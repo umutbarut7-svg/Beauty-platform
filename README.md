@@ -4,49 +4,48 @@ Güzellik, bakım, kuaför, sağlık ve spor dikeylerine genişleyebilen; müşt
 randevu, hizmet, işletme operasyonları ve AI destekli deneyimleri tek üründe
 buluşturan **AI-first super app** için monorepo başlangıç noktası.
 
-> **Durum:** Repository henüz başlangıç aşamasındadır. Mevcut incelemede yalnızca
-> bu README'nin önceki kısa sürümü ve Git metadatası bulunmuştur; uygulama kodu,
-> `package.json`, bağımlılık, test, CI/CD veya çalıştırılabilir kurulum yoktur.
+> **Durum:** Monorepo geliştirme temeli çalışır durumdadır. Expo mobil uygulaması,
+> Next.js yönetim paneli, NestJS/Fastify API, ortak paketler ve kalite komutları
+> ürün özelliği içermeyen minimum başlangıçlar olarak hazırlanmıştır.
 
 ## Mevcut durum analizi
 
-| Alan | Mevcut durum | Sonuç |
-| --- | --- | --- |
-| Mobil uygulama | Yok | Framework veya çalışan ekran bulunmuyor. |
-| Web yönetim paneli | Yok | Framework veya çalışan panel bulunmuyor. |
-| Backend/API | Yok | API, veri modeli ve migration bulunmuyor. |
-| Paket yönetimi | Yoktu | Boş pnpm workspace tanımı eklendi; uygulama bağımlılığı eklenmedi. |
-| Test ve kalite | Yok | Test runner, lint ve type-check henüz kurulmadı. |
-| Altyapı | Yok | Lokal servisler, deployment ve CI/CD henüz tanımlanmadı. |
+| Alan               | Mevcut durum                            | Sonuç                                                    |
+| ------------------ | --------------------------------------- | -------------------------------------------------------- |
+| Mobil uygulama     | Expo + React Native                     | TypeScript başlangıcı ve web export'u çalışıyor.         |
+| Web yönetim paneli | Next.js                                 | App Router tabanlı minimum başlangıç çalışıyor.          |
+| Backend/API        | NestJS + Fastify                        | `/health` uç noktası olan modüler başlangıç çalışıyor.   |
+| Paket yönetimi     | pnpm workspace + Turborepo              | Uygulama ve ortak paket görevleri kökten yönetiliyor.    |
+| Test ve kalite     | Vitest + ESLint + Prettier + TypeScript | Kök kalite komutları tüm workspace'leri doğruluyor.      |
+| Altyapı            | Yok                                     | Lokal servisler, deployment ve CI/CD henüz tanımlanmadı. |
 
 ### Tespit edilen eksikler
 
-- Kurulacak bir bağımlılık ve çalıştırılacak bir uygulama bulunmuyor.
 - Ortam değişkeni sözleşmesi, kimlik doğrulama ve yetkilendirme modeli yok.
 - Veritabanı şeması, migration/seed yaklaşımı ve tenant izolasyonu yok.
 - Loglama, metrik, tracing, hata izleme ve audit log altyapısı yok.
-- CI kontrolleri, güvenlik taramaları ve deployment akışı yok.
+- CI, güvenlik taramaları ve deployment akışı henüz yok.
 - AI sağlayıcı soyutlaması, araç izinleri, prompt sürümleme ve değerlendirme
   (eval) süreci yok.
 
-Bu commit ürün davranışı eklemez. Var olan yapıyla çakışma kontrolü yapıldı;
-yalnızca önceki README bulunduğu için mevcut kodu silmeden monorepo iskeleti ve
-dokümantasyon eklendi.
+Bu temel ürün davranışı eklemez. Mevcut monorepo sınırları korunarak yalnızca
+çalıştırılabilir uygulama girişleri, ortak sözleşmeler ve geliştirme araçları
+eklenmiştir.
 
 ## Önerilen teknoloji yığını
 
-| Katman | Öneri | Gerekçe |
-| --- | --- | --- |
-| Monorepo | pnpm workspaces + Turborepo | Hızlı, deterministik kurulum; ortak paketler ve cache edilebilir görevler |
-| Mobil | Expo + React Native + TypeScript | iOS/Android ortak kod tabanı, OTA ve native modül esnekliği |
-| Yönetim web | Next.js + TypeScript | SSR/RSC, iyi geliştirici deneyimi ve güvenli sunucu sınırı |
-| API | NestJS, Fastify adapter + TypeScript | Modüler domain yapısı, doğrulama, OpenAPI ve yüksek throughput |
-| Veri | PostgreSQL + PostGIS + pgvector | İşlemsel veri, konum ve embedding aramasını tek güvenilir çekirdekte tutma |
-| Cache/queue | Redis + BullMQ | Cache, rate limit ve başlangıç aşaması background job ihtiyaçları |
-| Dosya | S3 uyumlu object storage + CDN | Görsel/video için ölçeklenebilir saklama ve dağıtım |
-| Kimlik | OIDC/OAuth 2.1 uyumlu sağlayıcı | MFA, sosyal giriş ve merkezi oturum yönetimi |
-| Gözlemlenebilirlik | OpenTelemetry + yapılandırılmış loglar | Dağıtık tracing ve sağlayıcıdan bağımsız izleme |
-| API sözleşmesi | OpenAPI + üretilmiş istemciler | Mobil/web ile backend arasında tip güvenliği |
+| Katman             | Öneri                                  | Gerekçe                                                                    |
+| ------------------ | -------------------------------------- | -------------------------------------------------------------------------- |
+| Monorepo           | pnpm workspaces + Turborepo            | Hızlı, deterministik kurulum; ortak paketler ve cache edilebilir görevler  |
+| Mobil              | Expo + React Native + TypeScript       | iOS/Android ortak kod tabanı, OTA ve native modül esnekliği                |
+| Yönetim web        | Next.js + TypeScript                   | SSR/RSC, iyi geliştirici deneyimi ve güvenli sunucu sınırı                 |
+| API                | NestJS, Fastify adapter + TypeScript   | Modüler domain yapısı, doğrulama, OpenAPI ve yüksek throughput             |
+| Veri               | PostgreSQL + PostGIS + pgvector        | İşlemsel veri, konum ve embedding aramasını tek güvenilir çekirdekte tutma |
+| Cache/queue        | Redis + BullMQ                         | Cache, rate limit ve başlangıç aşaması background job ihtiyaçları          |
+| Dosya              | S3 uyumlu object storage + CDN         | Görsel/video için ölçeklenebilir saklama ve dağıtım                        |
+| Kimlik             | OIDC/OAuth 2.1 uyumlu sağlayıcı        | MFA, sosyal giriş ve merkezi oturum yönetimi                               |
+| Gözlemlenebilirlik | OpenTelemetry + yapılandırılmış loglar | Dağıtık tracing ve sağlayıcıdan bağımsız izleme                            |
+| API sözleşmesi     | OpenAPI + üretilmiş istemciler         | Mobil/web ile backend arasında tip güvenliği                               |
 
 İlk sürüm **modüler monolit** olarak başlamalıdır. Randevu, katalog, müşteri,
 ödeme ve bildirim domain sınırları kod içinde korunmalı; yalnızca ölçülmüş ihtiyaç
@@ -68,9 +67,8 @@ infra/            # Lokal ve bulut altyapısı, gözlemlenebilirlik, IaC
 docs/             # ADR'ler, güvenlik, domain ve operasyon dokümanları
 ```
 
-İskelet dizinler şimdilik yalnızca kapsam ve sahipliği tarif eder. Framework
-scaffold'ları teknoloji kararları onaylandıktan sonra ayrı, gözden geçirilebilir
-değişiklikler halinde oluşturulmalıdır.
+Bu dizinler bağımsız workspace'lerdir; paketler birbirlerinin yalnızca public
+API'lerini kullanmalıdır.
 
 ### Önerilen domain sınırları
 
@@ -125,17 +123,14 @@ her entegrasyonda doğrulanmalıdır.
 
 ## Yerel geliştirme
 
-Şu an çalıştırılabilir uygulama veya kurulacak dependency yoktur. Gereken taban:
+Gereken taban:
 
 - Node.js 22 LTS veya daha yeni LTS sürümü
 - pnpm 10
 - Docker/Compose (PostgreSQL, Redis ve object storage eklendiğinde)
 
 ```bash
-# Workspace tanımını doğrula; mevcut durumda dependency indirmez.
 pnpm install
-
-# Uygulamalar scaffold edildikten sonra hedeflenen komutlar:
 pnpm dev
 pnpm lint
 pnpm typecheck
@@ -143,8 +138,9 @@ pnpm test
 pnpm build
 ```
 
-Kök scriptleri uygulama paketleri eklendikçe tanımlanacaktır; bugün bu komutların
-çalışması beklenmemelidir.
+Tek bir uygulamayı çalıştırmak için pnpm filtresi kullanılabilir; örneğin
+`pnpm --filter @beauty-platform/api dev`. API varsayılan olarak `3001` portunda
+dinler. Ortam dosyaları ve gerçek credential'lar repository'ye eklenmemelidir.
 
 ## Aşamalı geliştirme planı
 
