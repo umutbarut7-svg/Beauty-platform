@@ -1,0 +1,11 @@
+{
+  "name": "beauty-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI-first beauty, wellness, health and sports super app monorepo",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  }
+}
