@@ -1,0 +1,20 @@
+{
+  "name": "@beauty-platform/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint/base": "./eslint/base.mjs",
+    "./typescript/base": "./typescript/base.json",
+    "./typescript/library": "./typescript/library.json"
+  },
+  "files": [
+    "eslint",
+    "typescript"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  }
+}

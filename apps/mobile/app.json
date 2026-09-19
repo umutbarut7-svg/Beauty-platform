@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "Beauty Platform",
+    "slug": "beauty-platform",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "web": { "bundler": "metro" }
+  }
+}

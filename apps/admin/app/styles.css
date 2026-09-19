@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, sans-serif;
+  background: #faf7f8;
+  color: #271f22;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 48rem;
+  margin: 20vh auto;
+  padding: 2rem;
+}
+.eyebrow {
+  color: #9a4964;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+h1 {
+  font-size: clamp(2rem, 7vw, 4.5rem);
+  letter-spacing: -0.05em;
+  margin: 0.5rem 0;
+}
+main > p:last-child {
+  color: #695c61;
+  line-height: 1.6;
+}
