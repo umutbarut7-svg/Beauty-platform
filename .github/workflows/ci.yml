@@ -13,6 +13,20 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: beauty_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d beauty_platform"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform?schema=public
     steps:
@@ -33,6 +47,10 @@ jobs:
         run: pnpm --filter @beauty-platform/api prisma:validate
       - name: Prisma generate
         run: pnpm --filter @beauty-platform/api prisma:generate
+      - name: Apply migrations to disposable PostgreSQL
+        run: pnpm --filter @beauty-platform/api exec prisma migrate deploy
+      - name: Verify migration status
+        run: pnpm --filter @beauty-platform/api exec prisma migrate status
       - name: Typecheck
         run: pnpm typecheck
       - name: Lint
