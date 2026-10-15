@@ -1,0 +1,3 @@
+-- Preserve PENDING/IN_PROGRESS for API compatibility; they represent BOOKED/IN_SERVICE.
+ALTER TYPE "AppointmentStatus" ADD VALUE IF NOT EXISTS 'CHECKED_IN' AFTER 'CONFIRMED';
+
