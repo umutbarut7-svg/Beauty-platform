@@ -15,17 +15,19 @@ CREATE TABLE "BusinessCustomer" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "BusinessCustomer_business_fkey" FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE CASCADE,
-  CONSTRAINT "BusinessCustomer_userCustomer_fkey" FOREIGN KEY ("userCustomerId") REFERENCES "Customer"("id") ON DELETE SET NULL,
-  CONSTRAINT "BusinessCustomer_mergedInto_fkey" FOREIGN KEY ("businessId", "mergedIntoId") REFERENCES "BusinessCustomer"("businessId", "id") ON DELETE RESTRICT
+  CONSTRAINT "BusinessCustomer_userCustomer_fkey" FOREIGN KEY ("userCustomerId") REFERENCES "Customer"("id") ON DELETE SET NULL
 );
+
+ALTER TABLE "BusinessCustomer" ADD CONSTRAINT "BusinessCustomer_businessId_id_key" UNIQUE ("businessId", "id");
+
+ALTER TABLE "BusinessCustomer" ADD CONSTRAINT "BusinessCustomer_mergedInto_fkey"
+  FOREIGN KEY ("businessId", "mergedIntoId") REFERENCES "BusinessCustomer"("businessId", "id") ON DELETE RESTRICT;
 
 CREATE UNIQUE INDEX "BusinessCustomer_businessId_phone_key" ON "BusinessCustomer"("businessId", "phone");
 CREATE UNIQUE INDEX "BusinessCustomer_businessId_email_key" ON "BusinessCustomer"("businessId", "email");
 CREATE INDEX "BusinessCustomer_business_name_idx" ON "BusinessCustomer"("businessId", "lastName", "firstName");
 CREATE INDEX "BusinessCustomer_business_created_idx" ON "BusinessCustomer"("businessId", "createdAt");
 CREATE INDEX "BusinessCustomer_userCustomer_idx" ON "BusinessCustomer"("userCustomerId");
-
-ALTER TABLE "BusinessCustomer" ADD CONSTRAINT "BusinessCustomer_businessId_id_key" UNIQUE ("businessId", "id");
 
 CREATE TABLE "CustomerNote" (
   "id" TEXT NOT NULL PRIMARY KEY,
