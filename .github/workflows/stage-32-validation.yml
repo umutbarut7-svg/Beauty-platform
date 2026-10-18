@@ -54,7 +54,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check Prisma schema formatting
-        run: pnpm --filter @beauty-platform/api exec prisma format
+        run: |
+          pnpm --filter @beauty-platform/api exec prisma format
+          git diff --exit-code -- apps/api/prisma/schema.prisma
 
       - name: Validate Prisma schema
         run: pnpm --filter @beauty-platform/api prisma:validate
