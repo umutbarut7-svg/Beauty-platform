@@ -1,5 +1,5 @@
 -- Preserve PENDING/IN_PROGRESS for API compatibility; they represent BOOKED/IN_SERVICE.
-ALTER TYPE "AppointmentStatus" ADD VALUE IF NOT EXISTS 'CHECKED_IN' AFTER 'CONFIRMED';
+-- CHECKED_IN is added by the preceding committed enum migration.
 
 ALTER TABLE "Appointment"
   ADD COLUMN "confirmedAt" TIMESTAMP(3),

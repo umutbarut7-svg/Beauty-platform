@@ -53,8 +53,13 @@ jobs:
       - name: Install pinned dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check Prisma schema formatting
-        run: pnpm --filter @beauty-platform/api exec prisma format --check
+      - name: Check Prisma schema formatting (read-only)
+        run: |
+          pnpm --filter @beauty-platform/api exec prisma format
+          if ! git diff --exit-code -- apps/api/prisma/schema.prisma; then
+            echo "Prisma schema formatting differs from committed content. Format and commit on the PR branch before rerunning CI."
+            exit 1
+          fi
 
       - name: Validate Prisma schema
         run: pnpm --filter @beauty-platform/api prisma:validate
