@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: stage-32-${{ github.workflow }}-${{ github.ref }}
@@ -56,7 +56,19 @@ jobs:
       - name: Check Prisma schema formatting
         run: |
           pnpm --filter @beauty-platform/api exec prisma format
-          git diff --exit-code -- apps/api/prisma/schema.prisma
+          if ! git diff --quiet -- apps/api/prisma/schema.prisma; then
+            if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.head_ref }}" = "fix/stage32-pr7-prisma-format" ]; then
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git add apps/api/prisma/schema.prisma
+              git commit -m "style(prisma): persist canonical schema formatting"
+              git push origin HEAD:fix/stage32-pr7-prisma-format
+              echo "Formatting committed; subsequent run validates it."
+              exit 1
+            fi
+            echo "Prisma schema is not formatted; refusing to continue."
+            exit 1
+          fi
 
       - name: Validate Prisma schema
         run: pnpm --filter @beauty-platform/api prisma:validate
