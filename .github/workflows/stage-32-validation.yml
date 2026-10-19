@@ -121,3 +121,12 @@ jobs:
         env:
           STAGE32_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
         run: pnpm --filter @beauty-platform/api test:stage33:integration
+
+      - name: Preserve Stage 33 browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: stage33-browser-diagnostics
+          path: /tmp/stage33-*.png
+          if-no-files-found: ignore
+          retention-days: 3

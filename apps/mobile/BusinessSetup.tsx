@@ -63,6 +63,11 @@ export function BusinessSetup({
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [message, setMessage] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [members, setMembers] = useState<
+    Array<{ id: string; role: string; user: { id: string; email: string } }>
+  >([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const path = `/businesses/${businessId}`;
   const field = (label: string, value: string, change: (x: string) => void) => (
     <TextInput
@@ -126,6 +131,41 @@ export function BusinessSetup({
         await load();
       })}
       <Text style={styles.heading}>Profesyonel</Text>
+      <Text>
+        Profesyonel hesabı önceden kayıtlı olmalıdır. Üyelik vermek profil
+        bağlamakla aynı işlem değildir.
+      </Text>
+      {field("Profesyonel hesap e-postası", memberEmail, setMemberEmail)}
+      {button("Kayıtlı hesaba profesyonel üyeliği ver", async () => {
+        await api.request(`${path}/members`, "POST", {
+          email: memberEmail,
+          role: "STAFF",
+        });
+        setMembers(await api.request(`${path}/members`));
+        setMessage("Profesyonel üyeliği oluşturuldu.");
+      })}
+      {button("İşletme üyelerini yükle", async () => {
+        setMembers(await api.request(`${path}/members`));
+      })}
+      {members
+        .filter((m) => m.role === "STAFF")
+        .map((m) =>
+          button(
+            `${m.user.email}${selectedUserId === m.user.id ? " ✓" : ""}`,
+            async () => {
+              setSelectedUserId(m.user.id);
+            },
+          ),
+        )}
+      {staffId &&
+        selectedUserId &&
+        button("Seçilen profesyoneli hesaba bağla", async () => {
+          await api.request(`${path}/staff/${staffId}`, "PATCH", {
+            userId: selectedUserId,
+          });
+          setMessage("Profesyonel profili seçilen üyeye bağlandı.");
+        })}
+
       {staff.map((p) =>
         button(`${p.displayName}${p.id === staffId ? " ✓" : ""}`, async () => {
           setStaffId(p.id);

@@ -464,6 +464,13 @@ export default function App() {
               {!bookings.length && (
                 <Text style={styles.body}>Henüz yüklenmiş randevu yok.</Text>
               )}
+              {mode === "business" && (
+                <Text>
+                  Yüklü bekleyen rezervasyon talepleri:{" "}
+                  {bookings.filter((b) => b.status === "PENDING").length}. Bu
+                  sayı yüklü kayıtlarla sınırlıdır; talep tahmini değildir.
+                </Text>
+              )}
               {bookings.map((b) =>
                 button(
                   `${b.service.name} · ${new Date(b.startsAt).toLocaleString()} · ${b.status}`,

@@ -474,8 +474,8 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     mobile.listen(8081, "127.0.0.1");
     await once(mobile, "listening");
     const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
     try {
-      const page = await browser.newPage();
       const login = async (email: string) => {
         await page
           .getByRole("textbox", { name: "E-posta", exact: true })
@@ -491,7 +491,23 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           .waitFor();
       };
       await page.goto("http://localhost:8081");
-      await login(`customer-${key}@example.test`);
+      const browserCustomerEmail = `browser-customer-${key}@example.test`;
+      await page
+        .getByRole("textbox", { name: "E-posta", exact: true })
+        .fill(browserCustomerEmail);
+      await page
+        .getByLabel("Parola", { exact: true })
+        .fill("Isolated-strong-password-33");
+      await page
+        .getByRole("button", { name: "Hesap oluştur", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Çıkış yap", exact: true })
+        .waitFor();
+      const browserCustomer = await create("/auth/login", "", {
+        email: browserCustomerEmail,
+        password: "Isolated-strong-password-33",
+      });
       await page
         .getByRole("textbox", { name: "İsteğiniz", exact: true })
         .fill(`Stage33-${key}`);
@@ -577,7 +593,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await page
         .getByRole("button", { name: "Çıkış yap", exact: true })
         .click();
-      await login(`customer-${key}@example.test`);
+      await login(browserCustomerEmail);
       await page
         .getByRole("button", { name: "Randevuları yenile", exact: true })
         .click();
@@ -599,8 +615,9 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         .first()
         .waitFor();
       expect(
-        (await request("/mvp/v1/passport", customerToken)).body.items,
-      ).toHaveLength(2);
+        (await request("/mvp/v1/passport", browserCustomer.accessToken)).body
+          .items,
+      ).toHaveLength(1);
       await page.screenshot({
         path:
           process.env.STAGE33_SCREENSHOT_PATH ??
@@ -654,6 +671,12 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           { exact: true },
         )
         .waitFor();
+    } catch (error) {
+      await page.screenshot({
+        path: "/tmp/stage33-failure.png",
+        fullPage: true,
+      });
+      throw error;
     } finally {
       await browser.close();
     }
