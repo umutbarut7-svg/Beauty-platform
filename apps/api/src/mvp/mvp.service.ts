@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -14,6 +15,7 @@ import { AppointmentsService } from "../appointments/appointments.service.js";
 import { PRISMA_SERVICE } from "../database/database.tokens.js";
 import type { PrismaService } from "../database/prisma.service.js";
 import { requestContext } from "../infrastructure/request-context.js";
+import { RedisWakeupService } from "../infrastructure/redis-wakeup.service.js";
 import type { ResultDto, SatisfactionDto } from "./mvp.dto.js";
 
 export const resultSelect = {
@@ -31,11 +33,20 @@ export class MvpService {
     @Inject(PRISMA_SERVICE) private readonly db: PrismaService,
     private readonly appointments: AppointmentsService,
     private readonly permissions: PermissionsService,
+    @Optional()
+    @Inject(RedisWakeupService)
+    private readonly wakeup?: RedisWakeupService,
   ) {}
 
   capabilities() {
     return {
       version: "v1",
+      redis: this.wakeup?.status() ?? {
+        enabled: false,
+        ready: false,
+        durableStore: "POSTGRESQL",
+        fallback: "POSTGRES_POLLING",
+      },
       enabled: process.env.STAGE33_MVP_ENABLED === "true",
       privatePhotos: {
         available: false,
@@ -226,7 +237,7 @@ export class MvpService {
       );
     if (owned.status !== "COMPLETED")
       throw new ConflictException("A completed beauty job is required");
-    return this.db.$transaction(async (tx: PrismaService) => {
+    const value = await this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
         "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `mvp-result:${businessId}:${appointmentId}`,
@@ -297,6 +308,8 @@ export class MvpService {
       });
       return { outcome: entry.outcome, createdAt: entry.createdAt };
     });
+    await this.wakeup?.notify();
+    return value;
   }
   async passport(user: AuthenticatedUser) {
     this.enabled();

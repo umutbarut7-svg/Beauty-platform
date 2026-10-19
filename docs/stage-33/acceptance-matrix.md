@@ -36,7 +36,7 @@ Kaynak sıralaması aynen korunmuştur. IMPLEMENTED kod bağlantısıdır; tek b
 
 - Unit + gerçek DB/HTTP entegrasyon + kritik UI E2E ayrı evidence gerekir.
 - Android/iOS build ve cihaz testi bu web/Vitest kanıtının yerine geçmez: BLOCKED/NOT RUN.
-- S3/OpenAI/Redis/pgvector gerçek adapter/connection doğrulaması: BLOCKED; sahte başarı yok.
+- S3/OpenAI/pgvector gerçek adapter/connection doğrulaması: BLOCKED; sahte başarı yok. Redis için gerçek SDK/izole Redis test kapısı eklendi; kanıt validation raporundadır.
 - PostgreSQL worker, aynı V1 modular monolith kodunu ayrı process olarak çalıştırır; Redis yerine geçtiği iddia edilmez.
 - Stage 32 workflow tüm gate’leri korur; Stage 33 gerçek HTTP/worker adımı eklenir.
 - Hiçbir production DB/provider ödemesi/bildirimi kullanılmaz.

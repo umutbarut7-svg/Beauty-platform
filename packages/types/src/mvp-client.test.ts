@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, MvpApiClient } from "./mvp-client.js";
 describe("MVP transport security", () => {
+  it("calls the browser fetch with its global receiver", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(new Response("{}"));
+    } as typeof fetch;
+    try {
+      await new MvpApiClient("https://api.example.test").request("/health");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
   it.each([
     "http://example.com",
     "https://user:secret@example.com",

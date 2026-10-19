@@ -22,7 +22,8 @@ export class MvpApiClient {
   readonly baseUrl: string;
   constructor(
     baseUrl: string,
-    private readonly transport: typeof fetch = fetch,
+    private readonly transport: typeof fetch = (...args) =>
+      globalThis.fetch(...args),
   ) {
     const url = new URL(baseUrl);
     if (

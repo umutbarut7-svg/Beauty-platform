@@ -13,6 +13,8 @@ const url =
   "postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public";
 if (process.env.STAGE32_TEST_DATABASE_URL !== url)
   throw new Error("Stage 33 HTTP tests require the disposable CI database");
+if (process.env.STAGE33_TEST_REDIS_URL !== "redis://127.0.0.1:6379")
+  throw new Error("Stage 33 HTTP tests require the isolated Redis service");
 const db = new PrismaClient({ datasourceUrl: url });
 const key = randomUUID();
 let app: ChildProcess | undefined;
@@ -37,6 +39,8 @@ const environment = {
   NODE_ENV: "test",
   DATABASE_URL: url,
   STAGE33_MVP_ENABLED: "true",
+  MVP_REDIS_ENABLED: "true",
+  MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
   CORS_ORIGINS: "http://localhost:8081,http://localhost:3000",
@@ -452,6 +456,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     });
     const capability = (await request("/mvp/v1/capabilities", customerToken))
       .body;
+    expect(capability.redis.ready).toBe(true);
     expect(capability.privatePhotos.available).toBe(false);
     expect(capability.visualAnalysis.available).toBe(false);
     expect(capability.verification.automatic).toBe(false);

@@ -145,8 +145,7 @@ implementasyonları korunmuştur. İstemciler member namespace'ine taşınmalıd
 Sonuç/memnuniyet ve tenant-scoped job kaydı aynı transaction'dadır. Worker
 `MVP_PASSPORT_PUBLISH_V1` için owner/tenant/result/satisfaction/state kontrolünü
 DB üzerinden tekrarlar. Passport yalnız yayınlanmış sonuçları gösterir. Worker
-replay'i birden fazla yayın audit'i oluşturmaz. Redis adapter'ı varmış gibi
-sunulmaz: bu çalışan PostgreSQL kalıcı kuyruk adapter'ıdır. Feature flag kapalı
+replay'i birden fazla yayın audit'i oluşturmaz. Redis yalnız PII içermeyen wakeup tick'i taşır; iş kaydı ve yetkisi PostgreSQL'dedir. Feature flag kapalı
 worker başlamaz ve başka consumer'ın işlerini tüketmez.
 
 Web kabulü için root dev dependency `@playwright/test@1.64.1` sabitlenmiştir;
@@ -154,3 +153,41 @@ lockfile değişikliği yalnız bu test aracı ve Next.js optional peer bağlam�
 CI tüm eski kapılardan sonra Chromium kurar, aynı gerçek API/DB/worker'a bağlı
 Expo web booking → işletme job/result → müşteri satisfaction/passport ve
 Next.js ledger görünümünü çalıştırır. Bu native cihaz testi değildir.
+
+## Redis bağlantısı ve yerel çalışma sözleşmesi
+
+`redis@6.3.0` resmi Node SDK'sı, mevcut PostgreSQL kalıcı kuyruğuna opsiyonel
+wakeup adapter'ı olarak eklenmiştir. Redis içine yalnız `1` tick'i yazılır;
+photo, prompt, actor, tenant veya job payload'ı taşınmaz. Liste 1 öğeyle ve 10
+saniyelik teknik wakeup TTL'iyle sınırlıdır; bu müşteri verisi retention kararı
+değildir. Job/idempotency/retry/authority PostgreSQL'de kalır. Redis yoksa
+`ready:false` açıkça raporlanır, worker DB polling'e döner; Redis teslimi başarılı
+olmuş gibi gösterilmez. Production bağlantısı `rediss://` gerektirir; TLS doğrulama
+ayarları kapatılmaz. [Resmi bağlantı dokümanı](https://redis.io/docs/latest/develop/clients/nodejs/connect/)
+ve kurulu SDK tipleri kullanılmıştır. Servis hatası URL/credential loglamaz.
+
+Çalıştırma sırası (yalnız geliştirme veya izole test ortamı):
+
+1. Sabitlenen pnpm ile frozen install; gerçek DB'de Prisma validate/generate;
+   test migration'ı yalnız disposable DB'ye uygulayın.
+2. Runtime bağlamında `DATABASE_URL`, JWT anahtarları ve izinli `CORS_ORIGINS`
+   sağlayın; secret değerlerini git veya terminal çıktısına yazmayın.
+3. `STAGE33_MVP_ENABLED=true` ile `pnpm --filter @beauty-platform/api build`,
+   ardından `pnpm --filter @beauty-platform/api start`.
+4. Ayrı process: aynı gözden geçirilmiş runtime bağlamıyla
+   `pnpm --filter @beauty-platform/api worker`. Flag kapalıysa worker başlamaz.
+5. Redis için `MVP_REDIS_ENABLED=true`, runtime `MVP_REDIS_URL` binding'i;
+   aksi halde açık PostgreSQL polling fallback'i kullanılır.
+6. Expo: `EXPO_PUBLIC_API_URL` erişilebilir API origin'i ile
+   `pnpm --filter @beauty-platform/mobile dev`. Native fiziksel cihazın localhost'u
+   API host'u değildir; gerçek cihaz için erişilebilir HTTPS origin gereklidir.
+7. Next.js: `NEXT_PUBLIC_API_URL` ile `pnpm --filter @beauty-platform/admin dev`.
+   Üretim dışı local HTTP yalnız loopback/emulator adresleri için kabul edilir.
+   Bu public değişkenlere hiçbir sağlayıcı veya JWT secret'ı eklenmez.
+
+`test:stage33:integration` aynı disposable PostgreSQL ve Redis üzerinde çalışır.
+Paylaşılan Redis wakeup sinyalinde test fixture yarışını önlemek için dosyalar
+seri çalışır; üretim retry/authorization/rate-limit kuralları gevşetilmez. Testler
+gerçek SDK bağlantısı, sınırlı/non-PII tick, Redis yokken fallback ve production
+TLS gereksinimini doğrular. pgvector semantic adapter ve canlı OpenAI/S3
+entegrasyonu halen doğrulanmış değildir; bunlar tamamlandı diye işaretlenmez.
