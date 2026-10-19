@@ -149,7 +149,9 @@ export class GovernanceEngine {
       throw new ConflictException("Governance bypass is prohibited");
     if (
       input.confidence !== undefined &&
-      (input.confidence < 0 || input.confidence > 1)
+      (!Number.isFinite(input.confidence) ||
+        input.confidence < 0 ||
+        input.confidence > 1)
     )
       throw new BadRequestException("Invalid AI confidence");
     return {
@@ -224,8 +226,9 @@ export class GovernanceEngine {
       if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key))
         throw new BadRequestException("Invalid policy context key");
       if (
-        value !== null &&
-        !["string", "number", "boolean"].includes(typeof value)
+        (typeof value === "number" && !Number.isFinite(value)) ||
+        (value !== null &&
+          !["string", "number", "boolean"].includes(typeof value))
       )
         throw new BadRequestException(
           "Policy context accepts scalar values only",

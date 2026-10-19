@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint .",
     "test": "vitest run src",
+    "test:integration": "vitest run integration",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
