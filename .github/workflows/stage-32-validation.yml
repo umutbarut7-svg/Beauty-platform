@@ -82,6 +82,11 @@ jobs:
       - name: Run API tests
         run: pnpm --filter @beauty-platform/api test
 
+      - name: Run governance PostgreSQL integration tests
+        env:
+          STAGE32_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
+        run: pnpm --filter @beauty-platform/api test:integration
+
       - name: Type-check API
         run: pnpm --filter @beauty-platform/api typecheck
 
@@ -99,3 +104,12 @@ jobs:
 
       - name: Check formatting
         run: pnpm format:check
+
+      - name: Type-check workspace
+        run: pnpm typecheck
+
+      - name: Lint workspace
+        run: pnpm lint
+
+      - name: Check whitespace errors
+        run: git diff --check

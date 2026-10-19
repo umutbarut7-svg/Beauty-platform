@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/consistent-type-imports */
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -59,11 +60,15 @@ export class GovernanceService {
       "governance:manage",
     );
     const marketId = await this.marketId(businessId);
-    if (input.level === "GLOBAL" && user.role !== "SUPER_ADMIN")
+    if (input.level !== "TENANT" && user.role !== "SUPER_ADMIN")
       throw new ForbiddenException(
-        "Global policies require platform authorization",
+        "Global and market policies require platform authorization",
       );
     return this.db.$transaction(async (tx: PrismaService) => {
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `governance-policy:${businessId}`,
+      );
       const policy = await tx.governancePolicy.upsert({
         where: { businessId_key: { businessId, key: input.key } },
         create: {
@@ -75,6 +80,8 @@ export class GovernanceService {
         },
         update: {},
       });
+      if (policy.level !== input.level || policy.scope !== input.scope)
+        throw new ConflictException("Policy scope and level are immutable");
       const latest = await tx.governancePolicyVersion.findFirst({
         where: { policyId: policy.id },
         orderBy: { version: "desc" },
@@ -128,21 +135,32 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
-        `governance-policy:${businessId}:${versionId}`,
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `governance-policy:${businessId}`,
       );
       const replay = await tx.governanceEvent.findUnique({
         where: { eventId: idempotencyKey },
       });
-      if (replay)
-        return tx.governancePolicyVersion.findUnique({
-          where: { id: versionId },
-        });
       const version = await tx.governancePolicyVersion.findFirst({
         where: { id: versionId, policy: { businessId } },
         include: { policy: true },
       });
       if (!version) throw new NotFoundException("Policy version not found");
+      if (version.policy.level !== "TENANT" && user.role !== "SUPER_ADMIN")
+        throw new ForbiddenException(
+          "Shared policies require platform authorization",
+        );
+      if (replay) {
+        if (
+          replay.businessId !== businessId ||
+          replay.resourceId !== versionId ||
+          replay.type !== "PolicyStatusChanged"
+        )
+          throw new ConflictException(
+            "Idempotency key belongs to another operation",
+          );
+        return version;
+      }
       this.engine.transitionPolicy(version.status as PolicyStatus, next);
       if (next === "ACTIVE")
         await tx.governancePolicyVersion.updateMany({
@@ -192,18 +210,21 @@ export class GovernanceService {
       where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
     });
     if (replay) return replay;
-    if (ai)
-      this.engine.assertAiContext({
-        tenantId: String(ai.tenantId),
-        resolvedTenantId: businessId,
-        model: String(ai.model ?? ""),
-        modelVersion: String(ai.modelVersion ?? ""),
-        promptVersion: String(ai.promptVersion ?? ""),
-        tool: ai.tool ? String(ai.tool) : undefined,
-        confidence:
-          typeof ai.confidence === "number" ? ai.confidence : undefined,
-        requestedBypass: ai.requestedBypass === true,
-      });
+    if (ai?.confidence !== undefined && typeof ai.confidence !== "number")
+      throw new BadRequestException("Invalid AI confidence");
+    const aiReview = ai
+      ? this.engine.assertAiContext({
+          tenantId: String(ai.tenantId),
+          resolvedTenantId: businessId,
+          model: String(ai.model ?? ""),
+          modelVersion: String(ai.modelVersion ?? ""),
+          promptVersion: String(ai.promptVersion ?? ""),
+          tool: ai.tool ? String(ai.tool) : undefined,
+          confidence:
+            typeof ai.confidence === "number" ? ai.confidence : undefined,
+          requestedBypass: ai.requestedBypass === true,
+        })
+      : undefined;
     const rows = await this.db.governancePolicyVersion.findMany({
       where: {
         status: "ACTIVE",
@@ -239,7 +260,19 @@ export class GovernanceService {
           }) as ResolvedPolicy,
       ),
     );
-    const result = this.engine.evaluate(resolved, context, highRisk);
+    let result = this.engine.evaluate(resolved, context, highRisk);
+    if (aiReview?.requiresHumanReview && result.decision === "ALLOW") {
+      result = {
+        ...result,
+        decision: "REVIEW",
+        reasonCode: "LOW_CONFIDENCE",
+        deterministicKey: this.engine.fingerprint([
+          result.deterministicKey,
+          "REVIEW",
+          "LOW_CONFIDENCE",
+        ]),
+      };
+    }
     return this.db.policyEvaluation.create({
       data: {
         businessId,
@@ -362,16 +395,21 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `dispute:${businessId}:${disputeId}`,
       );
       const prior = await tx.disputeTransition.findUnique({
         where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
       });
-      if (prior)
+      if (prior) {
+        if (prior.disputeId !== disputeId)
+          throw new ConflictException(
+            "Idempotency key belongs to another dispute",
+          );
         return tx.governanceDispute.findFirst({
           where: { id: disputeId, businessId },
         });
+      }
       const dispute = await tx.governanceDispute.findFirst({
         where: { id: disputeId, businessId },
       });
@@ -486,13 +524,22 @@ export class GovernanceService {
       "privacy:manage",
     );
     return this.db.$transaction(async (tx: PrismaService) => {
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `privacy:${businessId}:${requestId}`,
+      );
       const prior = await tx.privacyRequestTransition.findUnique({
         where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
       });
-      if (prior)
+      if (prior) {
+        if (prior.requestId !== requestId)
+          throw new ConflictException(
+            "Idempotency key belongs to another privacy request",
+          );
         return tx.privacyRequest.findFirst({
           where: { id: requestId, businessId },
         });
+      }
       const request = await tx.privacyRequest.findFirst({
         where: { id: requestId, businessId },
       });
@@ -537,6 +584,13 @@ export class GovernanceService {
       "governance:manage",
     );
     const marketId = await this.marketId(businessId);
+    if (input.policyEvaluationId) {
+      const evaluation = await this.db.policyEvaluation.findFirst({
+        where: { id: input.policyEvaluationId, businessId },
+      });
+      if (!evaluation)
+        throw new NotFoundException("Policy evaluation not found");
+    }
     return this.db.enforcementAction.upsert({
       where: {
         businessId_idempotencyKey: {
@@ -569,7 +623,7 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `enforcement:${businessId}:${actionId}`,
       );
       const replay = await tx.governanceEvent.findUnique({
@@ -579,7 +633,17 @@ export class GovernanceService {
         where: { id: actionId, businessId },
       });
       if (!action) throw new NotFoundException("Enforcement action not found");
-      if (replay) return action;
+      if (replay) {
+        if (
+          replay.businessId !== businessId ||
+          replay.resourceId !== actionId ||
+          replay.type !== "EnforcementStateChanged"
+        )
+          throw new ConflictException(
+            "Idempotency key belongs to another operation",
+          );
+        return action;
+      }
       this.engine.transitionEnforcement(action.state as EnforcementState, next);
       const updated = await tx.enforcementAction.update({
         where: { id: action.id },

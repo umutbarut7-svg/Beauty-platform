@@ -29,6 +29,24 @@ const policy = {
   ],
 };
 describe("GovernanceEngine", () => {
+  it.each([NaN, Infinity, -Infinity])(
+    "rejects non-finite policy inputs and AI confidence (%s)",
+    (value) => {
+      expect(() => engine.evaluate(policy, { risk: value }, false)).toThrow(
+        "scalar",
+      );
+      expect(() =>
+        engine.assertAiContext({
+          tenantId: "a",
+          resolvedTenantId: "a",
+          model: "m",
+          modelVersion: "1",
+          promptVersion: "1",
+          confidence: value,
+        }),
+      ).toThrow("confidence");
+    },
+  );
   it("enforces immutable policy lifecycle", () => {
     expect(() => engine.transitionPolicy("DRAFT", "REVIEW")).not.toThrow();
     expect(() => engine.transitionPolicy("DRAFT", "ACTIVE")).toThrow(

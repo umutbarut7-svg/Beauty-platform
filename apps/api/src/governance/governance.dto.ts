@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsObject,
@@ -26,7 +27,7 @@ export class PolicyTransitionDto {
 export class EvaluatePolicyDto {
   @IsString() scope!: string;
   @IsObject() context!: Record<string, unknown>;
-  @IsOptional() highRisk?: boolean;
+  @IsOptional() @IsBoolean() highRisk?: boolean;
   @IsString() idempotencyKey!: string;
   @IsOptional() @IsObject() ai?: Record<string, unknown>;
 }

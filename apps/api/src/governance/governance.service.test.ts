@@ -56,6 +56,145 @@ function setup() {
   };
 }
 describe("GovernanceService boundaries", () => {
+  it("rejects string AI confidence instead of silently bypassing review", async () => {
+    const { db, service } = setup();
+    await expect(
+      service.evaluate(user, "a", "AI", {}, false, "key", {
+        confidence: "0.4",
+      }),
+    ).rejects.toThrow("confidence");
+    expect(db.policyEvaluation.create).not.toHaveBeenCalled();
+  });
+  it("does not allow a tenant policy request to version an existing global policy", async () => {
+    const { db, service } = setup();
+    db.governancePolicy.upsert.mockResolvedValue({
+      id: "p",
+      marketId: "m1",
+      level: "GLOBAL",
+      scope: "AI",
+    });
+    await expect(
+      service.createPolicy(user, "a", {
+        key: "p",
+        scope: "AI",
+        level: "TENANT",
+        failMode: "OPEN",
+        reason: "test",
+        rules: [],
+      }),
+    ).rejects.toThrow("immutable");
+    expect(db.governancePolicyVersion.create).not.toHaveBeenCalled();
+  });
+  it.each(["GLOBAL", "MARKET"])(
+    "prevents tenant owners from publishing %s policies",
+    async (level) => {
+      const { db, service } = setup();
+      await expect(
+        service.createPolicy(user, "a", {
+          key: "p",
+          scope: "AI",
+          level,
+          failMode: "OPEN",
+          reason: "test",
+          rules: [],
+        }),
+      ).rejects.toThrow("platform authorization");
+      expect(db.governancePolicy.upsert).not.toHaveBeenCalled();
+    },
+  );
+  it("does not leak another tenant's policy version through replay", async () => {
+    const { db, service } = setup();
+    db.governanceEvent.findUnique.mockResolvedValue({
+      businessId: "other",
+      resourceId: "foreign",
+      type: "PolicyStatusChanged",
+    });
+    db.governancePolicyVersion.findFirst.mockResolvedValue(null);
+    await expect(
+      service.transitionPolicy(
+        user,
+        "a",
+        "foreign",
+        "ACTIVE",
+        "test",
+        "reused",
+      ),
+    ).rejects.toThrow("not found");
+    expect(db.governancePolicyVersion.findUnique).not.toHaveBeenCalled();
+  });
+  it.each(["ALLOW", "BLOCK"])(
+    "applies low-confidence review without weakening %s",
+    async (decision) => {
+      const { db, service } = setup();
+      db.governancePolicyVersion.findMany.mockResolvedValue([
+        {
+          id: "v",
+          version: 1,
+          failMode: "OPEN",
+          policy: { id: "p", level: "TENANT" },
+          rules: [
+            {
+              key: "known",
+              field: "verified",
+              operator: "EQUALS",
+              value: true,
+              decision,
+              reasonCode: "KNOWN",
+              priority: 1,
+            },
+          ],
+        },
+      ]);
+      db.policyEvaluation.create.mockImplementation(async ({ data }) => data);
+      const result = await service.evaluate(
+        user,
+        "a",
+        "AI",
+        { verified: true },
+        false,
+        "low",
+        {
+          tenantId: "a",
+          model: "m",
+          modelVersion: "1",
+          promptVersion: "1",
+          confidence: 0.4,
+        },
+      );
+      expect(result.decision).toBe(decision === "BLOCK" ? "BLOCK" : "REVIEW");
+      if (decision === "ALLOW")
+        expect(result.reasonCode).toBe("LOW_CONFIDENCE");
+    },
+  );
+  it("rejects reused privacy transition keys for another resource", async () => {
+    const { db, service } = setup();
+    db.privacyRequestTransition.findUnique.mockResolvedValue({
+      requestId: "other",
+    });
+    await expect(
+      service.transitionPrivacy(user, "a", "r", "APPROVED", "test", "same"),
+    ).rejects.toThrow("another privacy request");
+    expect(db.$queryRawUnsafe).toHaveBeenCalledWith(
+      "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+      "privacy:a:r",
+    );
+    expect(db.privacyRequest.update).not.toHaveBeenCalled();
+  });
+  it("rejects enforcement linked to another tenant's evaluation", async () => {
+    const { db, service } = setup();
+    db.policyEvaluation.findFirst.mockResolvedValue(null);
+    await expect(
+      service.createEnforcement(user, "a", {
+        subjectType: "USER",
+        subjectId: "u",
+        type: "HOLD",
+        reasonCodes: ["REVIEW"],
+        policyEvaluationId: "foreign",
+        idempotencyKey: "key",
+      }),
+    ).rejects.toThrow("not found");
+    expect(db.enforcementAction.upsert).not.toHaveBeenCalled();
+  });
   it("authorizes and tenant-scopes policy activation", async () => {
     const { db, permissions, service } = setup();
     db.governanceEvent.findUnique.mockResolvedValue(null);
@@ -63,7 +202,7 @@ describe("GovernanceService boundaries", () => {
       id: "v",
       policyId: "p",
       status: "APPROVED",
-      policy: { businessId: "a", marketId: "m1" },
+      policy: { businessId: "a", marketId: "m1", level: "TENANT" },
     });
     db.governancePolicyVersion.update.mockResolvedValue({
       id: "v",
