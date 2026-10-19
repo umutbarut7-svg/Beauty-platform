@@ -155,6 +155,10 @@ export class MvpService {
         "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `mvp-result:${businessId}:${appointmentId}`,
       );
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `mvp-key:${businessId}:${input.idempotencyKey}`,
+      );
       const appointment = await tx.appointment.findFirst({
         where: { id: appointmentId, businessId },
         select: { status: true },
@@ -226,6 +230,10 @@ export class MvpService {
       await tx.$queryRawUnsafe(
         "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `mvp-result:${businessId}:${appointmentId}`,
+      );
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `mvp-key:${businessId}:${input.idempotencyKey}`,
       );
       const result = await tx.beautyJobResult.findUnique({
         where: { businessId_appointmentId: { businessId, appointmentId } },

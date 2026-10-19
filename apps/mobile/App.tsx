@@ -63,6 +63,13 @@ export default function App() {
   } | null>(null);
   const keys = useRef(new Map<string, string>());
   const reset = () => {
+    setMode("customer");
+    setName("");
+    setServiceId("");
+    setLocationId("");
+    setStaffId("");
+    setSlots([]);
+    setDate("");
     setMatches([]);
     setCatalog(null);
     setBookings([]);

@@ -130,3 +130,27 @@ Fiziksel silme adapter ve reviewed retention/hold politikası olmadan çalışma
 Native Android/iOS kabulü web export veya Vitest ile PASS sayılamaz. Canlı provider
 ve kritik Customer/Business UI E2E koşulları ayrı evidence gerektirir. Tüm zincir,
 fotoğraf, provider, verification ve native kapıları geçmeden AŞAMA 33 PASS değildir.
+
+## Uygulamada ortaya çıkan başlangıç sorunları
+
+Tam derlenmiş API HTTP testinde iki çakışan route bulundu; önceki yalnız
+module/unit testleri tüm AppModule boot'unu doğrulamıyordu. Liveness/readiness
+`/health` ve `/health/ready` olarak Infrastructure'da kalır; eski bootstrap
+bilgisi `GET /` olur. Kimlikli üye hizmet atamaları
+`/businesses/:businessId/members/:memberId/services` altında ayrılır;
+`/staff/:staffId/services/:serviceId` gerçek profesyonel profilini yönetir.
+Bu iki farklı ID tipinin çakışan DELETE rotası kaldırılmış, yetki/servis
+implementasyonları korunmuştur. İstemciler member namespace'ine taşınmalıdır.
+
+Sonuç/memnuniyet ve tenant-scoped job kaydı aynı transaction'dadır. Worker
+`MVP_PASSPORT_PUBLISH_V1` için owner/tenant/result/satisfaction/state kontrolünü
+DB üzerinden tekrarlar. Passport yalnız yayınlanmış sonuçları gösterir. Worker
+replay'i birden fazla yayın audit'i oluşturmaz. Redis adapter'ı varmış gibi
+sunulmaz: bu çalışan PostgreSQL kalıcı kuyruk adapter'ıdır. Feature flag kapalı
+worker başlamaz ve başka consumer'ın işlerini tüketmez.
+
+Web kabulü için root dev dependency `@playwright/test@1.64.1` sabitlenmiştir;
+lockfile değişikliği yalnız bu test aracı ve Next.js optional peer bağlamıdır.
+CI tüm eski kapılardan sonra Chromium kurar, aynı gerçek API/DB/worker'a bağlı
+Expo web booking → işletme job/result → müşteri satisfaction/passport ve
+Next.js ledger görünümünü çalıştırır. Bu native cihaz testi değildir.
