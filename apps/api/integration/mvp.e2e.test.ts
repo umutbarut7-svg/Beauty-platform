@@ -194,6 +194,11 @@ beforeAll(async () => {
       locationIds: [locationId],
     })
   ).id;
+  expect(
+    await db.staffLocation.count({
+      where: { businessId, staffId, locationId },
+    }),
+  ).toBe(1);
   await create(
     `/businesses/${businessId}/staff/${staffId}/services/${serviceId}`,
     ownerToken,
@@ -362,6 +367,15 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     );
     expect(
       await db.beautyJobSatisfaction.count({ where: { businessId } }),
+    ).toBe(1);
+    expect(
+      await db.auditLog.count({
+        where: {
+          businessId,
+          action: "mvp.satisfaction.recorded",
+          resourceType: "BeautyJobSatisfaction",
+        },
+      }),
     ).toBe(1);
   }, 45000);
   it("denies missing JWT, cross-tenant, non-owner, invalid DTO and fabricated provider/verification success", async () => {

@@ -339,7 +339,10 @@ export class MvpService {
         actorId: user.id,
         actorType: user.role,
         action,
-        resourceType: "BeautyJobResult",
+        resourceType:
+          action === "mvp.satisfaction.recorded"
+            ? "BeautyJobSatisfaction"
+            : "BeautyJobResult",
         resourceId,
         correlationId: requestContext.get()?.requestId ?? randomUUID(),
         metadata: { idempotencyKey: key, version: "v1" },
