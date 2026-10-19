@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint .",
     "test": "vitest run src",
-    "test:integration": "vitest run integration",
+    "test:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run integration/governance.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",

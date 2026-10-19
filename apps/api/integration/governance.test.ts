@@ -124,6 +124,19 @@ afterAll(async () => {
 });
 
 describe("Stage 32 governance on real PostgreSQL and Prisma", () => {
+  it("allocates distinct immutable versions under concurrent policy creation", async () => {
+    const create = () =>
+      service.createPolicy(owner, tenant, {
+        key: "ai-policy",
+        scope: "AI",
+        level: "TENANT",
+        failMode: "CLOSED",
+        reason: "Concurrent draft",
+        rules: [],
+      });
+    const versions = await Promise.all([create(), create()]);
+    expect(versions.map((p) => p.version.version).sort()).toEqual([2, 3]);
+  });
   it("enforces membership and prevents cross-tenant replay disclosure", async () => {
     await expect(
       service.transitionPolicy(

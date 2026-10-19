@@ -56,6 +56,35 @@ function setup() {
   };
 }
 describe("GovernanceService boundaries", () => {
+  it("rejects string AI confidence instead of silently bypassing review", async () => {
+    const { db, service } = setup();
+    await expect(
+      service.evaluate(user, "a", "AI", {}, false, "key", {
+        confidence: "0.4",
+      }),
+    ).rejects.toThrow("confidence");
+    expect(db.policyEvaluation.create).not.toHaveBeenCalled();
+  });
+  it("does not allow a tenant policy request to version an existing global policy", async () => {
+    const { db, service } = setup();
+    db.governancePolicy.upsert.mockResolvedValue({
+      id: "p",
+      marketId: "m1",
+      level: "GLOBAL",
+      scope: "AI",
+    });
+    await expect(
+      service.createPolicy(user, "a", {
+        key: "p",
+        scope: "AI",
+        level: "TENANT",
+        failMode: "OPEN",
+        reason: "test",
+        rules: [],
+      }),
+    ).rejects.toThrow("immutable");
+    expect(db.governancePolicyVersion.create).not.toHaveBeenCalled();
+  });
   it.each(["GLOBAL", "MARKET"])(
     "prevents tenant owners from publishing %s policies",
     async (level) => {
@@ -146,7 +175,7 @@ describe("GovernanceService boundaries", () => {
       service.transitionPrivacy(user, "a", "r", "APPROVED", "test", "same"),
     ).rejects.toThrow("another privacy request");
     expect(db.$queryRawUnsafe).toHaveBeenCalledWith(
-      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      "SELECT pg_advisory_xact_lock(hashtext($1))::text",
       "privacy:a:r",
     );
     expect(db.privacyRequest.update).not.toHaveBeenCalled();

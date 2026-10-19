@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/consistent-type-imports */
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -64,6 +65,10 @@ export class GovernanceService {
         "Global and market policies require platform authorization",
       );
     return this.db.$transaction(async (tx: PrismaService) => {
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `governance-policy:${businessId}`,
+      );
       const policy = await tx.governancePolicy.upsert({
         where: { businessId_key: { businessId, key: input.key } },
         create: {
@@ -75,6 +80,8 @@ export class GovernanceService {
         },
         update: {},
       });
+      if (policy.level !== input.level || policy.scope !== input.scope)
+        throw new ConflictException("Policy scope and level are immutable");
       const latest = await tx.governancePolicyVersion.findFirst({
         where: { policyId: policy.id },
         orderBy: { version: "desc" },
@@ -128,8 +135,8 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
-        `governance-policy:${businessId}:${versionId}`,
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+        `governance-policy:${businessId}`,
       );
       const replay = await tx.governanceEvent.findUnique({
         where: { eventId: idempotencyKey },
@@ -203,6 +210,8 @@ export class GovernanceService {
       where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
     });
     if (replay) return replay;
+    if (ai?.confidence !== undefined && typeof ai.confidence !== "number")
+      throw new BadRequestException("Invalid AI confidence");
     const aiReview = ai
       ? this.engine.assertAiContext({
           tenantId: String(ai.tenantId),
@@ -386,21 +395,21 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `dispute:${businessId}:${disputeId}`,
       );
       const prior = await tx.disputeTransition.findUnique({
         where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
       });
-      if (prior)
+      if (prior) {
         if (prior.disputeId !== disputeId)
           throw new ConflictException(
             "Idempotency key belongs to another dispute",
           );
-      if (prior)
         return tx.governanceDispute.findFirst({
           where: { id: disputeId, businessId },
         });
+      }
       const dispute = await tx.governanceDispute.findFirst({
         where: { id: disputeId, businessId },
       });
@@ -516,21 +525,21 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `privacy:${businessId}:${requestId}`,
       );
       const prior = await tx.privacyRequestTransition.findUnique({
         where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
       });
-      if (prior)
+      if (prior) {
         if (prior.requestId !== requestId)
           throw new ConflictException(
             "Idempotency key belongs to another privacy request",
           );
-      if (prior)
         return tx.privacyRequest.findFirst({
           where: { id: requestId, businessId },
         });
+      }
       const request = await tx.privacyRequest.findFirst({
         where: { id: requestId, businessId },
       });
@@ -614,7 +623,7 @@ export class GovernanceService {
     );
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        "SELECT pg_advisory_xact_lock(hashtext($1))::text",
         `enforcement:${businessId}:${actionId}`,
       );
       const replay = await tx.governanceEvent.findUnique({
