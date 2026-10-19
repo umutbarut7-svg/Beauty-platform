@@ -149,7 +149,7 @@ replay'i birden fazla yayın audit'i oluşturmaz. Redis yalnız PII içermeyen w
 worker başlamaz ve başka consumer'ın işlerini tüketmez.
 
 Web kabulü için root dev dependency `@playwright/test@1.64.1` sabitlenmiştir;
-lockfile değişikliği yalnız bu test aracı ve Next.js optional peer bağlamıdır.
+lockfile değişiklikleri bu test aracı, Next.js optional peer bağlamı ve açıkça eklenen Redis SDK bağımlılığı içindir.
 CI tüm eski kapılardan sonra Chromium kurar, aynı gerçek API/DB/worker'a bağlı
 Expo web booking → işletme job/result → müşteri satisfaction/passport ve
 Next.js ledger görünümünü çalıştırır. Bu native cihaz testi değildir.
@@ -191,3 +191,8 @@ seri çalışır; üretim retry/authorization/rate-limit kuralları gevşetilmez
 gerçek SDK bağlantısı, sınırlı/non-PII tick, Redis yokken fallback ve production
 TLS gereksinimini doğrular. pgvector semantic adapter ve canlı OpenAI/S3
 entegrasyonu halen doğrulanmış değildir; bunlar tamamlandı diye işaretlenmez.
+
+## Doğrulama kaydı
+
+Gerçek komutlar, CI bağlantıları, web/native/provider sınırları ve kalan zorunlu
+kabul engelleri [validation.md](validation.md) içinde kaydedilir.
