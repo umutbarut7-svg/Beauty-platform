@@ -6,6 +6,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
+    "worker": "node dist/worker.js",
     "lint": "eslint .",
     "test": "vitest run src",
     "test:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run integration/governance.test.ts",
@@ -13,7 +14,8 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "test:stage33:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run integration/mvp.e2e.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

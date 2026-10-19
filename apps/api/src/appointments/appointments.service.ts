@@ -113,7 +113,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:${dto.staffMemberId}`,
           );
           const business = await tx.business.findUnique({
@@ -382,7 +382,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:appointment:${appointmentId}`,
           );
           const lockIds = [
@@ -393,7 +393,7 @@ export class AppointmentsService {
             .sort();
           for (const id of new Set(lockIds))
             await tx.$queryRawUnsafe(
-              "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "SELECT pg_advisory_xact_lock(hashtext($1))::text",
               `${businessId}:${id}`,
             );
           const current = await tx.appointment.findFirst({
@@ -771,7 +771,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:appointment:${appointmentId}`,
           );
           const current = await tx.appointment.findFirst({

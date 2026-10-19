@@ -165,6 +165,8 @@ const { PrismaClient } = PrismaPackage as unknown as {
     audienceDefinition: any;
     audienceMembership: any;
     governancePolicy: any;
+    beautyJobResult: any;
+    beautyJobSatisfaction: any;
     governancePolicyVersion: any;
     policyEvaluation: any;
     humanOverride: any;

@@ -1328,6 +1328,7 @@ model StaffTimeOff {
 }
 
 model Appointment {
+  beautyJobResult       BeautyJobResult?
   id                    String                     @id @default(cuid())
   businessId            String
   customerId            String
@@ -4141,4 +4142,36 @@ model GovernanceEvent {
 
   @@index([businessId, type, createdAt])
   @@index([marketId, type, createdAt])
+}
+
+model BeautyJobResult {
+  passportPublishedAt DateTime?
+  id                  String                 @id @default(cuid())
+  businessId          String
+  appointmentId       String
+  summary             String                 @db.VarChar(2000)
+  recordedById        String
+  idempotencyKey      String                 @db.VarChar(100)
+  createdAt           DateTime               @default(now())
+  appointment         Appointment            @relation(fields: [businessId, appointmentId], references: [businessId, id], onDelete: Restrict)
+  satisfaction        BeautyJobSatisfaction?
+
+  @@unique([businessId, appointmentId])
+  @@unique([businessId, id])
+  @@unique([businessId, idempotencyKey])
+  @@index([createdAt, id])
+}
+
+model BeautyJobSatisfaction {
+  id             String          @id @default(cuid())
+  businessId     String
+  resultId       String
+  customerUserId String
+  outcome        String          @db.VarChar(20)
+  idempotencyKey String          @db.VarChar(100)
+  createdAt      DateTime        @default(now())
+  result         BeautyJobResult @relation(fields: [businessId, resultId], references: [businessId, id], onDelete: Restrict)
+
+  @@unique([businessId, resultId])
+  @@unique([businessId, idempotencyKey])
 }

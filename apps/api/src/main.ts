@@ -30,7 +30,7 @@ async function bootstrap(): Promise<void> {
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   });
   await app.listen(config.port, "0.0.0.0");
 }
