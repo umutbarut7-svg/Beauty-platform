@@ -6,6 +6,7 @@ import { chromium } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { PrismaClient } from "@prisma/client";
+import { hash } from "bcryptjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const url =
@@ -64,9 +65,10 @@ async function create(
   method = "POST",
 ) {
   const r = await request(path, token, method, body);
-  expect(r.status, `${method} ${path}: ${JSON.stringify(r.body)}`).toBe(
-    method === "POST" ? 201 : 200,
-  );
+  expect(
+    r.status,
+    `${method} ${path}: ${String(r.body?.code ?? r.body?.message ?? "unexpected status")}`,
+  ).toBe(method === "POST" && path !== "/auth/login" ? 201 : 200);
   return r.body;
 }
 async function worker() {
@@ -123,7 +125,15 @@ beforeAll(async () => {
     password: "Isolated-strong-password-33",
   });
   professionalToken = professional.accessToken;
-  const unassigned = await create("/auth/register", "", {
+  // Keep the real 5/min registration limit intact, including the browser signup.
+  await db.user.create({
+    data: {
+      email: `unassigned-${key}@example.test`,
+      passwordHash: await hash("Isolated-strong-password-33", 12),
+      customer: { create: {} },
+    },
+  });
+  const unassigned = await create("/auth/login", "", {
     email: `unassigned-${key}@example.test`,
     password: "Isolated-strong-password-33",
   });
