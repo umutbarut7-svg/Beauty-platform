@@ -123,6 +123,30 @@ afterAll(async () => {
 });
 
 describe("platform-owned private photo journey with real DB/S3 and explicit OpenAI contract doubles", () => {
+  it("honors the real Prisma global and agent kill switches without calling the provider", async () => {
+    const user = await owner();
+    const abuse = new AbuseProtectionService(db as never);
+    const guard = new MvpExternalGuard(
+      db as never,
+      abuse,
+      new AISafetyEngine(),
+    );
+    for (const config of [
+      { scope: "GLOBAL" as const, target: "*" },
+      { scope: "AGENT_TYPE" as const, target: "MVP_VISUAL" },
+    ]) {
+      const toggle = await db.aIKillSwitch.create({
+        data: { ...config, enabled: true },
+      });
+      try {
+        await expect(guard.consume(user.id, "saç bakımı")).rejects.toThrow(
+          "AI_CAPABILITY_DISABLED",
+        );
+      } finally {
+        await db.aIKillSwitch.delete({ where: { id: toggle.id } });
+      }
+    }
+  });
   it("keeps SDK objects private, prevents overwrites, normalizes metadata and physically erases", async () => {
     const key = `private/mvp/${randomUUID()}`;
     const jpeg = await store.normalize(bytes, "image/png");
@@ -179,7 +203,12 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
       target: "parlaklık",
     });
     const first = visual.analyze(user, session.id, [], 0);
-    await called;
+    await Promise.race([
+      called,
+      first.then(() => {
+        throw new Error("Provider was not paused");
+      }),
+    ]);
     await expect(visual.analyze(user, session.id, [], 0)).rejects.toThrow(
       /BUSY|CHANGED/,
     );
@@ -227,11 +256,21 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
       target: "parlaklık",
     });
     const pending = visual.analyze(user, session.id, [], 0);
-    const rejected = expect(pending).rejects.toThrow("UNAVAILABLE");
-    await called;
+    const settled = pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await Promise.race([
+      called,
+      settled.then((error) => {
+        throw error ?? new Error("Provider was not paused");
+      }),
+    ]);
     await visual.withdraw(user, consent.id);
     release(response());
-    await rejected;
+    expect(await settled).toMatchObject({
+      message: expect.stringContaining("UNAVAILABLE"),
+    });
     const row = await db.mvpPhotoAnalysis.findUniqueOrThrow({
       where: { id: session.id },
     });

@@ -229,6 +229,7 @@ export function VisualJourney({
           style={styles.button}
           onPress={() => {
             const id = consentId;
+            generation.current++;
             setSession(null);
             setMatches(null);
             setAnswers([]);

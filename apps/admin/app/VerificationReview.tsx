@@ -80,7 +80,9 @@ export function VerificationReview({
             ))}
           </dl>
           {request.reviewNote && <p>Önceki karar notu: {request.reviewNote}</p>}
-          {policy?.policy?.version === request.policyVersion &&
+          {policy?.policy &&
+            (request.status === "APPROVED" ||
+              policy.policy.version === request.policyVersion) &&
             ["SUBMITTED", "APPROVED"].includes(request.status) && (
               <>
                 <label>
@@ -110,8 +112,8 @@ export function VerificationReview({
                       }))
                     }
                   />
-                  Güncel politikaya göre kanıtları inceledim; bu işletmenin
-                  üyesi değilim.
+                  Başvuruyu ve karar gerekçesini inceledim; bu işletmenin üyesi
+                  değilim.
                 </label>
                 {(request.status === "SUBMITTED"
                   ? (["APPROVED", "REJECTED"] as const)

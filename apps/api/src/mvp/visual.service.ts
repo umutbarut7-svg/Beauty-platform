@@ -56,7 +56,7 @@ export class MvpExternalGuard {
     if (!this.safety.evaluate(input).allowed)
       throw new BadRequestException("AI_INPUT_REQUIRES_REVIEW");
     if (
-      await this.db.aiKillSwitch.findFirst({
+      await this.db.aIKillSwitch.findFirst({
         where: {
           enabled: true,
           businessId: null,

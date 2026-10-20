@@ -1147,9 +1147,18 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         model: null,
         output: null as unknown,
       };
+      const fixtureCors = {
+        "access-control-allow-origin": "http://localhost:8081",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "authorization, content-type",
+      };
       await page.route("**/mvp/v1/**", async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
+        if (request.method() === "OPTIONS") {
+          await route.fulfill({ status: 204, headers: fixtureCors });
+          return;
+        }
         let value: unknown;
         if (path === "/mvp/v1/photos/policy") {
           value = {
@@ -1230,6 +1239,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
+          headers: fixtureCors,
           body: JSON.stringify(value),
         });
       });
