@@ -1,8 +1,8 @@
 # Fotoğraf ve işletme doğrulaması — inceleme taslağı
 
-Bu metin etkinleştirilmiş bir politika değildir. Kaynakta bulunmayan ürün kararları
-aşağıda **öneri** olarak sunulur; kullanıcı tarafından verilmiş kararlar sayılmaz.
-`.env.example` içindeki iki `*_POLICY_REVIEWED` değeri `false` kalır.
+Bu metin henüz etkinleştirilmiş bir politika değildir. **20 Ekim 2026 kullanıcı onayı:** fotoğraf/danışmanlık içeriği için azami **24 saat**, izin/işlem kanıtı için **90 gün**, işletme başvuru kanıtı/notu için **90 gün** saklama; işletme doğrulamasında işletmeden bağımsız platform yöneticisinin resmî kayıt kontrolü yapması prensip olarak onaylandı. Diğer ürün tercihleri ve gerçek sistem kabulü otomatik olarak onaylanmış sayılmaz.
+
+Kayıtlı platform adı, başvuru iletişim kanalı, resmî kayıt kaynağı/pazar, yetkili incelemeci ataması, sağlayıcı şartları ve hukuki metin incelemesi tamamlanana kadar `.env.example` içindeki iki `*_POLICY_REVIEWED` değeri `false` kalır.
 
 ## Önerilen fotoğraf kapsamı
 
@@ -11,7 +11,7 @@ aşağıda **öneri** olarak sunulur; kullanıcı tarafından verilmiş kararlar
 | Amaç       | Kullanıcının istediği saç görünümü için tekil danışmanlık, ek sorular, öneri planı ve katalog eşleştirmesi         |
 | Sahiplik   | İşletme seçilmeden önce platformdaki kullanıcı; işletme/profesyonel veya diğer kullanıcı fotoğrafı okuyamaz        |
 | Paylaşım   | Özel AWS S3 depolaması ve kullanıcının başlattığı analiz için OpenAI; işletmeye veya reklama otomatik paylaşım yok |
-| Saklama    | Fotoğraf, hedef/yanıtlar ve AI planı için azami **24 saat**; teknik onay/işlem kanıtı için **90 gün** önerilir     |
+| Saklama    | Fotoğraf, hedef/yanıtlar ve AI planı için azami **24 saat**; teknik onay/işlem kanıtı için **90 gün** (prensip onayı alındı)     |
 | İzin       | Varsayılanı boş olan ayrı onay; kayıt olmak veya katalog kullanmak fotoğraf izni sayılmaz                          |
 | Geri çekme | İzinler ekranından geri çekme; erişim ve analiz sonucu hemen kapatılır, worker fiziksel silmeyi takip eder         |
 | İşleme     | JPEG/PNG; en fazla 5 MB ve 20 milyon piksel; server JPEG'e dönüştürür, EXIF/GPS bilgisini kaldırır                 |
@@ -22,7 +22,7 @@ aşağıda **öneri** olarak sunulur; kullanıcı tarafından verilmiş kararlar
 “[Platformun kayıtlı adı] olarak seçtiğiniz fotoğrafı, isteğinizi ve hedefinizi
 saç danışmanlığı için işleriz. Fotoğrafınız özel depolamada tutulur; analizi
 başlattığınızda bu amaçla OpenAI'ye iletilir. Fotoğraf ve danışmanlık içeriği
-en fazla [onaylanan süre] saklanır. Onay/işlem kanıtı [onaylanan süre] tutulur.
+en fazla 24 saat saklanır. Onay/işlem kanıtı 90 gün tutulur.
 İzninizi uygulamadaki fotoğraf izinleri bölümünden geri çekebilirsiniz. Bu,
 fotoğraf ve sonuçlarına erişimi kapatır; fiziksel silme worker tarafından takip
 edilir. Analiz profesyonel değerlendirmesinin yerine geçmez ve sonuç garantisi
@@ -30,7 +30,7 @@ vermez. Başvurular için [iletişim] ve sağlayıcı işleme koşulları için 
 
 `store:false`, uygulamanın Responses isteğinde kullandığı ayardır; sağlayıcının
 hesap/veri işleme koşullarının yerine geçen bir saklama garantisi olarak sunulmaz.
-Kayıtlı platform adı, iletişim, sağlayıcı koşulları ve süreler doldurulmadan
+Kayıtlı platform adı, iletişim, sağlayıcı koşulları ve hukuki inceleme tamamlanmadan
 bu metin etkinleştirilmemelidir. Bu eksiklikler test-fixture metinleriyle kapatılmaz.
 
 ## Önerilen işletme doğrulaması
@@ -42,7 +42,7 @@ bu metin etkinleştirilmemelidir. Bu eksiklikler test-fixture metinleriyle kapat
 | Karar     | Gerekçeli onay/red; hiçbir AI veya normal işletme yöneticisi otomatik doğrulama yapamaz                         |
 | İptal     | İşletme, bekleyen başvuruyu iptal edip güncel koşullarla yeniden başvurabilir                                   |
 | Geri alma | Yetkili platform incelemecisi gerekçeyle doğrulamayı geri alabilir                                              |
-| Saklama   | Başvuru kanıtı/notu için **90 gün** önerilir; süre dolunca içerik temizlenir, bekleyen başvuru sona erer        |
+| Saklama   | Başvuru kanıtı/notu için **90 gün** (prensip onayı alındı); süre dolunca içerik temizlenir, bekleyen başvuru sona erer        |
 | Audit     | Karar/actor/resource referansı mevcut tenant audit'inde kalır; kanıt metni audit/log içine yazılmaz             |
 
 Kayıt referansının hangi resmî kaynakla doğrulanacağı, platformun hangi pazarlarda
@@ -53,7 +53,7 @@ version/notice/field-list/retention bağlamını zorunlu kılar; önerilen alan 
 
 ## Etkinleştirme öncesi somut gereklilikler
 
-1. Yukarıdaki öneriler üzerindeki ürün tercihleri ve eksik platform bilgileri.
+1. Onaylanan saklama süreleri ve bağımsız incelemeci prensibi kaydedildi. Kalan ürün tercihleri, platform bilgileri, hukuki metin incelemesi ve resmî doğrulama kaynağı.
 2. Özel, versioning kapalı S3 bucket, Public Access Block ve uygun IAM runtime
    rolü; gerçek bucket'ın erişim/şifreleme/silme ve saklama ayarlarının doğrulanması.
 3. Runtime secret binding ile OpenAI anahtarı, erişilebilir vision modeli ve
