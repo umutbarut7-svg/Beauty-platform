@@ -57,9 +57,10 @@ jobs:
           ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64 --no-daemon --max-workers=2
       - name: Install iOS pods
         if: matrix.platform == 'ios'
+        working-directory: apps/mobile/ios
         run: |
           xcodebuild -version
-          pod install --project-directory=apps/mobile/ios
+          pod install
       - name: Compile unsigned iOS simulator app
         if: matrix.platform == 'ios'
         run: |
