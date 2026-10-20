@@ -88,7 +88,10 @@ export class MvpApiClient {
       throw new ApiError(response.status);
     }
     if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
+    const result = (await response.json()) as T;
+    // A logout or another request's 401 may occur while the body is streaming.
+    if (generation !== this.generation) throw new Error("Oturum değişti.");
+    return result;
   }
 }
 

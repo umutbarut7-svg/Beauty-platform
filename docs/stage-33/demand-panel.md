@@ -41,6 +41,16 @@ panelde stale snapshot, dönem değiştirme, tahmin etiketi, boş veri,
 üyelik yetkisinin gerçekten kaldırılması sonrası hata/önceki verinin temizlenmesi
 ve işletme değişimini çalıştırır. Test doubles bu kapıda kullanılmaz.
 
+Aynı Chromium yolculuğunda BusinessSetup konum ve profesyonel oluşturma,
+kayıtlı STAFF hesabına bağlama, kategori/hizmet/fiyat ve profesyonel-hizmet
+ataması, işletme/profesyonel saatlerini kaydetme işlemleri de gerçek UI ve
+PostgreSQL üzerinden doğrulanır. Diğer işletme günlerinin korunması ayrıca
+kontrol edilir. Native UI kabulünün yerine geçmez.
+
+İstemcide response body okunurken oturum değişmesi durumunda eski özel verinin
+geri dönmesini engelleyen ikinci generation kontrolü eklendi. Geciktirilmiş body
+ile regression testi vardır; credentials temizlendikten sonra veri reddedilir.
+
 20 Ekim yerel sonuç: Node 24.19.0, pnpm 10.28.1 frozen install; workspace test
 (API 424 test / 93 dosya), typecheck, lint, format ve build başarılı.
 Integration TypeScript kontrolü başarılı. Prisma 6.19 generate ve validate da
@@ -48,6 +58,11 @@ bu ortamda başarılıdır; eski ortamın engine engeli bu çalışmaya taşınm
 Yerel PostgreSQL/Redis servisleri ve native araçlar kurulu olmadığından gerçek
 DB/Chromium/worker kabulü mevcut GitHub CI kapısında ayrıca doğrulanmalıdır.
 Bu belgenin eklenmesi tek başına yeni CI veya native başarısı iddia etmez.
+
+`expo export --platform all` Android/iOS JavaScript ve Hermes bytecode paketlerini
+yerelde başarıyla üretti. Aynı kontrol CI'a ayrı bir kapı olarak eklendi.
+Bu APK/IPA derlemesi, Xcode/Gradle veya cihazda çalıştırma değildir. İstemci
+oturum düzeltmesi sonrasındaki paketler son CI commit'inde tekrar kontrol edilir.
 
 ## Kalan sınırlar
 

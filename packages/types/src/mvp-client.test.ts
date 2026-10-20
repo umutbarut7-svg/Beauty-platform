@@ -61,4 +61,29 @@ describe("MVP transport security", () => {
       "Invalid API path",
     );
   });
+  it("rejects an old session's body if credentials are cleared while JSON is streaming", async () => {
+    let finish!: (body: unknown) => void;
+    let started!: () => void;
+    const parsing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const body = new Promise<unknown>((resolve) => {
+      finish = resolve;
+    });
+    const response = new Response("{}");
+    vi.spyOn(response, "json").mockImplementation(() => {
+      started();
+      return body;
+    });
+    const api = new MvpApiClient(
+      "https://api.example.test",
+      vi.fn().mockResolvedValue(response),
+    );
+    const request = api.request("/mvp/v1/passport");
+    const rejected = expect(request).rejects.toThrow("Oturum değişti.");
+    await parsing;
+    api.clear();
+    finish({ items: [{ summary: "previous user's private result" }] });
+    await rejected;
+  });
 });

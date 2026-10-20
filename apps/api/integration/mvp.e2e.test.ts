@@ -697,6 +697,123 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await page
         .getByRole("button", { name: `Stage33-${key}`, exact: true })
         .click();
+      // Exercise the real setup forms, rather than treating backend fixtures as UI acceptance.
+      const field = (name: string) =>
+        page.getByRole("textbox", { name, exact: true });
+      const click = (name: string) =>
+        page.getByRole("button", { name, exact: true }).click();
+      await click("Yönetim kayıtlarını yükle");
+      await field("Konum adı").fill("Browser location");
+      await field("Adres").fill("Synthetic test address");
+      await field("Şehir").fill("Test city");
+      await click("Konum ekle");
+      await page
+        .getByRole("button", { name: "Browser location ✓", exact: true })
+        .waitFor();
+      await field("Ad").fill("Browser");
+      await field("Soyad").fill("Professional");
+      await field("Görünen ad").fill("Browser Professional");
+      await click("Profesyonel ekle");
+      await page
+        .getByRole("button", { name: "Browser Professional ✓", exact: true })
+        .waitFor();
+      await click("İşletme üyelerini yükle");
+      await click(`unassigned-${key}@example.test`);
+      await click("Seçilen profesyoneli hesaba bağla");
+      await page
+        .getByText("Profesyonel profili seçilen üyeye bağlandı.", {
+          exact: true,
+        })
+        .waitFor();
+      await field("Kategori adı").fill("Browser category");
+      await click("Kategori ekle");
+      await page
+        .getByRole("button", { name: "Browser category ✓", exact: true })
+        .waitFor();
+      await field("Hizmet adı").fill("Browser service");
+      await field("Fiyat (ondalık metin)").fill("225.50");
+      await field("Para birimi").fill("TRY");
+      await field("Süre (dakika)").fill("45");
+      await click("Hizmet ekle");
+      await page.getByRole("button", { name: /Browser service.*✓/ }).waitFor();
+      await field("Fiyat (ondalık metin)").fill("250.75");
+      await click("Hizmet fiyatını kaydet");
+      await page
+        .getByRole("button", {
+          name: "Browser service · 250.75 TRY ✓",
+          exact: true,
+        })
+        .waitFor();
+      await click("Hizmeti seçilen profesyonele ata");
+      await page
+        .getByText("Hizmet ataması kaydedildi.", { exact: true })
+        .waitFor();
+      await click("MONDAY");
+      await field("Başlangıç (HH:mm)").fill("09:00");
+      await field("Bitiş (HH:mm)").fill("17:00");
+      await click("İşletme saatlerini yükle");
+      await page
+        .getByText("Saatler yüklendi; kaydetmeden önce kontrol edin.", {
+          exact: true,
+        })
+        .waitFor();
+      await click("Seçilen işletme gününü kaydet");
+      await page
+        .getByText("İşletme saatleri kaydedildi.", { exact: true })
+        .waitFor();
+      await click("Seçilen profesyonel gününü kaydet");
+      await page
+        .getByText("Profesyonel saatleri kaydedildi.", { exact: true })
+        .waitFor();
+      const browserStaff = await db.staff.findFirstOrThrow({
+        where: { businessId, displayName: "Browser Professional" },
+      });
+      const browserService = await db.service.findFirstOrThrow({
+        where: { businessId, name: "Browser service" },
+      });
+      expect(String(browserService.price)).toBe("250.75");
+      expect(browserService.durationMinutes).toBe(45);
+      expect(
+        await db.staffProfileService.count({
+          where: {
+            businessId,
+            staffId: browserStaff.id,
+            serviceId: browserService.id,
+          },
+        }),
+      ).toBe(1);
+      expect(browserStaff.userId).toBe(
+        (
+          await db.user.findUniqueOrThrow({
+            where: { email: `unassigned-${key}@example.test` },
+          })
+        ).id,
+      );
+      const browserLocation = await db.location.findFirstOrThrow({
+        where: { businessId, name: "Browser location" },
+      });
+      expect(
+        await db.staffLocation.count({
+          where: {
+            businessId,
+            staffId: browserStaff.id,
+            locationId: browserLocation.id,
+          },
+        }),
+      ).toBe(1);
+      expect(
+        await db.workingHour.count({ where: { businessId, branchId: null } }),
+      ).toBe(7);
+      expect(
+        await db.workingHour.findFirstOrThrow({
+          where: { businessId, branchId: null, dayOfWeek: "MONDAY" },
+        }),
+      ).toMatchObject({ openTime: "09:00", closeTime: "17:00" });
+      expect(
+        await db.staffWorkingHour.findFirstOrThrow({
+          where: { businessId, staffId: browserStaff.id, dayOfWeek: "MONDAY" },
+        }),
+      ).toMatchObject({ startTime: "09:00", endTime: "17:00" });
       await page
         .getByRole("button", { name: "Talep verilerini yükle", exact: true })
         .click();

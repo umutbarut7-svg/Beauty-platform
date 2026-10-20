@@ -108,6 +108,9 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Export Android and iOS JavaScript and Hermes bundles
+        run: pnpm --filter @beauty-platform/mobile exec expo export --platform all --output-dir /tmp/stage33-platform-bundles --max-workers 2
+
       - name: Run workspace tests
         run: pnpm test
 
