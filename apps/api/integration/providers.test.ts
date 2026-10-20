@@ -17,6 +17,7 @@ import { PhotoMaintenanceService } from "../src/mvp/photo-maintenance.service.js
 import { SemanticService } from "../src/mvp/semantic.service.js";
 import { AbuseProtectionService } from "../src/infrastructure/abuse-protection.service.js";
 import { MetricsService } from "../src/infrastructure/metrics.service.js";
+import { BackgroundJobsService } from "../src/infrastructure/background-jobs.service.js";
 import { AISafetyEngine } from "../src/ai/ai-safety.service.js";
 import { PermissionsService } from "../src/auth/permissions.service.js";
 import type { AuthenticatedUser } from "../src/auth/auth.types.js";
@@ -313,6 +314,123 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
 });
 
 describe("real pgvector index scope, freshness and cosine query (synthetic vectors, not live embeddings)", () => {
+  it("indexes through the durable worker exactly once and rejects revoked tenant membership before another provider call", async () => {
+    const user = await owner();
+    const business = await db.business.create({
+      data: {
+        name: "Synthetic worker catalog",
+        slug: randomUUID(),
+        isPublic: true,
+      },
+    });
+    await db.businessMember.create({
+      data: {
+        businessId: business.id,
+        userId: user.id,
+        role: "BUSINESS_OWNER",
+      },
+    });
+    const category = await db.serviceCategory.create({
+      data: { businessId: business.id, name: "Synthetic", slug: randomUUID() },
+    });
+    const catalog = await db.service.create({
+      data: {
+        businessId: business.id,
+        categoryId: category.id,
+        name: "Synthetic worker service",
+        slug: randomUUID(),
+        durationMinutes: 30,
+        price: "100",
+      },
+    });
+    const vector = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0));
+    const transport = vi
+      .fn()
+      .mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              model: "text-embedding-3-small",
+              data: [{ embedding: vector }],
+            }),
+          ),
+      );
+    const metrics = new MetricsService();
+    const jobs = new BackgroundJobsService(db as never, metrics);
+    const abuse = new AbuseProtectionService(db as never);
+    const semantic = new SemanticService(
+      db as never,
+      new PermissionsService(db as never),
+      new OpenAiBeautyProvider(metrics, transport),
+      new MvpExternalGuard(db as never, abuse, new AISafetyEngine()),
+      jobs,
+      { notify: async () => undefined } as never,
+    );
+    semantic.onModuleInit();
+    const idempotencyKey = randomUUID();
+    const queued = await semantic.enqueue(
+      user,
+      business.id,
+      catalog.id,
+      idempotencyKey,
+    );
+    expect(
+      (await semantic.enqueue(user, business.id, catalog.id, idempotencyKey))
+        .jobId,
+    ).toBe(queued.jobId);
+    expect(await jobs.processNext(true)).toBe(true);
+    expect(
+      (
+        await db.backgroundJob.findUniqueOrThrow({
+          where: { id: queued.jobId },
+        })
+      ).status,
+    ).toBe("SUCCEEDED");
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(
+      (await semantic.nearest(vector, "text-embedding-3-small")).items,
+    ).toContainEqual(
+      expect.objectContaining({
+        serviceId: catalog.id,
+        businessId: business.id,
+      }),
+    );
+    expect(await jobs.processNext(true)).toBe(false);
+    const delayed = await semantic.enqueue(
+      user,
+      business.id,
+      catalog.id,
+      randomUUID(),
+    );
+    await db.businessMember.delete({
+      where: {
+        userId_businessId: { userId: user.id, businessId: business.id },
+      },
+    });
+    expect(await jobs.processNext(true)).toBe(true);
+    expect(
+      (
+        await db.backgroundJob.findUniqueOrThrow({
+          where: { id: delayed.jobId },
+        })
+      ).status,
+    ).toBe("DEAD_LETTER");
+    expect(transport).toHaveBeenCalledTimes(1);
+    await expect(
+      semantic.enqueue(user, business.id, catalog.id, randomUUID()),
+    ).rejects.toThrow("denied");
+    expect(
+      await db.auditLog.count({
+        where: { businessId: business.id, action: "mvp.catalog.indexed" },
+      }),
+    ).toBe(1);
+    // Leave no public fixture for the following exact-nearest query assertions.
+    await db.business.update({
+      where: { id: business.id },
+      data: { isPublic: false },
+    });
+    jobs.onModuleDestroy();
+  }, 30000);
   it("returns only current active public bookable services and does not mix embedding models", async () => {
     const business = await db.business.create({
       data: {
