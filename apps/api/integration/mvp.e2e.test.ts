@@ -45,6 +45,15 @@ const environment = {
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
   CORS_ORIGINS: "http://localhost:8081,http://localhost:3000",
   RATE_LIMIT_DEFAULT: "10000",
+  MVP_VERIFICATION_POLICY_REVIEWED: "true",
+  MVP_VERIFICATION_POLICY_VERSION: "synthetic-ci-verification-v1",
+  MVP_VERIFICATION_NOTICE:
+    "Synthetic test policy; not a real approved product policy",
+  MVP_VERIFICATION_RETENTION_DAYS: "30",
+  MVP_VERIFICATION_FIELDS_JSON: JSON.stringify([
+    { key: "legal_name", label: "İşletme kayıt adı" },
+    { key: "registry_reference", label: "Kayıt referansı" },
+  ]),
 };
 async function request(
   path: string,
@@ -267,6 +276,95 @@ afterAll(async () => {
 });
 
 describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
+  it("requires an independent platform reviewer and atomically audits verification approval/revocation", async () => {
+    const path = `/mvp/v1/businesses/${businessId}/verification`;
+    const input = {
+      policyVersion: "synthetic-ci-verification-v1",
+      answers: {
+        legal_name: "Synthetic fixture only",
+        registry_reference: "SYNTHETIC-NOT-A-REAL-DOCUMENT",
+      },
+    };
+    expect((await request(path, strangerToken, "POST", input)).status).toBe(
+      403,
+    );
+    expect((await request(path, professionalToken)).status).toBe(403);
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...input,
+          answers: { guessed: "not allowed" },
+        })
+      ).status,
+    ).toBe(400);
+    const submission = await create(path, ownerToken, input);
+    expect((await request(path, ownerToken, "POST", input)).status).toBe(409);
+    expect(
+      (
+        await request(`${path}/${submission.id}/review`, ownerToken, "POST", {
+          decision: "APPROVED",
+          note: "Unauthorized owner",
+        })
+      ).status,
+    ).toBe(403);
+    const reviewerEmail = `reviewer-${key}@example.test`;
+    await db.user.create({
+      data: {
+        email: reviewerEmail,
+        passwordHash: await hash("Isolated-strong-password-33", 12),
+        role: "SUPER_ADMIN",
+      },
+    });
+    const reviewerToken = (
+      await create("/auth/login", "", {
+        email: reviewerEmail,
+        password: "Isolated-strong-password-33",
+      })
+    ).accessToken;
+    const decision = {
+      decision: "APPROVED",
+      note: "Synthetic evidence reviewed under the CI fixture policy",
+    };
+    await create(`${path}/${submission.id}/review`, reviewerToken, decision);
+    await create(`${path}/${submission.id}/review`, reviewerToken, decision);
+    expect(
+      (await db.business.findUniqueOrThrow({ where: { id: businessId } }))
+        .isVerified,
+    ).toBe(true);
+    expect(
+      await db.auditLog.count({
+        where: { businessId, action: "mvp.verification.approved" },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await request(
+          `${path}/${submission.id}/review`,
+          reviewerToken,
+          "POST",
+          { decision: "REJECTED", note: "Invalid state" },
+        )
+      ).status,
+    ).toBe(409);
+    await create(`${path}/${submission.id}/review`, reviewerToken, {
+      decision: "REVOKED",
+      note: "End the synthetic verification fixture",
+    });
+    expect(
+      (await db.business.findUniqueOrThrow({ where: { id: businessId } }))
+        .isVerified,
+    ).toBe(false);
+    const hiddenPhotos = await request("/mvp/v1/photos/policy", customerToken);
+    expect(hiddenPhotos.body.available).toBe(false);
+    expect(
+      (
+        await request("/mvp/v1/photos/consents", customerToken, "POST", {
+          policyVersion: "invented",
+          accepted: true,
+        })
+      ).status,
+    ).toBe(503);
+  });
   it("registers, books authoritative availability, completes a job, records result and customer satisfaction, publishes passport via real worker", async () => {
     expect(
       (await request(`/mvp/v1/catalog/${businessId}`, customerToken)).body

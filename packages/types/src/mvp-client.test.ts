@@ -1,6 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, MvpApiClient } from "./mvp-client.js";
 describe("MVP transport security", () => {
+  it("sends multipart files without overriding the transport boundary or persisting credentials", async () => {
+    const transport = vi.fn().mockResolvedValue(new Response("{}"));
+    const api = new MvpApiClient("https://api.example.test", transport);
+    const body = new FormData();
+    body.append(
+      "photo",
+      new Blob(["synthetic"], { type: "image/png" }),
+      "photo.png",
+    );
+    await api.request("/mvp/v1/photos/upload/fixture", "POST", body, {
+      multipart: true,
+      timeoutMs: 45000,
+    });
+    expect(transport.mock.calls[0]?.[1]).toMatchObject({
+      body,
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store",
+    });
+    expect(
+      transport.mock.calls[0]?.[1].headers["content-type"],
+    ).toBeUndefined();
+  });
   it("calls the browser fetch with its global receiver", async () => {
     const original = globalThis.fetch;
     globalThis.fetch = function (this: unknown) {

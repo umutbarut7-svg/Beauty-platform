@@ -46,22 +46,28 @@ response uyumsuzluğu, advisory lock void deserialization, BigInt JSON çıktıs
 nested staff-location parent key ve tarayıcı fetch receiver hataları bulundu ve
 düzeltildi. Testler skip edilmedi; rate limit ve domain kabul şartları korunur.
 
-## Kalan zorunlu kabul engelleri
+## Güncel sağlayıcı devam çalışması ve kabul engelleri
 
-- İşletme verification için onaylanmış karar/review politikası yok: BLOCKED.
-- Pretenant fotoğraf notice/consent/retention kararı yok: upload kapalı/BLOCKED.
-- Private S3 ve OpenAI vision/structured analysis gerçek adapter/runtime
-  doğrulaması yok; yalnız anahtar eksikliği olarak sunulmaz. Smart Questions,
-  visual analysis ve Result Plan tam kabulü BLOCKED.
-- pgvector semantic matching adapter'ı bu değişiklikte uygulanmadı; mevcut
-  DATABASE katalog araması AI/semantic başarı olarak sunulmaz.
-- Business Demand sinyal paneli eklendi; kapsam ve yeni kontrol kaydı
-  `demand-panel.md` içindedir. İşletme AI konsolu/provider ve native kabulü
-  hâlâ eksiktir. Panel, bu engelleri kaldırmış sayılmaz.
-- Web E2E kritik akışı kapsar; bütün BusinessSetup ekran işlemleri ve
-  Android/iOS ayrıca kabul gerektirir.
+Yeni uygulama [providers-and-visual-flow.md](providers-and-visual-flow.md),
+incelenmeye hazır ürün seçenekleri [policy-drafts.md](policy-drafts.md) içindedir.
+S3/OpenAI/pgvector adapter kodları, owner photo workflow, mobil ekranlar ve
+bağımsız reviewer verification akışı eklendi. Bu, canlı bağlantı kabulü değildir.
+Yerel API suite 434 test / 94 dosya, types 9 test, typecheck/lint/build/format
+kontrolleri geçti; son commit'in gerçek CI sonucu PR #11 checks ile ayrıca izlenir.
 
-Aşama 34/35, production dağıtımı, gerçek ödeme/bildirim veya main merge yapılmadı.
+- Onaylanmış platform notice/retention ve işletme verification ürün politikası:
+  BLOCKED; taslaklar etkinleştirilmedi.
+- Gerçek AWS bucket güvenlik/retention/erasure ve OpenAI hesabı/model erişimi:
+  BLOCKED; runtime secret bağlantıları yok. CI'daki contract doubles canlı OpenAI
+  değildir; S3-compatible fixture production AWS kabulü değildir.
+- Gerçek pgvector CI fixture sorgusu ve gerçek OpenAI embedding bağlantısı ayrı
+  koşullardır. Adapter'ın varlığı gerçek embedding hesabını kanıtlamaz.
+- Gerçek Android/iOS APK/IPA ve cihaz kabulü NOT RUN; JS/Hermes export bunların
+  yerine geçmez. Yeni görsel UI'nin canlı provider/native kabulü ayrı yapılmalıdır.
+
+Aşama 33 bütünü PASS değildir. Aşama 34/35, production dağıtımı, gerçek ödeme/
+bildirim ve main merge yapılmadı. Aşağıdaki önceki run'lar yalnız kendi SHA'larının
+kanıtıdır; yeni sağlayıcı koduna otomatik olarak uygulanmaz.
 
 ## GitHub CI kanıtı
 

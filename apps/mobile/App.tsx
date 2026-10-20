@@ -1,5 +1,7 @@
 import { BusinessSetup } from "./BusinessSetup";
 import { BusinessDemand } from "./BusinessDemand";
+import { VisualJourney } from "./VisualJourney";
+import { BusinessIntelligenceSetup } from "./BusinessIntelligenceSetup";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -236,11 +238,14 @@ export default function App() {
                   </Text>
                   {input("İsteğiniz", intent, setIntent)}
                   {input("Hedefiniz", target, setTarget)}
-                  <Text style={styles.notice}>
-                    Fotoğraf, akıllı sorular ve görsel analiz şu anda
-                    kullanılamıyor. Sonuç veya AI önerisi üretilmiş değildir.
-                    Mevcut katalogdan randevu seçebilirsiniz.
-                  </Text>
+                  <VisualJourney
+                    api={api}
+                    intent={intent}
+                    target={target}
+                    busy={busy}
+                    run={run}
+                    choose={choose}
+                  />
                   {button("Katalogda ara", async () => {
                     const response = await api.request<DiscoverySearchResponse>(
                       `/discovery/search?query=${encodeURIComponent(intent)}&limit=20`,
@@ -439,6 +444,13 @@ export default function App() {
                     />
                     <BusinessDemand
                       key={`demand-${business.id}`}
+                      api={api}
+                      businessId={business.id}
+                      busy={busy}
+                      run={run}
+                    />
+                    <BusinessIntelligenceSetup
+                      key={`intelligence-${business.id}`}
                       api={api}
                       businessId={business.id}
                       busy={busy}

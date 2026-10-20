@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { ApiError, MvpApiClient } from "@beauty-platform/types";
+import { VerificationReview } from "./VerificationReview";
 type Business = { id: string; name: string; isVerified: boolean };
 type Revenue = {
   status: string;
@@ -153,7 +154,21 @@ export default function HomePage() {
                   ? "Mevcut kayıt doğrulanmış"
                   : "İncelenmiş doğrulama politikası ve yetkili değerlendirme gerekiyor."}
               </p>
-              <p>Bu ekran yeni doğrulama kararı veya ödeme oluşturmaz.</p>
+              <VerificationReview
+                key={selected.id}
+                api={api}
+                businessId={selected.id}
+                busy={busy}
+                run={run}
+                reviewed={(isVerified) => {
+                  setSelected({ ...selected, isVerified });
+                  setBusinesses((values) =>
+                    values.map((b) =>
+                      b.id === selected.id ? { ...b, isVerified } : b,
+                    ),
+                  );
+                }}
+              />
               <button
                 disabled={busy}
                 onClick={() =>

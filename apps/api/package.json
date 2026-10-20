@@ -15,15 +15,17 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
-    "test:stage33:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run --no-file-parallelism integration/mvp.e2e.test.ts integration/redis-wakeup.test.ts"
+    "test:stage33:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run --no-file-parallelism integration/mvp.e2e.test.ts integration/redis-wakeup.test.ts integration/providers.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1153.0",
     "@beauty-platform/types": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
+    "@fastify/multipart": "10.1.4",
     "@nestjs/common": "^12.0.3",
     "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^12.0.3",
@@ -37,7 +39,8 @@
     "luxon": "^3.7.2",
     "redis": "6.3.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.1",

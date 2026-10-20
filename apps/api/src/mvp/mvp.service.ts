@@ -17,6 +17,9 @@ import type { PrismaService } from "../database/prisma.service.js";
 import { requestContext } from "../infrastructure/request-context.js";
 import { RedisWakeupService } from "../infrastructure/redis-wakeup.service.js";
 import type { ResultDto, SatisfactionDto } from "./mvp.dto.js";
+import { VisualService } from "./visual.service.js";
+import { VerificationService } from "./verification.service.js";
+import { aiConfigured } from "./providers/provider-config.js";
 
 export const resultSelect = {
   id: true,
@@ -36,6 +39,10 @@ export class MvpService {
     @Optional()
     @Inject(RedisWakeupService)
     private readonly wakeup?: RedisWakeupService,
+    @Optional() @Inject(VisualService) private readonly visual?: VisualService,
+    @Optional()
+    @Inject(VerificationService)
+    private readonly verificationService?: VerificationService,
   ) {}
 
   capabilities() {
@@ -48,16 +55,26 @@ export class MvpService {
         fallback: "POSTGRES_POLLING",
       },
       enabled: process.env.STAGE33_MVP_ENABLED === "true",
-      privatePhotos: {
+      privatePhotos: this.visual?.capability() ?? {
         available: false,
         reason: "PRIVATE_STORAGE_AND_REVIEWED_OWNER_CONSENT_REQUIRED",
       },
-      visualAnalysis: {
+      visualAnalysis: this.visual?.capability() ?? {
         available: false,
         reason: "REVIEWED_POLICY_AND_PROVIDER_REQUIRED",
       },
-      matching: { provider: "DATABASE", semanticVectorAvailable: false },
-      verification: {
+      matching: {
+        provider: "DATABASE",
+        semanticVectorAvailable:
+          process.env.MVP_SEMANTIC_ENABLED === "true" &&
+          aiConfigured() &&
+          ["text-embedding-3-small", "text-embedding-3-large"].includes(
+            process.env.OPENAI_EMBEDDING_MODEL ?? "",
+          ),
+        semanticEndpoint: "VISUAL_PLAN_OR_BUSINESS_CONSOLE",
+        configurationOnly: true,
+      },
+      verification: this.verificationService?.policy() ?? {
         automatic: false,
         reason: "REVIEWED_BUSINESS_VERIFICATION_POLICY_REQUIRED",
       },

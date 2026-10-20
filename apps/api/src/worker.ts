@@ -3,13 +3,16 @@ import { AppModule } from "./app.module.js";
 import { BackgroundJobsService } from "./infrastructure/background-jobs.service.js";
 import { loadRuntimeConfig } from "./infrastructure/config.js";
 import { RedisWakeupService } from "./infrastructure/redis-wakeup.service.js";
+import { PhotoMaintenanceService } from "./mvp/photo-maintenance.service.js";
 async function main() {
   loadRuntimeConfig();
-  if (process.env.STAGE33_MVP_ENABLED !== "true")
+  const cleanupOnly = process.argv.includes("--privacy-cleanup");
+  if (process.env.STAGE33_MVP_ENABLED !== "true" && !cleanupOnly)
     throw new Error("MVP_FEATURE_DISABLED");
   const app = await NestFactory.createApplicationContext(AppModule);
   const jobs = app.get(BackgroundJobsService);
   const wakeup = app.get(RedisWakeupService);
+  const maintenance = app.get(PhotoMaintenanceService);
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -19,7 +22,8 @@ async function main() {
   process.once("SIGINT", stop);
   try {
     do {
-      const processed = await jobs.processNext(true);
+      await maintenance.sweep();
+      const processed = cleanupOnly ? false : await jobs.processNext(true);
       if (process.argv.includes("--once")) break;
       if (!processed) await wakeup.wait();
     } while (!stopping);

@@ -64,20 +64,35 @@ export class MvpApiClient {
     if (refreshToken)
       await this.request("/auth/logout", "POST", { refreshToken });
   }
-  async request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  async request<T>(
+    path: string,
+    method = "GET",
+    body?: unknown,
+    options?: { multipart?: boolean; timeoutMs?: number },
+  ): Promise<T> {
     if (!path.startsWith("/") || path.startsWith("//") || /[\\\r\n]/.test(path))
       throw new Error("Invalid API path");
     const generation = this.generation;
     const response = await this.transport(`${this.baseUrl}${path}`, {
       method,
       headers: {
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...(body === undefined || options?.multipart
+          ? {}
+          : { "content-type": "application/json" }),
         ...(this.accessToken
           ? { authorization: `Bearer ${this.accessToken}` }
           : {}),
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(15000),
+      ...(body === undefined
+        ? {}
+        : {
+            body: options?.multipart
+              ? (body as FormData)
+              : JSON.stringify(body),
+          }),
+      signal: AbortSignal.timeout(
+        Math.min(60000, Math.max(1000, options?.timeoutMs ?? 15000)),
+      ),
       credentials: "omit",
       redirect: "error",
       cache: "no-store",
