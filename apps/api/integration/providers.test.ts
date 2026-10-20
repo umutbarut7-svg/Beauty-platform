@@ -344,17 +344,15 @@ describe("real pgvector index scope, freshness and cosine query (synthetic vecto
       },
     });
     const vector = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0));
-    const transport = vi
-      .fn()
-      .mockImplementation(
-        async () =>
-          new Response(
-            JSON.stringify({
-              model: "text-embedding-3-small",
-              data: [{ embedding: vector }],
-            }),
-          ),
-      );
+    const transport = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: "text-embedding-3-small",
+            data: [{ embedding: vector }],
+          }),
+        ),
+    );
     const metrics = new MetricsService();
     const jobs = new BackgroundJobsService(db as never, metrics);
     const abuse = new AbuseProtectionService(db as never);
