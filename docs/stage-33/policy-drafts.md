@@ -1,6 +1,8 @@
 # Fotoğraf ve işletme doğrulaması — inceleme taslağı
 
-Bu metin henüz etkinleştirilmiş bir politika değildir. **20 Ekim 2026 kullanıcı onayı:** fotoğraf/danışmanlık içeriği için azami **24 saat**, izin/işlem kanıtı için **90 gün**, işletme başvuru kanıtı/notu için **90 gün** saklama; işletme doğrulamasında işletmeden bağımsız platform yöneticisinin resmî kayıt kontrolü yapması prensip olarak onaylandı. Diğer ürün tercihleri ve gerçek sistem kabulü otomatik olarak onaylanmış sayılmaz.
+Bu metin henüz etkinleştirilmiş bir politika değildir.
+
+**20 Ekim 2026 kullanıcı onayı:** fotoğraf/danışmanlık içeriği için azami **24 saat**, izin/işlem kanıtı için **90 gün**, işletme başvuru kanıtı/notu için **90 gün** saklama; işletme doğrulamasında işletmeden bağımsız platform yöneticisinin resmî kayıt kontrolü yapması prensip olarak onaylandı. Diğer ürün tercihleri ve gerçek sistem kabulü otomatik olarak onaylanmış sayılmaz.
 
 Kayıtlı platform adı, başvuru iletişim kanalı, resmî kayıt kaynağı/pazar, yetkili incelemeci ataması, sağlayıcı şartları ve hukuki metin incelemesi tamamlanana kadar `.env.example` içindeki iki `*_POLICY_REVIEWED` değeri `false` kalır.
 
