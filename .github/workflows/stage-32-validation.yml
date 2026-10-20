@@ -131,7 +131,7 @@ jobs:
 
       - name: Start isolated S3-compatible storage for adapter tests
         run: |
-          docker run --detach --name stage33-private-storage -p 127.0.0.1:9000:9000 -e MINIO_ROOT_USER=stage33-test-root -e MINIO_ROOT_PASSWORD=stage33-isolated-test-password -e MINIO_KMS_SECRET_KEY=ci-key:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          docker run --detach --name stage33-private-storage -p 127.0.0.1:9000:9000 -e MINIO_ROOT_USER=stage33-test-root -e MINIO_ROOT_PASSWORD=stage33-isolated-test-password -e MINIO_KMS_SECRET_KEY=ci-key:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= cgr.dev/chainguard/minio:latest server /data
           for attempt in $(seq 1 40); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/ready > /dev/null; then exit 0; fi
             sleep 1
