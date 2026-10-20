@@ -189,6 +189,8 @@ export class PrivatePhotoStore {
   }
   async erase(key: string) {
     try {
+      this.key(key);
+      await this.assertPrivateBucket();
       await this.client().send(
         new DeleteObjectCommand({ Bucket: this.bucket(), Key: this.key(key) }),
       );

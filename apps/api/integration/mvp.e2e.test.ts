@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
+import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const url =
@@ -308,7 +309,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       ).status,
     ).toBe(403);
     const reviewerEmail = `reviewer-${key}@example.test`;
-    await db.user.create({
+    const reviewer = await db.user.create({
       data: {
         email: reviewerEmail,
         passwordHash: await hash("Isolated-strong-password-33", 12),
@@ -325,6 +326,22 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       decision: "APPROVED",
       note: "Synthetic evidence reviewed under the CI fixture policy",
     };
+    await db.businessMember.create({
+      data: { userId: reviewer.id, businessId, role: "BUSINESS_ADMIN" },
+    });
+    expect(
+      (
+        await request(
+          `${path}/${submission.id}/review`,
+          reviewerToken,
+          "POST",
+          decision,
+        )
+      ).status,
+    ).toBe(403);
+    await db.businessMember.delete({
+      where: { userId_businessId: { userId: reviewer.id, businessId } },
+    });
     await create(`${path}/${submission.id}/review`, reviewerToken, decision);
     await create(`${path}/${submission.id}/review`, reviewerToken, decision);
     expect(
@@ -354,6 +371,18 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       (await db.business.findUniqueOrThrow({ where: { id: businessId } }))
         .isVerified,
     ).toBe(false);
+    await db.mvpVerificationRequest.update({
+      where: { id: submission.id },
+      data: { evidenceExpiresAt: new Date(0) },
+    });
+    const expiredEvidence = (await request(path, ownerToken)).body.find(
+      (row: { id: string }) => row.id === submission.id,
+    );
+    expect(expiredEvidence.answers).toEqual({});
+    expect(expiredEvidence.reviewNote).toBeNull();
+    expect(JSON.stringify(expiredEvidence)).not.toContain(
+      "SYNTHETIC-NOT-A-REAL-DOCUMENT",
+    );
     const hiddenPhotos = await request("/mvp/v1/photos/policy", customerToken);
     expect(hiddenPhotos.body.available).toBe(false);
     expect(
@@ -1099,6 +1128,229 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           { exact: true },
         )
         .waitFor();
+      // UI contract double only. The preceding journey uses real HTTP/DB;
+      // this block proves rendering/file upload/questions/withdrawal, NOT live AI acceptance.
+      let analyzes = 0;
+      let uploadedMultipart = false;
+      let withdrawalObserved = false;
+      let releaseMatch: (() => void) | undefined;
+      const matchGate = new Promise<void>((resolve) => {
+        releaseMatch = resolve;
+      });
+      const expiry = new Date(Date.now() + 3600000).toISOString();
+      const visual = {
+        id: "synthetic-browser-session",
+        status: "CREATED",
+        attempts: 0,
+        expiresAt: expiry,
+        provider: null,
+        model: null,
+        output: null as unknown,
+      };
+      await page.route("**/mvp/v1/**", async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        let value: unknown;
+        if (path === "/mvp/v1/photos/policy") {
+          value = {
+            available: true,
+            reason: "CI_CONTRACT_ONLY",
+            policy: {
+              version: "synthetic-browser-v1",
+              notice: "Sentetik tarayıcı sözleşme testi izni",
+              retentionHours: 24,
+            },
+          };
+        } else if (
+          path === "/mvp/v1/photos/consents" &&
+          request.method() === "POST"
+        ) {
+          value = { id: "synthetic-browser-consent" };
+        } else if (path === "/mvp/v1/photos/upload/synthetic-browser-consent") {
+          const uploadHeaders = request.headers();
+          uploadedMultipart =
+            Boolean(uploadHeaders["authorization"]?.startsWith("Bearer ")) &&
+            Boolean(
+              uploadHeaders["content-type"]?.startsWith(
+                "multipart/form-data; boundary=",
+              ),
+            ) &&
+            Boolean(
+              request.postDataBuffer()?.includes(Buffer.from("photo.png")),
+            );
+          value = { id: "synthetic-browser-photo" };
+        } else if (path === "/mvp/v1/visual/sessions") {
+          value = visual;
+        } else if (
+          path === "/mvp/v1/visual/sessions/synthetic-browser-session/analyze"
+        ) {
+          const submitted = request.postDataJSON();
+          expect(submitted.expectedAttempt).toBe(analyzes);
+          expect(submitted.answers).toEqual(
+            analyzes === 0 ? [] : ["Haftada iki kez"],
+          );
+          analyzes++;
+          visual.attempts = analyzes;
+          visual.status = analyzes === 1 ? "NEEDS_INFORMATION" : "PLAN";
+          visual.output = {
+            status: visual.status,
+            observations: ["Sentetik görsel gözlemi"],
+            questions: analyzes === 1 ? ["Bakım sıklığınız nedir?"] : [],
+            steps: analyzes === 2 ? ["Sentetik danışmanlık adımı"] : [],
+            searchQuery: "saç bakımı",
+            limitations: ["Bu yalnızca bir arayüz sözleşme testidir"],
+          };
+          value = visual;
+        } else if (
+          path === "/mvp/v1/visual/sessions/synthetic-browser-session/matches"
+        ) {
+          await matchGate;
+          value = {
+            provider: "OPENAI_PGVECTOR",
+            status: "MATCHED",
+            items: [
+              {
+                businessId,
+                serviceId,
+                businessName: "Gecikmiş sentetik eşleşme",
+                serviceName: "Sentetik hizmet",
+                similarity: 0.7,
+              },
+            ],
+          };
+        } else if (
+          path === "/mvp/v1/photos/consents/synthetic-browser-consent/withdraw"
+        ) {
+          withdrawalObserved = true;
+          value = { status: "REVOKED", physicalErasure: "PENDING_WORKER" };
+        } else {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(value),
+        });
+      });
+      await page.goto("http://localhost:8081");
+      await login(browserCustomerEmail);
+      await page
+        .getByRole("textbox", { name: "İsteğiniz", exact: true })
+        .fill("Saç bakımı");
+      await page
+        .getByRole("textbox", { name: "Hedefiniz", exact: true })
+        .fill("Bakım planı");
+      await page
+        .getByRole("button", {
+          name: "Görsel danışmanlık durumunu yükle",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByText("Sentetik tarayıcı sözleşme testi izni", { exact: true })
+        .waitFor();
+      await page
+        .getByRole("checkbox", {
+          name: "Fotoğraf ve AI işlemeye açık izin veriyorum",
+          exact: true,
+        })
+        .click();
+      const chooserPromise = page.waitForEvent("filechooser");
+      await page
+        .getByRole("button", {
+          name: "İzinle fotoğraf seç ve yükle",
+          exact: true,
+        })
+        .click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles({
+        name: "photo.png",
+        mimeType: "image/png",
+        buffer: await sharp({
+          create: {
+            width: 20,
+            height: 20,
+            channels: 3,
+            background: "#666666",
+          },
+        })
+          .png()
+          .toBuffer(),
+      });
+      await page
+        .getByText("Fotoğraf kaydedildi. Analizi başlatabilirsiniz.", {
+          exact: true,
+        })
+        .waitFor();
+      expect(uploadedMultipart).toBe(true);
+      await page
+        .getByRole("button", { name: "Görsel analizi başlat", exact: true })
+        .click();
+      await page
+        .getByText("Bakım sıklığınız nedir?", { exact: true })
+        .waitFor();
+      await page
+        .getByRole("textbox", { name: "Danışmanlık yanıtı 1", exact: true })
+        .fill("Haftada iki kez");
+      await page
+        .getByRole("button", { name: "Yanıtlarla analizi sürdür", exact: true })
+        .click();
+      await page
+        .getByText("Sentetik danışmanlık adımı", { exact: false })
+        .waitFor();
+      expect(analyzes).toBe(2);
+      const delayedRequest = page.waitForRequest((r) =>
+        r.url().endsWith("/synthetic-browser-session/matches"),
+      );
+      const delayedResponse = page.waitForResponse((r) =>
+        r.url().endsWith("/synthetic-browser-session/matches"),
+      );
+      await page
+        .getByRole("button", {
+          name: "Plana göre profesyonel ara",
+          exact: true,
+        })
+        .click();
+      await delayedRequest;
+      await page
+        .getByRole("button", { name: "Fotoğraf iznimi geri çek", exact: true })
+        .click();
+      await page
+        .getByText(
+          "İzniniz geri çekildi. Erişim kapatıldı; fotoğrafın fiziksel silinmesi işleniyor.",
+          { exact: true },
+        )
+        .waitFor();
+      expect(withdrawalObserved).toBe(true);
+      releaseMatch!();
+      await (await delayedResponse).finished();
+      await page
+        .getByRole("button", {
+          name: "Görsel danışmanlık durumunu yükle",
+          exact: true,
+        })
+        .waitFor({ state: "visible" });
+      await expect
+        .poll(() =>
+          page
+            .getByRole("button", {
+              name: "Görsel danışmanlık durumunu yükle",
+              exact: true,
+            })
+            .isEnabled(),
+        )
+        .toBe(true);
+      expect(
+        await page
+          .getByText("Gecikmiş sentetik eşleşme", { exact: false })
+          .count(),
+      ).toBe(0);
+      expect(
+        await page
+          .getByText("Sentetik danışmanlık adımı", { exact: false })
+          .count(),
+      ).toBe(0);
     } catch (error) {
       await page.screenshot({
         path: "/tmp/stage33-failure.png",

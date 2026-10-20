@@ -317,9 +317,12 @@ export class VisualService {
         ownerId: user.id,
         expiresAt: { gt: new Date() },
         photo: {
+          deletedAt: null,
           revokedAt: null,
+          expiresAt: { gt: new Date() },
           consent: {
             revokedAt: null,
+            expiresAt: { gt: new Date() },
             policyVersion: photoPolicy()?.version ?? "DISABLED",
           },
         },

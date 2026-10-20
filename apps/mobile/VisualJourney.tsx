@@ -139,13 +139,19 @@ export function VisualJourney({
               );
               return;
             }
+            const epoch = ++generation.current;
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ["images"],
               base64: false,
               exif: false,
               quality: 0.8,
             });
-            if (result.canceled || !result.assets[0]) return;
+            if (
+              epoch !== generation.current ||
+              result.canceled ||
+              !result.assets[0]
+            )
+              return;
             const asset = result.assets[0];
             const type =
               asset.mimeType ??
@@ -159,7 +165,6 @@ export function VisualJourney({
               setMessage("En fazla 5 MB boyutunda JPEG veya PNG seçin.");
               return;
             }
-            generation.current++;
             setSession(null);
             setMatches(null);
             setAnswers([]);
@@ -168,11 +173,19 @@ export function VisualJourney({
                 `/mvp/v1/photos/consents/${consentId}/withdraw`,
                 "POST",
               );
+            if (epoch !== generation.current) return;
             const consent = await api.request<{ id: string }>(
               "/mvp/v1/photos/consents",
               "POST",
               { policyVersion: capability.policy!.version, accepted: true },
             );
+            if (epoch !== generation.current) {
+              await api.request(
+                `/mvp/v1/photos/consents/${consent.id}/withdraw`,
+                "POST",
+              );
+              return;
+            }
             setConsentId(consent.id);
             const form = new FormData();
             if (Platform.OS === "web") {
@@ -189,19 +202,21 @@ export function VisualJourney({
                 type,
               } as unknown as Blob);
             }
+            if (epoch !== generation.current) return;
             const photo = await api.request<{ id: string }>(
               `/mvp/v1/photos/upload/${consent.id}`,
               "POST",
               form,
               { multipart: true, timeoutMs: 45000 },
             );
-            setSession(
-              await api.request<MvpVisualSession>(
-                "/mvp/v1/visual/sessions",
-                "POST",
-                { photoId: photo.id, intent, target },
-              ),
+            if (epoch !== generation.current) return;
+            const next = await api.request<MvpVisualSession>(
+              "/mvp/v1/visual/sessions",
+              "POST",
+              { photoId: photo.id, intent, target },
             );
+            if (epoch !== generation.current) return;
+            setSession(next);
             setMessage("Fotoğraf kaydedildi. Analizi başlatabilirsiniz.");
           })}
         </>
@@ -214,7 +229,6 @@ export function VisualJourney({
           style={styles.button}
           onPress={() => {
             const id = consentId;
-            generation.current++;
             setSession(null);
             setMatches(null);
             setAnswers([]);

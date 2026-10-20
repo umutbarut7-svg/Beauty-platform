@@ -90,11 +90,37 @@ export class VerificationService {
         businessId,
         "business:update",
       );
-    return this.db.mvpVerificationRequest.findMany({
+    const rows = await this.db.mvpVerificationRequest.findMany({
       where: { businessId },
       orderBy: { createdAt: "desc" },
       take: 20,
+      select: {
+        id: true,
+        policyVersion: true,
+        answers: true,
+        status: true,
+        reviewNote: true,
+        evidenceExpiresAt: true,
+      },
     });
+    return rows.map(
+      (row: {
+        id: string;
+        policyVersion: string;
+        answers: unknown;
+        status: string;
+        reviewNote: string | null;
+        evidenceExpiresAt: Date;
+      }) =>
+        new Date(row.evidenceExpiresAt).getTime() <= Date.now()
+          ? {
+              ...row,
+              answers: {},
+              reviewNote: null,
+              status: row.status === "SUBMITTED" ? "EXPIRED" : row.status,
+            }
+          : row,
+    );
   }
   async submit(
     user: AuthenticatedUser,
@@ -186,7 +212,7 @@ export class VerificationService {
         new Date(request.evidenceExpiresAt).getTime() <= Date.now()
       )
         throw new ConflictException("VERIFICATION_EVIDENCE_EXPIRED");
-      if (request.policyVersion !== policy.version)
+      if (decision !== "REVOKED" && request.policyVersion !== policy.version)
         throw new ConflictException("VERIFICATION_POLICY_CHANGED");
       if (request.status === decision && request.reviewerId === user.id)
         return request;
