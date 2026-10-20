@@ -9,7 +9,7 @@ Aşama 33 bütünü PASS değildir. Verification karar politikası ve işletme
 seçilmeden fotoğraf aydınlatma/retention politikası kullanıcı tarafından eksik
 olarak teyit edilmiştir; ilgili alt akışlar kapalıdır.
 
-## Yerel gerçek sonuçlar
+## Önceki yerel doğrulama kaydı (ilk Stage 33 uygulaması)
 
 Node 24.19.0, repository packageManager pnpm 10.28.1 kullanıldı.
 
@@ -119,3 +119,30 @@ commit SHA'sı için kendiliğinden test başarısı iddia etmez.
 `demand-panel.md` yeni talep panelinin sözleşmesini ve bu değişiklikteki
 yerel doğrulamayı kaydeder. Önceki Run #23/#25 sonuçları yeni kodun kanıtı
 değildir. Yeni commit CI sonucu PR #11 checks üzerinden ayrıca doğrulanır.
+
+## Sağlayıcı ve görsel akış devam doğrulaması
+
+API 434 test / 94 dosya ve ortak types 9 test yerelde geçti. Güncel Prisma
+şeması validate/generate; workspace typecheck/lint/build ve integration TypeScript
+kontrolleri geçti. Önceki yerel engine erişim engeli bu oturumda tekrarlanmadı.
+
+Run #28'de yeni migration, temsilî kayıtların korunduğu upgrade, mevcut unit/
+governance/workspace kapıları ve Android/iOS JavaScript/Hermes export geçti;
+MinIO Docker Hub imajı kaldırıldığı için izole depolama kurulumu başarısız oldu.
+Bu run başarılı CI olarak sayılmaz. Uzak daldaki registry düzeltmesi korundu;
+kullanılabilir public Chainguard MinIO manifest'i okunarak test imajı
+`sha256:32c504bea4574d8f29d719b37bc0dad920ecf3e22b81dc5cea0bb105af2ce10f`
+ile sabitlendi. Production AWS yerine geçtiği iddia edilmez.
+
+Güncel CI ek kapıları: gerçek PostgreSQL/S3-compatible owner isolation, revoke
+race, fiziksel erasure ve expiry; gerçek pgvector güncellik/model/public scope;
+kalıcı semantic worker idempotency ve üyelik iptali; gerçek HTTP bağımsız
+verification reviewer, approval/replay/revocation ve expiry projection. Bunların
+OpenAI transport'u ve embedding vektörleri açıkça sentetiktir. Mevcut gerçek
+HTTP/DB Chromium yolculuğuna ek görsel UI contract testi, gerçek dosya seçimi ve
+multipart aktarımı, takip soruları, plan ve izin iptalinden sonra geciken yanıtı
+kapsar. Bu ek UI bloğu canlı AI testi değildir.
+
+Bu yeni commit'in CI sonucu henüz bekleniyor; PR #11 checks kesin kayıttır.
+Onaylı ürün politikası, gerçek AWS/OpenAI kabulü ve native cihaz kabulü olmadan
+Aşama 33 PASS değildir.
