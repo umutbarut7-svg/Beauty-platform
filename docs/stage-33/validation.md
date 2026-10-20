@@ -55,8 +55,9 @@ düzeltildi. Testler skip edilmedi; rate limit ve domain kabul şartları korunu
   visual analysis ve Result Plan tam kabulü BLOCKED.
 - pgvector semantic matching adapter'ı bu değişiklikte uygulanmadı; mevcut
   DATABASE katalog araması AI/semantic başarı olarak sunulmaz.
-- Business Demand tam paneli/AI konsolu ve native cihaz kabulü eksik; mevcut
-  gerçek booking talepleri tüm Demand ürün kabulünün yerine geçmez.
+- Business Demand sinyal paneli eklendi; kapsam ve yeni kontrol kaydı
+  `demand-panel.md` içindedir. İşletme AI konsolu/provider ve native kabulü
+  hâlâ eksiktir. Panel, bu engelleri kaldırmış sayılmaz.
 - Web E2E kritik akışı kapsar; bütün BusinessSetup ekran işlemleri ve
   Android/iOS ayrıca kabul gerektirir.
 
@@ -106,3 +107,9 @@ Başarılı browser artifact'i yalnız sentetik test hesaplarını içerir ve CI
 base main'dir. Bu raporu ekleyen sonraki commit yalnız doküman değişikliğidir;
 onun bağımsız CI durumu GitHub PR checks'ten ayrıca izlenir. Bu belge kendi
 commit SHA'sı için kendiliğinden test başarısı iddia etmez.
+
+## 20 Ekim 2026 devam çalışması
+
+`demand-panel.md` yeni talep panelinin sözleşmesini ve bu değişiklikteki
+yerel doğrulamayı kaydeder. Önceki Run #23/#25 sonuçları yeni kodun kanıtı
+değildir. Yeni commit CI sonucu PR #11 checks üzerinden ayrıca doğrulanır.

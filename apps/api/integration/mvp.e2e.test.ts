@@ -465,6 +465,118 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     });
     expect(own).toBeTruthy();
   });
+  it("serves real scoped demand with observation windows, safe projection and strict query validation", async () => {
+    const path = `/businesses/${businessId}/marketplace`;
+    const input = {
+      businessId,
+      signalType: "SEARCH",
+      source: "OBSERVED" as const,
+      sourceEntityType: "DISCOVERY_SEARCH",
+      sourceEntityId: "private-fixture-source",
+      timeWindow: "ROLLING_30_DAYS" as const,
+      value: "3",
+      confidence: "0.8",
+      freshness: "1",
+      observedAt: new Date(),
+      dataState: "AVAILABLE",
+      evidence: { privateEvidence: "not-returned" },
+      calculationVersion: "stage33-demand-fixture-v1",
+    };
+    await db.marketplaceDemandSignal.createMany({
+      data: [
+        { ...input, idempotencyKey: `${key}-demand-current` },
+        {
+          ...input,
+          idempotencyKey: `${key}-demand-predicted`,
+          signalType: "PREDICTED_DEMAND",
+          source: "PREDICTED",
+          value: "2",
+        },
+        {
+          ...input,
+          idempotencyKey: `${key}-demand-expired`,
+          observedAt: new Date(Date.now() - 31 * 86400000),
+        },
+        {
+          ...input,
+          idempotencyKey: `${key}-demand-future`,
+          observedAt: new Date(Date.now() + 86400000),
+        },
+        {
+          ...input,
+          idempotencyKey: `${key}-demand-other-window`,
+          timeWindow: "ROLLING_7_DAYS",
+          value: "7",
+        },
+      ],
+    });
+    await db.marketplaceLiquiditySnapshot.create({
+      data: {
+        businessId,
+        window: "ROLLING_30_DAYS",
+        periodStart: new Date(Date.now() - 90 * 86400000),
+        periodEnd: new Date(Date.now() - 60 * 86400000),
+        health: "DATA_INSUFFICIENT",
+        dataState: "AVAILABLE",
+        components: {},
+        evidence: {},
+        confidence: "0.8",
+        observedAt: new Date(Date.now() - 60 * 86400000),
+        calculationVersion: "stage33-demand-fixture-v1",
+        version: 1,
+      },
+    });
+    const response = await request(
+      `${path}/demand?window=ROLLING_30_DAYS&limit=20`,
+      ownerToken,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(2);
+    expect(
+      response.body.map((s: { source: string }) => s.source).sort(),
+    ).toEqual(["OBSERVED", "PREDICTED"]);
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /private-fixture-source|privateEvidence|not-returned|sourceEntityId/,
+    );
+    expect(
+      (await request(`${path}/liquidity?window=ROLLING_30_DAYS`, ownerToken))
+        .body.status,
+    ).toBe("STALE_DATA");
+    expect(
+      (
+        await request(
+          `/businesses/${otherBusinessId}/marketplace/demand?window=ROLLING_30_DAYS`,
+          ownerToken,
+        )
+      ).body,
+    ).toEqual([]);
+    expect(
+      (await request(`${path}/demand?window=ROLLING_30_DAYS`, strangerToken))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await request(
+          `${path}/demand?window=ROLLING_30_DAYS`,
+          professionalToken,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (await request(`${path}/demand?window=ROLLING_30_DAYS`, "")).status,
+    ).toBe(401);
+    expect(
+      (
+        await request(
+          `${path}/demand?window=ROLLING_30_DAYS&limit=101`,
+          ownerToken,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await request(`${path}/demand?window=FOREVER`, ownerToken)).status,
+    ).toBe(400);
+  });
   it("runs the real Expo web customer/business journey and the Next.js operator view in Chromium", async () => {
     const root = resolve("../mobile/dist");
     mobile = createServer((req, res) => {
@@ -582,6 +694,78 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await page
         .getByRole("button", { name: "İşletmelerimi yükle", exact: true })
         .click();
+      await page
+        .getByRole("button", { name: `Stage33-${key}`, exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Talep verilerini yükle", exact: true })
+        .click();
+      await page
+        .getByText("Talep özeti: Veri güncel değil", { exact: true })
+        .waitFor();
+      await page.getByText("Arama: 3", { exact: true }).waitFor();
+      await page
+        .getByText("Tahmin; gerçekleşmiş talep değildir", { exact: true })
+        .waitFor();
+      await page
+        .getByRole("button", { name: "Talep dönemi: Son 7 gün", exact: true })
+        .click();
+      expect(await page.getByText("Arama: 3", { exact: true }).count()).toBe(0);
+      await page
+        .getByRole("button", { name: "Talep verilerini yükle", exact: true })
+        .click();
+      await page.getByText("Arama: 7", { exact: true }).waitFor();
+      const membership = await db.businessMember.findFirstOrThrow({
+        where: { businessId, role: "BUSINESS_OWNER" },
+      });
+      try {
+        await db.businessMember.update({
+          where: { id: membership.id },
+          data: { role: "STAFF" },
+        });
+        await page
+          .getByRole("button", { name: "Talep verilerini yükle", exact: true })
+          .click();
+        await page
+          .getByText(
+            "Talep verileri yüklenemedi. Yetkinizi ve bağlantınızı kontrol edip yeniden deneyin.",
+            { exact: true },
+          )
+          .waitFor();
+        expect(await page.getByText("Arama: 7", { exact: true }).count()).toBe(
+          0,
+        );
+      } finally {
+        await db.businessMember.update({
+          where: { id: membership.id },
+          data: { role: membership.role },
+        });
+      }
+      await page
+        .getByRole("button", { name: "Talep dönemi: Son 90 gün", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Talep verilerini yükle", exact: true })
+        .click();
+      await page
+        .getByText(
+          "Bu dönem için kayıtlı talep sinyali yok. Bu, talebin sıfır olduğu anlamına gelmez.",
+          { exact: true },
+        )
+        .waitFor();
+      await page
+        .getByRole("button", { name: `Other-${key}`, exact: true })
+        .click();
+      await page
+        .getByText("Seçilen dönem için talep verilerini yükleyin.", {
+          exact: true,
+        })
+        .waitFor();
+      expect(await page.getByText("Arama: 3", { exact: true }).count()).toBe(0);
+      await page
+        .getByRole("button", { name: "Talep verilerini yükle", exact: true })
+        .click();
+      await page.getByText("Talep özeti: Veri yok", { exact: true }).waitFor();
       await page
         .getByRole("button", { name: `Stage33-${key}`, exact: true })
         .click();

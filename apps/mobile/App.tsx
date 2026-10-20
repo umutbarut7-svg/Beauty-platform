@@ -1,4 +1,5 @@
 import { BusinessSetup } from "./BusinessSetup";
+import { BusinessDemand } from "./BusinessDemand";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -431,6 +432,13 @@ export default function App() {
                     })}
                     <BusinessSetup
                       key={business.id}
+                      api={api}
+                      businessId={business.id}
+                      busy={busy}
+                      run={run}
+                    />
+                    <BusinessDemand
+                      key={`demand-${business.id}`}
                       api={api}
                       businessId={business.id}
                       busy={busy}
