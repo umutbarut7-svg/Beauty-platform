@@ -132,10 +132,10 @@ resulting tested image digests before any deployment.
 The owner approved the stated base-cost estimate in this session on 21 October
 2026. No stack was started from the assistant environment: its available AWS
 roles cover audit/synthetic tests, not infrastructure creation. The owner-run
-bootstrap is pinned to the tested source at `99c99599e092d46236f20bcee46aaeaa6a5c576d`:
+bootstrap is pinned to the tested source at `f4bc9f4a0bdf6a6f5cabb7c401dd8bf1beba34e6`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/99c99599e092d46236f20bcee46aaeaa6a5c576d/infra/preview/bootstrap-foundation.py -o /tmp/beauty-preview.py && python3 /tmp/beauty-preview.py --apply
+curl -fsSL https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/f4bc9f4a0bdf6a6f5cabb7c401dd8bf1beba34e6/infra/preview/bootstrap-foundation.py -o /tmp/beauty-preview.py && python3 /tmp/beauty-preview.py --apply
 ```
 
 Run it in AWS CloudShell. It checks account 926642724499, fixes the region to
@@ -143,17 +143,26 @@ Stockholm, validates the reviewed embedded template, creates missing database/JW
 SecureStrings without printing them, and executes a CREATE-only change set whose
 14 logical resources/types must exactly match the reviewed template. It never
 reads the OpenAI key, creates access keys, updates an existing stack or changes
-an existing parameter. Parameter values go through the AWS CLI's stdin rather
-than process arguments; raw AWS error output is suppressed.
+an existing parameter. Requests use the native Boto3 SDK in CloudShell. Secret values remain in memory;
+no CLI parameter-file bridge, secret process arguments or secret files are used.
+Only error codes are shown for secret-bearing operations.
 
 Default execution without flags is a local plan with no AWS requests.
 `--status` reads the existing stack and non-secret outputs. An existing stack is
 reported, never automatically repaired/replaced; inspect any failed status before
-further action. Six local bootstrap safety tests passed, including wrong-account
+further action. Nine local bootstrap safety tests passed, including wrong-account
 rejection, non-mutating repeat execution, destructive-change rejection, secret
-argument/error handling and exact template parity.
+error handling, native SDK request validation, a fully stubbed CREATE flow,
+permission-failure classification and exact template parity.
 
 This command starts **paid foundation resources**, not a working public app.
 Image delivery, Docker/Compose installation, final DNS/HTTPS and live-host checks
 remain necessary. The final domain names are still needed. No budget was raised
 or spending cap promised by this bootstrap.
+
+The owner's read-only CloudFormation CLI validation succeeded on 21 October 2026.
+The earlier bootstrap stopped at its CLI JSON/stdin request bridge; its raw error
+was suppressed, so the precise CLI cause was not established. The revised native
+SDK transport bypasses that bridge. Its nine local tests use Botocore Stubber;
+they do not establish successful live provisioning. The original foundation
+resource set and template are unchanged. Live stack creation remains pending.
