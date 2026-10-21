@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Beauty Platform preview foundation; creates paid resources only when explicitly deployed.
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.small, t3.medium]
+  SsmKeyArn:
+    Type: String
+    Description: ARN of the existing regional alias/aws/ssm key
+    AllowedPattern: "^arn:aws:kms:eu-north-1:[0-9]{12}:key/[0-9a-f-]+$"
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  Network:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.47.0.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Project, Value: BeautyPlatformPreview }]
+  Internet:
+    Type: AWS::EC2::InternetGateway
+  AttachInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: { Ref: Network }
+      InternetGatewayId: { Ref: Internet }
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: { Ref: Network }
+      CidrBlock: 10.47.0.0/25
+      MapPublicIpOnLaunch: false
+  Routes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: { Ref: Network }
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternet
+    Properties:
+      RouteTableId: { Ref: Routes }
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: { Ref: Internet }
+  SubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: { Ref: Subnet }
+      RouteTableId: { Ref: Routes }
+  Firewall:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS preview and HTTP certificate challenge; administration through SSM
+      VpcId: { Ref: Network }
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 0.0.0.0/0 }
+  ImageRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration: { EncryptionType: AES256 }
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Remove old untagged build layers","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":3},"action":{"type":"expire"}}]}'
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: PreviewRuntimeOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource:
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/database-password",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-access-secret",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-refresh-secret",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/dev/openai-api-key",
+                    }
+              - Effect: Deny
+                Action:
+                  [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath]
+                NotResource:
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/database-password",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-access-secret",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-refresh-secret",
+                    }
+                  - {
+                      Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/dev/openai-api-key",
+                    }
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: { Ref: SsmKeyArn }
+                Condition:
+                  StringEquals:
+                    kms:ViaService: ssm.eu-north-1.amazonaws.com
+                    kms:EncryptionContext:PARAMETER_ARN:
+                      - {
+                          Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/database-password",
+                        }
+                      - {
+                          Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-access-secret",
+                        }
+                      - {
+                          Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/preview/jwt-refresh-secret",
+                        }
+                      - {
+                          Fn::Sub: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/beauty-platform/dev/openai-api-key",
+                        }
+              - Effect: Allow
+                Action: [s3:GetBucketVersioning, s3:GetBucketPublicAccessBlock]
+                Resource: arn:aws:s3:::beautyplatform-private-photos-dev
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: arn:aws:s3:::beautyplatform-private-photos-dev/private/mvp/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  [
+                    ecr:BatchGetImage,
+                    ecr:GetDownloadUrlForLayer,
+                    ecr:BatchCheckLayerAvailability,
+                  ]
+                Resource: { Fn::GetAtt: [ImageRepository, Arn] }
+  RuntimeProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [{ Ref: RuntimeRole }]
+  Server:
+    Type: AWS::EC2::Instance
+    DependsOn: PublicRoute
+    Properties:
+      ImageId: { Ref: AmiId }
+      InstanceType: { Ref: InstanceType }
+      IamInstanceProfile: { Ref: RuntimeProfile }
+      CreditSpecification: { CpuCredits: standard }
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      NetworkInterfaces:
+        - DeviceIndex: "0"
+          AssociatePublicIpAddress: false
+          SubnetId: { Ref: Subnet }
+          GroupSet: [{ Ref: Firewall }]
+      Tags:
+        - { Key: Name, Value: BeautyPlatformPreview }
+        - { Key: Environment, Value: preview }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euo pipefail
+          systemctl enable --now amazon-ssm-agent
+          install -d -m 0700 /opt/beauty-preview
+          # Docker/images/secrets are installed only in the reviewed deployment step.
+  PublicAddress:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachInternet
+    Properties: { Domain: vpc }
+  AddressAttachment:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: { Fn::GetAtt: [PublicAddress, AllocationId] }
+      InstanceId: { Ref: Server }
+
+Outputs:
+  InstanceId:
+    Value: { Ref: Server }
+  PreviewIpv4:
+    Value: { Ref: PublicAddress }
+  ImageRepositoryUri:
+    Value: { Fn::GetAtt: [ImageRepository, RepositoryUri] }
+  RuntimeRoleArn:
+    Value: { Fn::GetAtt: [RuntimeRole, Arn] }
