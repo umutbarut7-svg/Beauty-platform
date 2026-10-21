@@ -2,9 +2,6 @@ name: Stage 33 live journey acceptance
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [.github/workflows/stage33-live-journey.yml]
 
 permissions: {}
 
@@ -14,7 +11,7 @@ concurrency:
 
 jobs:
   adapters:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Run isolated Stage 33 live journey acceptance')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -66,7 +63,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: application/pnpm-lock.yaml
 
-      - name: Build reviewed adapters before accessing credentials
+      - name: Build reviewed application and migrate disposable database
         working-directory: application
         run: |
           pnpm install --frozen-lockfile
@@ -87,7 +84,7 @@ jobs:
           mask-aws-account-id: true
           allowed-account-ids: 926642724499
 
-      - name: Run application adapters with in-memory secret binding
+      - name: Run live HTTP catalog and privacy worker journey
         working-directory: application/apps/api
         env:
           STAGE33_LIVE_JOURNEY_TEST: confirmed
