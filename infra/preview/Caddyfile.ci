@@ -1,0 +1,13 @@
+:80 {
+  handle_path /api/* {
+    reverse_proxy api:3001
+  }
+  handle_path /operator/* {
+    reverse_proxy admin:3000
+  }
+  handle {
+    root * /srv/web
+    try_files {path} /index.html
+    file_server
+  }
+}
