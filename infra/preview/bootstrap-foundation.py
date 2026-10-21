@@ -3,8 +3,6 @@
 import argparse
 import json
 import secrets
-import shutil
-import subprocess
 import sys
 import time
 
@@ -425,19 +423,38 @@ class SetupError(Exception):
     pass
 
 
-def aws(service, operation, arguments=(), document=None, allow_missing=False):
-    command = ['aws', service, operation, '--region', REGION, '--output', 'json', '--no-cli-pager',
-               '--cli-connect-timeout', '5', '--cli-read-timeout', '30', *arguments]
-    if document is not None:
-        command += ['--cli-input-json', 'file:///dev/stdin']
-    result = subprocess.run(command, input=json.dumps(document) if document is not None else None,
-                            text=True, capture_output=True, timeout=45)
-    if result.returncode:
-        if allow_missing and 'does not exist' in result.stderr:
+_clients = {}
+
+
+def aws(service, operation, document=None, allow_missing=False):
+    # Use the CloudShell SDK directly. No CLI JSON/stdin parameter-file bridge.
+    try:
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        raise SetupError('AWS Python SDK bulunamadi; bu komutu AWS CloudShell icinde calistir.') from None
+    try:
+        if service not in _clients:
+            _clients[service] = boto3.client(service, region_name=REGION,
+                config=Config(connect_timeout=5, read_timeout=30,
+                              retries={'total_max_attempts': 2, 'mode': 'standard'}))
+        return getattr(_clients[service], operation.replace('-', '_'))(**(document or {}))
+    except ClientError as error:
+        detail = error.response.get('Error', {})
+        code = detail.get('Code', 'AWSServiceError')
+        if not code.isalnum() or len(code) > 64:
+            code = 'AWSServiceError'
+        if (allow_missing and service == 'cloudformation' and operation == 'describe-stacks'
+                and code == 'ValidationError' and 'does not exist' in detail.get('Message', '')):
             return None
-        # AWS errors may echo arguments. Never expose raw stderr or request bodies.
-        raise SetupError(f'AWS islemi tamamlanamadi: {service} {operation}')
-    return json.loads(result.stdout) if result.stdout.strip() else {}
+        message = f'AWS islemi tamamlanamadi: {service} {operation} ({code})'
+        # This one operation contains only the public, embedded template, no secrets.
+        if service == 'cloudformation' and operation == 'validate-template':
+            message += ': ' + ' '.join(detail.get('Message', '').split())[:500]
+        raise SetupError(message) from None
+    except BotoCoreError:
+        raise SetupError(f'AWS baglanti/istek hatasi: {service} {operation}; gizli degerler gosterilmedi.') from None
 
 
 def validate_changes(changes):
@@ -472,12 +489,10 @@ def main(argv=None):
         print('Creates:', len(STACK['Resources']), 'new foundation resources and three SecureStrings.')
         print('No AWS request made. --apply starts paid resources; --status reads progress.')
         return 0
-    if not shutil.which('aws'):
-        raise SetupError('Bu komutu AWS CloudShell icinde calistir.')
     identity = aws('sts', 'get-caller-identity')
     if identity.get('Account') != ACCOUNT:
         raise SetupError('Beklenen AWS hesabinda degilsin; hicbir sey degistirilmedi.')
-    existing = aws('cloudformation', 'describe-stacks', ['--stack-name', STACK_NAME], allow_missing=True)
+    existing = aws('cloudformation', 'describe-stacks', document={'StackName': STACK_NAME}, allow_missing=True)
     if existing:
         show_status(existing['Stacks'][0])
         print('Mevcut stack degistirilmedi; ayni komutu tekrar calistirmak yeni sunucu olusturmaz.')
@@ -486,7 +501,7 @@ def main(argv=None):
         print('Bu hesapta BeautyPlatformPreview henuz olusturulmamis.')
         return 0
     print('Onaylanan temel altyapi hazirlaniyor; OpenAI anahtari okunmayacak.')
-    key = aws('kms', 'describe-key', ['--key-id', 'alias/aws/ssm'])['KeyMetadata']
+    key = aws('kms', 'describe-key', document={'KeyId': 'alias/aws/ssm'})['KeyMetadata']
     if key.get('AWSAccountId') != ACCOUNT or key.get('KeyState') != 'Enabled':
         raise SetupError('Beklenen etkin SSM sifreleme anahtari bulunamadi.')
     template = json.dumps(STACK, separators=(',', ':'))
@@ -518,7 +533,7 @@ def main(argv=None):
         'Tags': [{'Key': 'Project', 'Value': 'BeautyPlatformPreview'}],
     })
     for _ in range(30):
-        planned = aws('cloudformation', 'describe-change-set', ['--change-set-name', change['Id']])
+        planned = aws('cloudformation', 'describe-change-set', document={'ChangeSetName': change['Id']})
         if planned['Status'] == 'CREATE_COMPLETE':
             break
         if planned['Status'] == 'FAILED':
@@ -529,7 +544,7 @@ def main(argv=None):
     if planned.get('NextToken'):
         raise SetupError('Beklenmeyen cok sayfali kaynak plani; uygulama baslatilmadi.')
     validate_changes(planned['Changes'])
-    aws('cloudformation', 'execute-change-set', ['--change-set-name', change['Id']])
+    aws('cloudformation', 'execute-change-set', document={'ChangeSetName': change['Id']})
     print('ONAYLANAN ALTYAPI OLUSTURMA BASLATILDI.')
     print('AWS temel gideri yaklasik 22 USD/ay + kullanim/vergi; mevcut 5 USD butce bir harcama siniri degildir.')
     print('Durum: python3 /tmp/beauty-preview.py --status')
@@ -540,7 +555,7 @@ def main(argv=None):
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (SetupError, subprocess.TimeoutExpired, OSError, KeyError, ValueError) as error:
+    except (SetupError, OSError, KeyError, ValueError) as error:
         message = str(error) if isinstance(error, SetupError) else 'Kurulum tamamlanamadi; gizli degerler gosterilmedi.'
         print(message, file=sys.stderr)
         sys.exit(1)
