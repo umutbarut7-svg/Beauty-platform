@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/dist
+**/.next
+**/.expo
+**/.env*
+**/*.pem
+**/*.key
+**/*credentials*
+**/test-results
+**/playwright-report
+**/__pycache__
+**/*.log
+
+apps/api/stage33-live-*.cjs
