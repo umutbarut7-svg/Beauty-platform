@@ -174,7 +174,7 @@ export default function App() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>BEAUTY PLATFORM · PRE-LAUNCH</Text>
+        <Text style={styles.eyebrow}>EPIFIZ · PRE-LAUNCH</Text>
         <Text style={styles.title}>Bakım yolculuğunuz</Text>
         <Text style={styles.body}>
           Gerçek müsaitlik, kayıtlı sonuçlar ve size ait bir bakım geçmişi.
