@@ -42,8 +42,26 @@ uses a prefix-limited listing to verify absence. It emits fixed pass/fail labels
 it does not publish image bytes, object keys, vectors, response text or secrets.
 There are no diagnostic artifacts or automatic retries of paid model calls.
 
-At preparation time this gate has **not run with live credentials**. Provisioning
-the dedicated role and explicitly running the workflow remain required.
+## Verified live adapter run
+
+[Run 39605805326](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39605805326)
+completed with **SUCCESS** on 21 October 2026. Job 119241568165 verified the
+scoped OIDC role and in-memory encrypted parameter binding, and emitted all four
+expected passing checks:
+
+- Real private AES256 S3 upload/read, overwrite rejection, anonymous denial and
+  EXIF removal.
+- The compiled application embedding adapter returned a validated 1536-dimension
+  vector from OpenAI.
+- The compiled vision adapter accepted a synthetic image and validated a live
+  structured response with NEEDS_INFORMATION.
+- The synthetic object was physically erased; the reserved-prefix listing
+  confirmed its absence.
+
+The application revision was `123e7339e2ab2a9e8e94f391a8431b73afc28efe` and
+workflow/harness revision was `e6645a9cbbad8ba2c557c6f2b51619ebba55c72d`.
+No live database or customer photo was used. The pass does not certify photo
+quality or the complete consent/worker/catalog/device acceptance journey.
 
 ## Remaining acceptance boundary
 
