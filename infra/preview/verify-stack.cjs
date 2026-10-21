@@ -76,7 +76,7 @@ async function main() {
   const registered = await post("/api/auth/register", user, 201);
   assert.ok(registered.accessToken);
   assert.ok(!registered.user.passwordHash);
-  const login = await post("/api/auth/login", user, 201);
+  const login = await post("/api/auth/login", user, 200);
   assert.equal(login.user.id, registered.user.id);
   const r = await fetch(base + "/api/mvp/v1/capabilities", {
     headers: { authorization: `Bearer ${login.accessToken}` },
@@ -89,7 +89,7 @@ async function main() {
   compose("stop", "gateway", "api", "worker", "postgres", "prepare-secrets");
   compose("up", "-d");
   await ready();
-  const relogin = await post("/api/auth/login", user, 201);
+  const relogin = await post("/api/auth/login", user, 200);
   assert.equal(relogin.user.id, registered.user.id);
   console.log(
     "PASS: database survives service restart and tmpfs secret can be initialized again",
@@ -113,7 +113,7 @@ async function main() {
     assert.equal(state.OOMKilled, false, service);
   }
   console.log(
-    "PASS: all five runtime containers running within configured memory caps",
+    "PASS: all six runtime containers running within configured memory caps",
   );
 }
 main().catch((e) => {
