@@ -12,4 +12,8 @@ config.expo.ios = {
   ...config.expo.ios,
   bundleIdentifier: "com.beautyplatform.stage33test",
 };
+if (config.expo.name !== "EPIFIZ")
+  throw new Error("Expected EPIFIZ app display name for native validation");
+if (config.expo.slug !== "beauty-platform")
+  throw new Error("Do not silently change the Expo project identity");
 fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
