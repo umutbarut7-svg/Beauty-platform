@@ -1,0 +1,146 @@
+name: beauty-preview
+
+x-runtime: &runtime
+  NODE_ENV: ${PREVIEW_NODE_ENV:-production}
+  PREVIEW_CI_FIXTURE: ${PREVIEW_CI_FIXTURE:-false}
+  AWS_REGION: eu-north-1
+  DB_HOST: postgres
+  PORT: "3001"
+  CORS_ORIGINS: https://${PREVIEW_HOST},https://${ADMIN_HOST}
+  TRUST_PROXY: "true"
+  EXTERNAL_REQUEST_TIMEOUT_MS: "10000"
+  RETRY_MAX_ATTEMPTS: "3"
+  RATE_LIMIT_DEFAULT: "100"
+  RATE_LIMIT_WINDOW_MS: "60000"
+  STAGE33_MVP_ENABLED: "false"
+  MVP_AI_ENABLED: "false"
+  MVP_SEMANTIC_ENABLED: "false"
+  MVP_REDIS_ENABLED: "false"
+  MVP_PHOTO_POLICY_REVIEWED: "false"
+  MVP_VERIFICATION_POLICY_REVIEWED: "false"
+  MVP_S3_ENABLED: "true"
+  MVP_S3_BUCKET: beautyplatform-private-photos-dev
+  OPENAI_VISION_MODEL: gpt-5.4-mini
+  OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+  MVP_AI_DAILY_REQUEST_LIMIT: "5"
+  MVP_AI_GLOBAL_DAILY_REQUEST_LIMIT: "20"
+
+x-limits: &limits
+  restart: unless-stopped
+  init: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  logging:
+    driver: json-file
+    options:
+      max-size: 5m
+      max-file: "2"
+
+services:
+  prepare-secrets:
+    image: ${API_IMAGE:?Set the tested API image}
+    command: [prepare-db-secret]
+    user: "1000:1000"
+    environment: *runtime
+    volumes: [database_secret:/preview-secrets]
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beauty_preview
+      POSTGRES_USER: beauty
+      POSTGRES_PASSWORD_FILE: /preview-secrets/postgres-password
+    depends_on:
+      prepare-secrets: { condition: service_completed_successfully }
+    volumes:
+      - database:/var/lib/postgresql/data
+      - database_secret:/preview-secrets:ro
+    shm_size: 128mb
+    mem_limit: 512m
+    command: [postgres, -c, shared_buffers=96MB, -c, max_connections=30]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U beauty -d beauty_preview]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    logging:
+      driver: json-file
+      options: { max-size: 5m, max-file: "2" }
+
+  migrate:
+    image: ${MIGRATE_IMAGE:?Set the tested migration image}
+    environment: *runtime
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  api:
+    <<: *limits
+    image: ${API_IMAGE}
+    command: [api]
+    environment:
+      <<: *runtime
+      NODE_OPTIONS: --max-old-space-size=256
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 384m
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    <<: *limits
+    image: ${API_IMAGE}
+    command: [worker]
+    environment:
+      <<: *runtime
+      NODE_OPTIONS: --max-old-space-size=128
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 256m
+
+  admin:
+    <<: *limits
+    image: ${ADMIN_IMAGE:?Set the tested admin image}
+    mem_limit: 256m
+
+  gateway:
+    image: ${GATEWAY_IMAGE:?Set the tested gateway image}
+    restart: unless-stopped
+    environment:
+      PREVIEW_HOST: ${PREVIEW_HOST:?Set a DNS name}
+      ADMIN_HOST: ${ADMIN_HOST:?Set a DNS name}
+    ports: ["${HTTP_BIND:-0.0.0.0:80}:80", "${HTTPS_BIND:-0.0.0.0:443}:443"]
+    volumes: [tls_data:/data, tls_config:/config]
+    depends_on:
+      api: { condition: service_healthy }
+      admin: { condition: service_started }
+    mem_limit: 96m
+    logging:
+      driver: json-file
+      options: { max-size: 5m, max-file: "2" }
+
+volumes:
+  database:
+  database_secret:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=1000,gid=1000,mode=0755
+  tls_data:
+  tls_config:
