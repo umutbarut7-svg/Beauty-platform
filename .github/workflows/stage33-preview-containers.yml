@@ -70,3 +70,5 @@ jobs:
       - name: Remove disposable CI stack
         if: always()
         run: docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml down --volumes --remove-orphans
+
+# Startup regression: keep the database secret tmpfs mounted.
