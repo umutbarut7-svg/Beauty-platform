@@ -12,7 +12,7 @@ jobs:
   connection:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       id-token: write
     steps:
@@ -52,3 +52,100 @@ jobs:
           aws iam get-account-summary --query 'SummaryMap.AccountMFAEnabled' --output text > /dev/null
           echo "AWS OIDC connection and audit read access verified."
           echo "AWS OIDC connection and audit read access verified. No AWS resources changed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Audit AWS settings and resource counts without changes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import concurrent.futures, json, os, re, subprocess
+          os.environ["AWS_MAX_ATTEMPTS"] = "1"
+          os.environ["AWS_PAGER"] = ""
+          rows = []
+          def emit(label, value):
+              rows.append((label, str(value).replace("|", "/").replace("\n", " ")))
+          def aws(service, operation, **kwargs):
+              args = ["aws", service, operation, "--output", "json", "--no-cli-pager", "--cli-connect-timeout", "5", "--cli-read-timeout", "10"]
+              for key, value in kwargs.items():
+                  args += ["--" + key.replace("_", "-"), str(value)]
+              try:
+                  result = subprocess.run(args, capture_output=True, text=True, timeout=25)
+                  if result.returncode:
+                      match = re.search(r"\(([A-Za-z0-9_.-]+)\)", result.stderr)
+                      return {"audit_error": match.group(1) if match else "CommandFailed"}
+                  return json.loads(result.stdout) if result.stdout.strip() else {}
+              except (subprocess.TimeoutExpired, ValueError, OSError) as exc:
+                  return {"audit_error": type(exc).__name__}
+          def count_result(result, key, instances=False):
+              if "audit_error" in result:
+                  return "UNKNOWN (" + result["audit_error"] + ")"
+              if key not in result:
+                  return "UNKNOWN (missing response field)"
+              if instances:
+                  return sum(len(item.get("Instances", [])) for item in result[key])
+              return len(result[key])
+          identity = aws("sts", "get-caller-identity")
+          account = identity.get("Account")
+          if not account:
+              raise SystemExit("AWS identity could not be verified")
+          summary = aws("iam", "get-account-summary")
+          if "audit_error" in summary:
+              emit("IAM summary", "UNKNOWN (" + summary["audit_error"] + ")")
+          else:
+              for key in ["AccountMFAEnabled", "AccountAccessKeysPresent", "Users", "Roles"]:
+                  emit(key, summary.get("SummaryMap", {}).get(key, "UNKNOWN"))
+          block = aws("s3control", "get-public-access-block", account_id=account, region="eu-north-1")
+          emit("Account S3 public block", block.get("PublicAccessBlockConfiguration", {}).get("BlockPublicPolicy", "UNKNOWN (" + block.get("audit_error", "missing field") + ")"))
+          buckets = aws("s3api", "list-buckets")
+          emit("S3 bucket count", count_result(buckets, "Buckets"))
+          for index, bucket in enumerate(buckets.get("Buckets", []), 1):
+              name = bucket["Name"]
+              prefix = "Bucket " + str(index) + " "
+              location = aws("s3api", "get-bucket-location", bucket=name)
+              region = location.get("LocationConstraint") or "us-east-1"
+              emit(prefix + "region", "UNKNOWN" if "audit_error" in location else region)
+              public = aws("s3api", "get-public-access-block", bucket=name)
+              config = public.get("PublicAccessBlockConfiguration", {})
+              emit(prefix + "all public access blocks", all(config.get(k) is True for k in ["BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"]) if config else "UNKNOWN (" + public.get("audit_error", "missing field") + ")")
+              encryption = aws("s3api", "get-bucket-encryption", bucket=name)
+              algorithms = [r.get("ApplyServerSideEncryptionByDefault", {}).get("SSEAlgorithm", "UNKNOWN") for r in encryption.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])]
+              emit(prefix + "default encryption", ", ".join(algorithms) or "UNKNOWN (" + encryption.get("audit_error", "missing field") + ")")
+              for operation, field, default in [("get-bucket-versioning", "Status", "Not enabled"), ("get-bucket-ownership-controls", "OwnershipControls", "UNKNOWN")]:
+                  result = aws("s3api", operation, bucket=name)
+                  value = result.get(field, default)
+                  if field == "OwnershipControls":
+                      value = ", ".join(r.get("ObjectOwnership", "UNKNOWN") for r in result.get(field, {}).get("Rules", [])) or "UNKNOWN"
+                  emit(prefix + operation, "UNKNOWN (" + result["audit_error"] + ")" if "audit_error" in result else value)
+              policy = aws("s3api", "get-bucket-policy", bucket=name)
+              if "Policy" in policy:
+                  try:
+                      statements = json.loads(policy["Policy"]).get("Statement", [])
+                      if isinstance(statements, dict):
+                          statements = [statements]
+                      found = any(s.get("Sid") == "DenyInsecureTransport" and s.get("Effect") == "Deny" and str(s.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport")).lower() == "false" for s in statements)
+                      emit(prefix + "expected HTTP deny rule present", found)
+                  except (ValueError, AttributeError):
+                      emit(prefix + "expected HTTP deny rule present", "UNKNOWN (policy parse)")
+              else:
+                  emit(prefix + "policy read", policy.get("audit_error", "UNKNOWN"))
+          regions = aws("ec2", "describe-regions", region="eu-north-1")
+          names = [r["RegionName"] for r in regions.get("Regions", [])]
+          emit("Enabled regions discovered", len(names) if names else "UNKNOWN (" + regions.get("audit_error", "empty response") + ")")
+          queries = [("ec2", "describe-instances", "Reservations"), ("ec2", "describe-nat-gateways", "NatGateways"), ("ec2", "describe-addresses", "Addresses"), ("ec2", "describe-volumes", "Volumes"), ("rds", "describe-db-instances", "DBInstances"), ("rds", "describe-db-clusters", "DBClusters"), ("elbv2", "describe-load-balancers", "LoadBalancers"), ("ecs", "list-clusters", "clusterArns"), ("lambda", "list-functions", "Functions")]
+          def scan(region):
+              return [(region + " " + service + "/" + operation, count_result(aws(service, operation, region=region), key, key == "Reservations")) for service, operation, key in queries]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              for group in pool.map(scan, sorted(names or ["eu-north-1"])):
+                  for label, value in group:
+                      emit(label, value)
+          budgets = aws("budgets", "describe-budgets", account_id=account, region="us-east-1")
+          emit("Budget count", count_result(budgets, "Budgets"))
+          for index, budget in enumerate(budgets.get("Budgets", []), 1):
+              notifications = aws("budgets", "describe-notifications-for-budget", account_id=account, budget_name=budget["BudgetName"], region="us-east-1")
+              emit("Budget " + str(index) + " notification count", count_result(notifications, "Notifications"))
+              for number, notification in enumerate(notifications.get("Notifications", []), 1):
+                  subscribers = aws("budgets", "describe-subscribers-for-notification", account_id=account, budget_name=budget["BudgetName"], notification=json.dumps(notification), region="us-east-1")
+                  emit("Budget " + str(index) + " alert " + str(number) + " subscriber count", count_result(subscribers, "Subscribers"))
+          report = ["## AWS read-only audit", "", "No AWS resources or settings were changed. UNKNOWN means the check was not verified.", "Resource counts cover the listed services and enabled regions only; this is not a complete inventory or billing reconciliation.", "No Cost Explorer requests were made. No resource identifiers, email addresses or credentials are included.", "", "| Check | Result |", "|---|---|"] + ["| " + k + " | " + v + " |" for k, v in rows]
+          print("\n".join(report))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as handle:
+              handle.write("\n".join(report) + "\n")
+          PY
