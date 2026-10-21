@@ -590,7 +590,7 @@ export default function App() {
   );
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f8f4ef" },
+  screen: { flex: 1, backgroundColor: "#FAFAFC" },
   content: {
     padding: 24,
     paddingTop: 48,
@@ -601,20 +601,20 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   eyebrow: {
-    color: "#8b4b39",
+    color: "#6850CB",
     fontWeight: "700",
     letterSpacing: 2,
     fontSize: 11,
   },
-  title: { color: "#23382f", fontSize: 38, fontWeight: "700" },
+  title: { color: "#0E0F1A", fontSize: 38, fontWeight: "700" },
   heading: {
-    color: "#23382f",
+    color: "#0E0F1A",
     fontSize: 21,
     fontWeight: "600",
     marginBottom: 10,
   },
-  body: { color: "#58645c", lineHeight: 24, fontSize: 15 },
-  small: { color: "#68776e", fontSize: 11, lineHeight: 20 },
+  body: { color: "#474655", lineHeight: 24, fontSize: 15 },
+  small: { color: "#575466", fontSize: 11, lineHeight: 20 },
   notice: {
     color: "#7c4127",
     backgroundColor: "#f3e8db",
@@ -623,24 +623,24 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: 22,
-    backgroundColor: "#fffdf9",
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: "#e8e2d7",
+    borderColor: "#DCCBFF",
   },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   input: {
     borderWidth: 1,
-    borderColor: "#d4dcd4",
+    borderColor: "#C8CBD6",
     borderRadius: 10,
     padding: 14,
-    color: "#23382f",
+    color: "#0E0F1A",
     backgroundColor: "#fff",
     minHeight: 48,
   },
   button: {
-    backgroundColor: "#264e3d",
+    backgroundColor: "#6041D3",
     borderRadius: 10,
     padding: 14,
     marginVertical: 3,
