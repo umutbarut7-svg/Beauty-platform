@@ -76,6 +76,11 @@ async function main() {
       mode: 0o600,
     });
     await chmod("/preview-secrets/postgres-password", 0o444);
+    // Keep the tmpfs volume mounted until the database also has it mounted.
+    // A one-shot initializer lets Docker unmount/empty it between services.
+    const keeper = setInterval(() => {}, 60000);
+    for (const signal of ["SIGTERM", "SIGINT"])
+      process.once(signal, () => clearInterval(keeper));
     return;
   }
   if (
