@@ -41,6 +41,27 @@ async function post(path, data, expected) {
 async function main() {
   assert.equal(process.env.PREVIEW_CI_FIXTURE, "true");
   assert.equal(process.env.PREVIEW_NODE_ENV, "test");
+  execFileSync(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "-e",
+      "PREVIEW_HOST=preview.example.test",
+      "-e",
+      "ADMIN_HOST=ops.example.test",
+      "--entrypoint",
+      "caddy",
+      process.env.GATEWAY_IMAGE,
+      "validate",
+      "--config",
+      "/etc/caddy/Caddyfile",
+      "--adapter",
+      "caddyfile",
+    ],
+    { stdio: "pipe" },
+  );
+  console.log("PASS: production HTTPS proxy configuration validates");
   await ready();
   for (const path of ["/", "/operator/"]) {
     const r = await fetch(base + path, { signal: AbortSignal.timeout(10000) });
@@ -64,8 +85,8 @@ async function main() {
   const caps = await r.json();
   assert.equal(caps.enabled, false);
   console.log("PASS: real registration/login with rollout closed");
-  compose("stop", "gateway", "api", "worker", "postgres");
-  compose("run", "--rm", "--no-deps", "prepare-secrets");
+  compose("restart", "prepare-secrets");
+  compose("stop", "gateway", "api", "worker", "postgres", "prepare-secrets");
   compose("up", "-d");
   await ready();
   const relogin = await post("/api/auth/login", user, 201);
@@ -73,7 +94,14 @@ async function main() {
   console.log(
     "PASS: database survives service restart and tmpfs secret can be initialized again",
   );
-  for (const service of ["api", "worker", "postgres", "admin", "gateway"]) {
+  for (const service of [
+    "api",
+    "worker",
+    "postgres",
+    "admin",
+    "gateway",
+    "prepare-secrets",
+  ]) {
     const id = compose("ps", "-q", service).trim();
     assert.ok(id, service);
     const state = JSON.parse(
