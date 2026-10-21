@@ -63,10 +63,55 @@ workflow/harness revision was `e6645a9cbbad8ba2c557c6f2b51619ebba55c72d`.
 No live database or customer photo was used. The pass does not certify photo
 quality or the complete consent/worker/catalog/device acceptance journey.
 
+## Verified live HTTP, catalog and privacy-worker run
+
+[Run 39607658908](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39607658908)
+completed with **SUCCESS** on 21 October 2026; job 119247947595. Application
+revision remained `123e7339e2ab2a9e8e94f391a8431b73afc28efe`; the tested harness
+revision was `12f8bdcba50e769f28f9dcc65b80b40d2d89bc4f`.
+
+The disposable runner used PostgreSQL/pgvector with a fixed loopback database URL,
+the real AWS development bucket and real OpenAI requests. All seven checks passed:
+
+- Real HTTP consent, private upload, EXIF removal and cross-user session denial.
+- A live structured vision response committed through the application HTTP/DB
+  path as NEEDS_INFORMATION.
+- Withdrawal immediately denied access and scrubbed analysis fields. An injected
+  first storage-erasure failure left deletion pending and the object present.
+  A subsequent real cleanup-worker process erased the object.
+- Forced-expiry fixtures were scrubbed and physically erased by the worker while
+  unexpired 90-day evidence remained. This tests expiry predicates by advancing
+  fixture timestamps, not 24 hours of wall-clock operation.
+- Live embeddings were generated through the durable catalog worker; duplicate
+  indexing requests were idempotent. Real HTTP search returned a pgvector match.
+  Non-bookable services were excluded, and a queued job with revoked membership
+  reached DEAD_LETTER.
+- With rollout, AI and reviewed-policy flags closed in a restarted test API,
+  new consent failed closed while repeated withdrawal remained available and
+  did not duplicate its evidence event.
+- Final cleanup verified all owned synthetic S3 objects absent.
+
+Fixture files: `scripts/stage33-live-journey.cjs` and
+`scripts/stage33-live-fixture-preload.cjs`. The preload deliberately restricts
+test-process UUIDs to the reserved `f33f33f3-` namespace (112 random bits remain)
+so the existing narrow S3 role suffices. It also injects one erasure exception
+only when explicitly requested. Production application code is unchanged; this
+does not claim a real AWS outage was induced. No real person, customer image or
+production database was used. Policy flags were enabled only for synthetic CI
+fixtures; product policy approval is still outstanding.
+
+Workflow: `.github/workflows/stage33-live-journey.yml`. Its first run was
+triggered by the explicit acceptance commit; the push trigger was then removed.
+Future runs are manual-only on main. No application rollout or deployment was
+enabled.
+
 ## Remaining acceptance boundary
 
-Passing these adapter checks does not prove the complete HTTP consent/upload/
-analysis/withdrawal journey, PostgreSQL/pgvector live matching, worker expiry and
-retry behavior, real-photo quality, reviewed legal policies, device acceptance
-or deployment readiness. It does not enable product rollout flags or merge the
-Stage 33 application. Stage 33 remains DRAFT / NOT PASS overall.
+These passing gates do not certify real-photo quality, a live PLAN-to-matches
+customer journey, follow-up-question answer quality, reviewed legal policies,
+all native setup flows or real-device acceptance. They do not create a persistent
+application server, production database or continuously running cleanup worker.
+The pgvector match proves the implemented query path, not semantic recommendation
+quality or service suitability. Browser/native live-provider UX and continuous
+retention operations remain separate acceptance gates. No Stage 33 application
+merge or rollout is implied. Stage 33 remains DRAFT / NOT PASS overall.
