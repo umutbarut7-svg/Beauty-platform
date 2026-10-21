@@ -16,6 +16,20 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - name: Inspect non-secret OIDC matching claims
+        shell: bash
+        run: |
+          node <<'NODE'
+          (async () => {
+            const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            url.searchParams.set('audience', 'sts.amazonaws.com');
+            const response = await fetch(url, {headers: {Authorization: 'Bearer ' + process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}});
+            if (!response.ok) throw new Error('OIDC request failed: ' + response.status);
+            const {value} = await response.json();
+            const claims = JSON.parse(Buffer.from(value.split('.')[1], 'base64url').toString());
+            console.log(JSON.stringify({iss: claims.iss, aud: claims.aud, sub: claims.sub, repository: claims.repository, ref: claims.ref}));
+          })().catch(() => { console.error('OIDC claim inspection failed'); process.exit(1); });
+          NODE
       - name: Obtain temporary AWS audit credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -25,6 +39,7 @@ jobs:
           role-duration-seconds: 900
           mask-aws-account-id: true
           output-credentials: false
+          disable-retry: true
       - name: Verify assumed role and security audit access
         shell: bash
         run: |
