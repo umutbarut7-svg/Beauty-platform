@@ -1,0 +1,39 @@
+name: AWS OIDC connection check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/aws-oidc-check.yml]
+
+permissions: {}
+
+jobs:
+  connection:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    steps:
+      - name: Obtain temporary AWS audit credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: BeautyPlatformConnectionCheck
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+      - name: Verify assumed role and security audit access
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$identity" in
+            arn:aws:sts::*:assumed-role/BeautyPlatformGitHubAudit/*) ;;
+            *) echo "::error::Unexpected AWS role"; exit 1 ;;
+          esac
+          aws iam get-account-summary --query 'SummaryMap.AccountMFAEnabled' --output text > /dev/null
+          echo "AWS OIDC connection and audit read access verified."
+          echo "AWS OIDC connection and audit read access verified. No AWS resources changed." >> "$GITHUB_STEP_SUMMARY"
