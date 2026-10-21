@@ -43,7 +43,19 @@ services:
     user: "1000:1000"
     environment: *runtime
     volumes: [database_secret:/preview-secrets]
-    restart: "no"
+    restart: unless-stopped
+    mem_limit: 128m
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "require('node:fs').accessSync('/preview-secrets/postgres-password')",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
 
@@ -55,7 +67,7 @@ services:
       POSTGRES_USER: beauty
       POSTGRES_PASSWORD_FILE: /preview-secrets/postgres-password
     depends_on:
-      prepare-secrets: { condition: service_completed_successfully }
+      prepare-secrets: { condition: service_healthy }
     volumes:
       - database:/var/lib/postgresql/data
       - database_secret:/preview-secrets:ro
