@@ -30,7 +30,9 @@ enabled. OpenAI and JWT plaintext stay in process memory, not image layers,
 Compose configuration, user data, build arguments, artifacts or secret files.
 
 The database password is shared with PostgreSQL through a dedicated Docker tmpfs
-volume; it is not a persistent disk file. Parameter names are fixed in the loader.
+volume; it is not a persistent disk file. The small secret-helper process keeps
+that tmpfs mount alive and reports healthy only after the file exists; PostgreSQL
+waits for that health check. Parameter names are fixed in the loader.
 The `PREVIEW_CI_FIXTURE` path is allowed only with `NODE_ENV=test` and contains
 clearly disposable values. It must never be enabled for the persistent preview.
 Database and JWT parameters must be provisioned separately as SecureStrings after
@@ -94,3 +96,33 @@ The container build/stack gate and the foundation lint gate must pass before
 this package is called validated. The foundation still needs a live AWS change
 set and the running service needs HTTPS, restart, migration, worker and resource
 measurement checks after the owner authorizes provisioning.
+
+## Container validation evidence — 21 October 2026
+
+Application: `123e7339e2ab2a9e8e94f391a8431b73afc28efe`.
+Harness: `c8e4e028a66d97d75a71b46b80ab767c902e42d8`.
+Run: https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39615596847
+
+The isolated runner built all four image targets, passed CloudFormation lint and
+six secret-loader tests, validated the production Caddy configuration, applied
+all migrations to a disposable PostgreSQL/pgvector database, and served HTML
+from both frontends plus API readiness through the gateway. Real HTTP registration,
+login and closed-rollout capability checks passed. After stopping/restarting API,
+worker, database, gateway and secret helper, the same account could still log in.
+All six runtime containers were running without an OOM kill under their configured
+memory limits. The disposable stack and its volumes were removed at the end.
+
+No AWS identity, real OpenAI key, ECR upload or paid AWS resource was used by this
+container run. The two earlier provider runs in
+`docs/stage-33/live-provider-validation.md` provide the separate actual AWS/OpenAI
+adapter evidence. A test assertion initially expected HTTP 201 for login; it was
+corrected to the controller's explicit HTTP 200 contract. The first container run
+also exposed the one-shot tmpfs initializer issue, fixed by the healthy long-lived
+secret helper and covered by the successful restart check.
+
+These are loopback HTTP/server and restart checks. They do not establish browser
+interaction, public DNS/certificate issuance, host reboot recovery, sustained-load
+capacity, live instance IAM/SSM binding, backup/restore, real-photo PLAN quality,
+native-device acceptance, policy approval or production readiness. Image tags
+remain preparation inputs; rebuild for the approved HTTPS hostnames and pin the
+resulting tested image digests before any deployment.
