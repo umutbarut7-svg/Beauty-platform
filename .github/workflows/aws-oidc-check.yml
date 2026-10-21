@@ -93,7 +93,8 @@ jobs:
               for key in ["AccountMFAEnabled", "AccountAccessKeysPresent", "Users", "Roles"]:
                   emit(key, summary.get("SummaryMap", {}).get(key, "UNKNOWN"))
           block = aws("s3control", "get-public-access-block", account_id=account, region="eu-north-1")
-          emit("Account S3 public block", block.get("PublicAccessBlockConfiguration", {}).get("BlockPublicPolicy", "UNKNOWN (" + block.get("audit_error", "missing field") + ")"))
+          account_blocks = block.get("PublicAccessBlockConfiguration", {})
+          emit("Account S3 all public access blocks", all(account_blocks.get(k) is True for k in ["BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"]) if account_blocks else "UNKNOWN (" + block.get("audit_error", "missing field") + ")")
           buckets = aws("s3api", "list-buckets")
           emit("S3 bucket count", count_result(buckets, "Buckets"))
           for index, bucket in enumerate(buckets.get("Buckets", []), 1):
@@ -142,7 +143,7 @@ jobs:
               notifications = aws("budgets", "describe-notifications-for-budget", account_id=account, budget_name=budget["BudgetName"], region="us-east-1")
               emit("Budget " + str(index) + " notification count", count_result(notifications, "Notifications"))
               for number, notification in enumerate(notifications.get("Notifications", []), 1):
-                  subscribers = aws("budgets", "describe-subscribers-for-notification", account_id=account, budget_name=budget["BudgetName"], notification=json.dumps(notification), region="us-east-1")
+                  subscribers = aws("budgets", "describe-subscribers-for-notification", account_id=account, budget_name=budget["BudgetName"], notification=json.dumps({k: v for k, v in notification.items() if k in ["NotificationType", "ComparisonOperator", "Threshold", "ThresholdType"]}), region="us-east-1")
                   emit("Budget " + str(index) + " alert " + str(number) + " subscriber count", count_result(subscribers, "Subscribers"))
           report = ["## AWS read-only audit", "", "No AWS resources or settings were changed. UNKNOWN means the check was not verified.", "Resource counts cover the listed services and enabled regions only; this is not a complete inventory or billing reconciliation.", "No Cost Explorer requests were made. No resource identifiers, email addresses or credentials are included.", "", "| Check | Result |", "|---|---|"] + ["| " + k + " | " + v + " |" for k, v in rows]
           print("\n".join(report))
