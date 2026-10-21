@@ -163,7 +163,7 @@ Resources:
       ImageId: { Ref: AmiId }
       InstanceType: { Ref: InstanceType }
       IamInstanceProfile: { Ref: RuntimeProfile }
-      CreditSpecification: { CpuCredits: standard }
+      CreditSpecification: { CPUCredits: standard }
       MetadataOptions:
         HttpTokens: required
         HttpPutResponseHopLimit: 2
