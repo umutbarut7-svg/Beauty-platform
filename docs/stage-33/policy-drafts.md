@@ -8,16 +8,16 @@ Kayıtlı platform adı, başvuru iletişim kanalı, resmî kayıt kaynağı/paz
 
 ## Önerilen fotoğraf kapsamı
 
-| Karar      | İncelemeye sunulan öneri                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------------------------------ |
-| Amaç       | Kullanıcının istediği saç görünümü için tekil danışmanlık, ek sorular, öneri planı ve katalog eşleştirmesi         |
-| Sahiplik   | İşletme seçilmeden önce platformdaki kullanıcı; işletme/profesyonel veya diğer kullanıcı fotoğrafı okuyamaz        |
-| Paylaşım   | Özel AWS S3 depolaması ve kullanıcının başlattığı analiz için OpenAI; işletmeye veya reklama otomatik paylaşım yok |
-| Saklama    | Fotoğraf, hedef/yanıtlar ve AI planı için azami **24 saat**; teknik onay/işlem kanıtı için **90 gün** (prensip onayı alındı)     |
-| İzin       | Varsayılanı boş olan ayrı onay; kayıt olmak veya katalog kullanmak fotoğraf izni sayılmaz                          |
-| Geri çekme | İzinler ekranından geri çekme; erişim ve analiz sonucu hemen kapatılır, worker fiziksel silmeyi takip eder         |
-| İşleme     | JPEG/PNG; en fazla 5 MB ve 20 milyon piksel; server JPEG'e dönüştürür, EXIF/GPS bilgisini kaldırır                 |
-| Sınır      | Kimlik tespiti, sağlık/korunan özellik çıkarımı, teşhis, sonuç garantisi veya eğitim/veri satışı amacı yok         |
+| Karar      | İncelemeye sunulan öneri                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Amaç       | Kullanıcının istediği saç görünümü için tekil danışmanlık, ek sorular, öneri planı ve katalog eşleştirmesi                   |
+| Sahiplik   | İşletme seçilmeden önce platformdaki kullanıcı; işletme/profesyonel veya diğer kullanıcı fotoğrafı okuyamaz                  |
+| Paylaşım   | Özel AWS S3 depolaması ve kullanıcının başlattığı analiz için OpenAI; işletmeye veya reklama otomatik paylaşım yok           |
+| Saklama    | Fotoğraf, hedef/yanıtlar ve AI planı için azami **24 saat**; teknik onay/işlem kanıtı için **90 gün** (prensip onayı alındı) |
+| İzin       | Varsayılanı boş olan ayrı onay; kayıt olmak veya katalog kullanmak fotoğraf izni sayılmaz                                    |
+| Geri çekme | İzinler ekranından geri çekme; erişim ve analiz sonucu hemen kapatılır, worker fiziksel silmeyi takip eder                   |
+| İşleme     | JPEG/PNG; en fazla 5 MB ve 20 milyon piksel; server JPEG'e dönüştürür, EXIF/GPS bilgisini kaldırır                           |
+| Sınır      | Kimlik tespiti, sağlık/korunan özellik çıkarımı, teşhis, sonuç garantisi veya eğitim/veri satışı amacı yok                   |
 
 ### Kullanıcı metni için doldurulacak taslak
 
@@ -37,15 +37,15 @@ bu metin etkinleştirilmemelidir. Bu eksiklikler test-fixture metinleriyle kapat
 
 ## Önerilen işletme doğrulaması
 
-| Karar     | İncelemeye sunulan öneri                                                                                        |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| Başvuru   | İşletmenin kayıt adı ve yetkili kayıttaki referansı; belge asılları veya kimlik fotoğrafları bu forma yüklenmez |
-| İnceleme  | İşletmeye üye olmayan platform yöneticisi, ilgili resmî kaynaktan ve işletmeyle kurulan kanaldan kontrol eder   |
-| Karar     | Gerekçeli onay/red; hiçbir AI veya normal işletme yöneticisi otomatik doğrulama yapamaz                         |
-| İptal     | İşletme, bekleyen başvuruyu iptal edip güncel koşullarla yeniden başvurabilir                                   |
-| Geri alma | Yetkili platform incelemecisi gerekçeyle doğrulamayı geri alabilir                                              |
-| Saklama   | Başvuru kanıtı/notu için **90 gün** (prensip onayı alındı); süre dolunca içerik temizlenir, bekleyen başvuru sona erer        |
-| Audit     | Karar/actor/resource referansı mevcut tenant audit'inde kalır; kanıt metni audit/log içine yazılmaz             |
+| Karar     | İncelemeye sunulan öneri                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Başvuru   | İşletmenin kayıt adı ve yetkili kayıttaki referansı; belge asılları veya kimlik fotoğrafları bu forma yüklenmez        |
+| İnceleme  | İşletmeye üye olmayan platform yöneticisi, ilgili resmî kaynaktan ve işletmeyle kurulan kanaldan kontrol eder          |
+| Karar     | Gerekçeli onay/red; hiçbir AI veya normal işletme yöneticisi otomatik doğrulama yapamaz                                |
+| İptal     | İşletme, bekleyen başvuruyu iptal edip güncel koşullarla yeniden başvurabilir                                          |
+| Geri alma | Yetkili platform incelemecisi gerekçeyle doğrulamayı geri alabilir                                                     |
+| Saklama   | Başvuru kanıtı/notu için **90 gün** (prensip onayı alındı); süre dolunca içerik temizlenir, bekleyen başvuru sona erer |
+| Audit     | Karar/actor/resource referansı mevcut tenant audit'inde kalır; kanıt metni audit/log içine yazılmaz                    |
 
 Kayıt referansının hangi resmî kaynakla doğrulanacağı, platformun hangi pazarlarda
 başlayacağı ve yetkili incelemecinin kim olacağı netleşmelidir. Bu seçimler
