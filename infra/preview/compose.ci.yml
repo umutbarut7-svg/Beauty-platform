@@ -1,0 +1,4 @@
+services:
+  gateway:
+    volumes:
+      - ./Caddyfile.ci:/etc/caddy/Caddyfile:ro
