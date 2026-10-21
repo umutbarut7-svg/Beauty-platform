@@ -1,16 +1,13 @@
 name: Stage 33 preview container validation
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [.github/workflows/stage33-preview-containers.yml]
 permissions: {}
 concurrency:
   group: stage33-preview-containers
   cancel-in-progress: false
 jobs:
   containers:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Validate isolated Stage 33 preview containers')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
@@ -71,6 +68,4 @@ jobs:
         if: always()
         run: docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml down --volumes --remove-orphans
 
-# Startup regression: keep the database secret tmpfs mounted.
 
-# Login acceptance follows the explicit HTTP 200 controller contract.
