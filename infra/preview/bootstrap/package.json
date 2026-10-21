@@ -1,0 +1,8 @@
+{
+  "name": "beauty-preview-secret-bootstrap",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "3.1153.0"
+  }
+}
