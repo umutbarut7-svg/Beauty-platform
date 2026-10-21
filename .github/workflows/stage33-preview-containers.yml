@@ -1,0 +1,72 @@
+name: Stage 33 preview container validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/stage33-preview-containers.yml]
+permissions: {}
+concurrency:
+  group: stage33-preview-containers
+  cancel-in-progress: false
+jobs:
+  containers:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Validate isolated Stage 33 preview containers')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      API_IMAGE: beauty-preview-api:ci
+      MIGRATE_IMAGE: beauty-preview-migrate:ci
+      ADMIN_IMAGE: beauty-preview-admin:ci
+      GATEWAY_IMAGE: beauty-preview-gateway:ci
+      PREVIEW_NODE_ENV: test
+      PREVIEW_CI_FIXTURE: "true"
+      PREVIEW_HOST: preview.example.test
+      ADMIN_HOST: ops.example.test
+      HTTP_BIND: 127.0.0.1:8080
+      HTTPS_BIND: 127.0.0.1:8443
+    defaults:
+      run:
+        working-directory: application
+    steps:
+      - name: Checkout deployment harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Checkout reviewed application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          path: application
+          persist-credentials: false
+      - name: Copy preview package and lint foundation
+        run: |
+          mkdir -p infra
+          cp -a ../harness/infra/preview infra/
+          python3 -m pip install --disable-pip-version-check cfn-lint==1.45.0
+          cfn-lint infra/preview/stack.yml
+          npm ci --omit=dev --prefix infra/preview/bootstrap
+          node --test infra/preview/bootstrap/entrypoint.test.cjs
+      - name: Build API and migrations without AWS credentials
+        run: |
+          docker build -f infra/preview/Dockerfile --target api -t "$API_IMAGE" .
+          docker build -f infra/preview/Dockerfile --target migrate -t "$MIGRATE_IMAGE" .
+      - name: Build both frontends with disposable loopback URL
+        run: |
+          docker build -f infra/preview/Dockerfile --target admin --build-arg ADMIN_API_URL=http://127.0.0.1:8080/api -t "$ADMIN_IMAGE" .
+          docker build -f infra/preview/Dockerfile --target gateway --build-arg WEB_API_URL=http://127.0.0.1:8080/api -t "$GATEWAY_IMAGE" .
+      - name: Start isolated stack
+        run: docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml up -d
+      - name: Verify HTTP, migration, auth, closed rollout and restart
+        run: node infra/preview/verify-stack.cjs
+      - name: Container diagnostics on failure
+        if: failure()
+        run: |
+          docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml ps -a
+          docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml logs --tail 60
+      - name: Remove disposable CI stack
+        if: always()
+        run: docker compose -f infra/preview/compose.yml -f infra/preview/compose.ci.yml down --volumes --remove-orphans
