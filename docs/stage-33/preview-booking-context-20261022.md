@@ -1,6 +1,6 @@
 # Explicit customer booking context — preview correction
 
-Status: prepared; candidate regression/build run [39794044679](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39794044679) is queued. No publication is claimed.
+Status: prepared, not published. Initial run [39794044679](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39794044679) failed with JavaScript heap exhaustion in the bounded isolated build. Retry [39795890584](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39795890584) uses a 1 GiB container and 768 MiB Node heap. Candidate publication requires separate owner approval; the automatic review did not accept the previous activation approval as authority for publishing this new code change.
 
 The customer UI omits customerId when reserving a slot. The appointments API
 classifies an account with salon-owner membership as a managing actor regardless
