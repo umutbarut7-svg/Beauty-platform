@@ -35,7 +35,7 @@ jobs:
       - name: Verify identity and execute checked-in operation
         shell: bash
         env:
-          AWS_PAGER: ''
+          AWS_PAGER: ""
         run: |
           python3 - <<'PY'
           import json, os, pathlib, subprocess, time
