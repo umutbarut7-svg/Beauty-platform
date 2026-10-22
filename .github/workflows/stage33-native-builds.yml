@@ -1,0 +1,111 @@
+name: Stage 33 native preview builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/operations/native-request.json]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage33-native-builds
+  cancel-in-progress: false
+
+jobs:
+  native:
+    name: ${{ matrix.platform }} native preview
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            os: ubuntu-24.04
+          - platform: ios
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    defaults:
+      run:
+        working-directory: application
+    steps:
+      - name: Checkout native build harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+      - name: Checkout pinned application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          path: application
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: application/pnpm-lock.yaml
+      - name: Set up Java
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Prepare exact preview UI without cloud credentials
+        run: |
+          python3 ../harness/scripts/prepare-stage33-native.py .
+          pnpm install --frozen-lockfile --filter @beauty-platform/mobile...
+          pnpm --filter @beauty-platform/types build
+          pnpm --filter @beauty-platform/mobile typecheck
+      - name: Generate native project
+        run: pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ${{ matrix.platform }} --no-install
+      - name: Build self-contained Android preview APK
+        if: matrix.platform == 'android'
+        working-directory: application/apps/mobile/android
+        run: |
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
+          test -s app/build/outputs/apk/release/app-release.apk
+          mkdir -p "$GITHUB_WORKSPACE/native-output"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/native-output/EPIFIZ-android-preview-arm64.apk"
+          sha256sum "$GITHUB_WORKSPACE/native-output/EPIFIZ-android-preview-arm64.apk"
+      - name: Build iOS simulator application
+        if: matrix.platform == 'ios'
+        working-directory: application/apps/mobile/ios
+        shell: bash
+        run: |
+          xcodebuild -version
+          pod install
+          workspace_paths=(*.xcworkspace)
+          test "${#workspace_paths[@]}" -eq 1
+          scheme="${workspace_paths[0]%.xcworkspace}"
+          xcodebuild -workspace "${workspace_paths[0]}" -scheme "$scheme" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/epifiz-ios" CODE_SIGNING_ALLOWED=NO build
+          app_paths=("$RUNNER_TEMP/epifiz-ios/Build/Products/Release-iphonesimulator/"*.app)
+          test "${#app_paths[@]}" -eq 1
+          mkdir -p "$GITHUB_WORKSPACE/native-output"
+          ditto -c -k --sequesterRsrc --keepParent "${app_paths[0]}" "$GITHUB_WORKSPACE/native-output/EPIFIZ-ios-simulator.zip"
+          shasum -a 256 "$GITHUB_WORKSPACE/native-output/EPIFIZ-ios-simulator.zip"
+      - name: Add artifact acceptance boundary
+        run: |
+          cp ../harness/docs/stage-33/native-preview-readme.md "$GITHUB_WORKSPACE/native-output/README.md"
+          printf '%s\n' "Application: 123e7339e2ab2a9e8e94f391a8431b73afc28efe" "Harness: $GITHUB_SHA" "Platform: ${{ matrix.platform }}" > "$GITHUB_WORKSPACE/native-output/build-revision.txt"
+      - name: Upload native preview only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: EPIFIZ-${{ matrix.platform }}-preview
+          path: native-output/
+          if-no-files-found: error
+          retention-days: 7
