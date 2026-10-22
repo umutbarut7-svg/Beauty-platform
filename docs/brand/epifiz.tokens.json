@@ -3,19 +3,49 @@
   "name": "EPIFIZ",
   "status": "candidate-not-production-approved",
   "color": {
-    "midnight": {"$type":"color","$value":"#0E0F1A"},
-    "violet": {"$type":"color","$value":"#8B6CFF"},
-    "lavender": {"$type":"color","$value":"#DCCBFF"},
-    "silver": {"$type":"color","$value":"#C8CBD6"},
-    "paper": {"$type":"color","$value":"#FAFAFC"},
-    "textPrimary": {"$type":"color","$value":"#0E0F1A"},
-    "textInverse": {"$type":"color","$value":"#FAFAFC"}
+    "midnight": {
+      "$type": "color",
+      "$value": "#0E0F1A"
+    },
+    "violet": {
+      "$type": "color",
+      "$value": "#8B6CFF"
+    },
+    "lavender": {
+      "$type": "color",
+      "$value": "#DCCBFF"
+    },
+    "silver": {
+      "$type": "color",
+      "$value": "#C8CBD6"
+    },
+    "paper": {
+      "$type": "color",
+      "$value": "#FAFAFC"
+    },
+    "textPrimary": {
+      "$type": "color",
+      "$value": "#0E0F1A"
+    },
+    "textInverse": {
+      "$type": "color",
+      "$value": "#FAFAFC"
+    }
   },
   "radius": {
-    "card": {"$type":"dimension","$value":"16px"},
-    "button": {"$type":"dimension","$value":"12px"}
+    "card": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "button": {
+      "$type": "dimension",
+      "$value": "12px"
+    }
   },
   "spacing": {
-    "unit": {"$type":"dimension","$value":"4px"}
+    "unit": {
+      "$type": "dimension",
+      "$value": "4px"
+    }
   }
 }
