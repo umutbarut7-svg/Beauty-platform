@@ -15,8 +15,10 @@ TRUST = {
     "Statement": [{"Effect": "Allow", "Principal": {"Federated": PROVIDER},
         "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {
             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-            "token.actions.githubusercontent.com:sub": "repo:umutbarut7-svg/Beauty-platform:ref:refs/heads/main"}}}],
+            "token.actions.githubusercontent.com:sub": "repo:umutbarut7-svg@327211068/Beauty-platform@1363270994:ref:refs/heads/main"}}}],
 }
+LEGACY_TRUST = json.loads(json.dumps(TRUST))
+LEGACY_TRUST["Statement"][0]["Condition"]["StringEquals"]["token.actions.githubusercontent.com:sub"] = "repo:umutbarut7-svg/Beauty-platform:ref:refs/heads/main"
 POLICY = {
     "Version": "2012-10-17",
     "Statement": [
@@ -47,7 +49,8 @@ def provision(sts, iam, ec2):
     except iam.exceptions.NoSuchEntityException:
         role = None
     if role:
-        if role["AssumeRolePolicyDocument"] != TRUST:
+        trust = role["AssumeRolePolicyDocument"]
+        if trust not in (TRUST, LEGACY_TRUST):
             raise RuntimeError("Existing role trust differs; left unchanged")
         attached = iam.list_attached_role_policies(RoleName=ROLE)
         inline = iam.list_role_policies(RoleName=ROLE)
@@ -56,8 +59,16 @@ def provision(sts, iam, ec2):
         if POLICY_NAME in inline.get("PolicyNames", []):
             if iam.get_role_policy(RoleName=ROLE, PolicyName=POLICY_NAME)["PolicyDocument"] != POLICY:
                 raise RuntimeError("Existing permissions differ; left unchanged")
+            if trust == LEGACY_TRUST:
+                # Repair only the exact trust created by the original bootstrap.
+                # The ID-bearing subject was verified in the successful OIDC audit log.
+                iam.update_assume_role_policy(RoleName=ROLE, PolicyDocument=json.dumps(TRUST))
+                print("GITHUB KIMLIK ESLESMESI DUZELTILDI; sunucu ve yetki kapsami degismedi.")
+                return
             print("BAGLANTI ROLU ZATEN HAZIR; degisiklik yapilmadi.")
             return
+        if trust == LEGACY_TRUST:
+            raise RuntimeError("Legacy role setup is incomplete; inspect before repair")
     else:
         iam.create_role(RoleName=ROLE, AssumeRolePolicyDocument=json.dumps(TRUST),
                         Description="GitHub main operations on the single approved preview host",

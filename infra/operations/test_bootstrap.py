@@ -30,6 +30,7 @@ class BridgeTests(unittest.TestCase):
     def assert_no_write(self):
         self.iam.create_role.assert_not_called()
         self.iam.put_role_policy.assert_not_called()
+        self.iam.update_assume_role_policy.assert_not_called()
 
     def test_wrong_account_stops_before_any_iam_call(self):
         self.sts.get_caller_identity.return_value = {"Account": "000000000000"}
@@ -54,7 +55,7 @@ class BridgeTests(unittest.TestCase):
         write = setup.POLICY["Statement"][0]
         self.assertEqual(write["Action"], "ssm:SendCommand")
         self.assertEqual(write["Resource"], [f"arn:aws:ec2:{setup.REGION}:{setup.ACCOUNT}:instance/{setup.INSTANCE}", f"arn:aws:ssm:{setup.REGION}::document/AWS-RunShellScript"])
-        self.assertEqual(setup.TRUST["Statement"][0]["Condition"]["StringEquals"]["token.actions.githubusercontent.com:sub"], "repo:umutbarut7-svg/Beauty-platform:ref:refs/heads/main")
+        self.assertEqual(setup.TRUST["Statement"][0]["Condition"]["StringEquals"]["token.actions.githubusercontent.com:sub"], "repo:umutbarut7-svg@327211068/Beauty-platform@1363270994:ref:refs/heads/main")
 
     def test_repeat_is_read_only(self):
         self.existing()
@@ -75,6 +76,21 @@ class BridgeTests(unittest.TestCase):
 
     def test_changed_policy_is_never_overwritten(self):
         self.existing()
+        self.iam.get_role_policy.return_value = {"PolicyDocument": {}}
+        with self.assertRaises(RuntimeError): self.run_setup()
+        self.assert_no_write()
+
+    def test_known_original_trust_is_repaired_only_after_policy_validation(self):
+        self.existing()
+        self.iam.get_role.return_value = {"Role": {"AssumeRolePolicyDocument": setup.LEGACY_TRUST}}
+        self.run_setup()
+        self.iam.update_assume_role_policy.assert_called_once()
+        self.iam.create_role.assert_not_called()
+        self.iam.put_role_policy.assert_not_called()
+
+    def test_known_trust_with_unexpected_permissions_is_not_repaired(self):
+        self.existing()
+        self.iam.get_role.return_value = {"Role": {"AssumeRolePolicyDocument": setup.LEGACY_TRUST}}
         self.iam.get_role_policy.return_value = {"PolicyDocument": {}}
         with self.assertRaises(RuntimeError): self.run_setup()
         self.assert_no_write()

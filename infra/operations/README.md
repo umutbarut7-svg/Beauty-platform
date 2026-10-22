@@ -8,11 +8,18 @@ The one-time CloudShell `bootstrap.py --apply` creates only the dedicated
 the AWS account, existing GitHub OIDC provider and running instance first.
 It does not create keys, change existing roles, provision paid infrastructure,
 change the instance profile, or alter running services. Existing mismatched
-roles/policies are rejected rather than overwritten. Repeating a completed
+roles/policies are rejected rather than overwritten. The sole repair exception
+is the exact original bootstrap trust, after checking its permissions still
+match: it is replaced with the actual GitHub subject containing the owner and
+repository IDs. Repeating a completed
 setup makes no changes. A partial new-role setup can be completed by rerunning.
 
 Credentials are temporary OIDC credentials restricted to this repository's
-`main` branch. The role can send `AWS-RunShellScript` commands to **one server**;
+`main` branch. The verified subject is
+`repo:umutbarut7-svg@327211068/Beauty-platform@1363270994:ref:refs/heads/main`
+(successful audit run `39591548054`, job `119193464337`). The plain name-only
+subject caused the first operations run `39767597857` to fail at role assumption;
+no server command ran in that attempt. The role can send `AWS-RunShellScript` commands to **one server**;
 SSM shell execution has administrator privileges on that host, including access
 to its files and runtime identity. This is host management authority, not an
 AWS account administrator role. AWS resource creation/deletion, IAM changes,
