@@ -50,6 +50,9 @@ jobs:
               raise SystemExit('Unexpected account or role; execution blocked')
           previous = aws('ssm', 'get-command-invocation', '--command-id', '4fa99e42-d5e3-48d1-b5f3-533a3f74d412', '--instance-id', 'i-09fe7fdb5f10d63b6')
           print('Previous webpack build status only:', json.dumps({key: previous.get(key) for key in ['Status', 'StatusDetails', 'ResponseCode', 'ExecutionElapsedTime']}), flush=True)
+          build_text = previous.get('StandardOutputContent', '') + '\n' + previous.get('StandardErrorContent', '')
+          markers = {'dependency_install': 'pnpm install --frozen-lockfile', 'admin_webpack_started': 'next build --webpack', 'compilation_started': 'Creating an optimized production build', 'compiled': 'Compiled successfully', 'typecheck': 'Checking validity of types', 'page_data': 'Collecting page data', 'out_of_memory': 'heap out of memory', 'network_dns_error': 'EAI_AGAIN', 'image_export': 'exporting to image'}
+          print('Build phase flags only:', json.dumps({name: marker in build_text for name, marker in markers.items()}), flush=True)
           request = json.loads(pathlib.Path('.github/operations/preview-request.json').read_text())
           if set(request) != {'request_id', 'mode'} or request['mode'] not in {'inspect', 'approved-maintenance'}:
               raise SystemExit('Unsupported operation request')
