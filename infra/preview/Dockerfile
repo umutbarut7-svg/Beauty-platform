@@ -47,7 +47,7 @@ FROM builder AS admin-build
 ARG ADMIN_API_URL
 RUN test -n "$ADMIN_API_URL"
 ENV NEXT_PUBLIC_API_URL=$ADMIN_API_URL
-RUN pnpm --filter @beauty-platform/admin build \
+RUN NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @beauty-platform/admin exec next build --webpack \
     && pnpm --filter @beauty-platform/admin --prod deploy --legacy --frozen-lockfile /out/admin \
     && mkdir -p /out/admin/.next && cp -a apps/admin/.next/. /out/admin/.next/
 
