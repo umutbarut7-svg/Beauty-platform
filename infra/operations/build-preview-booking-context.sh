@@ -8,10 +8,10 @@ def run(args,timeout=30):
     return p.stdout.strip()
 folder=pathlib.Path('/opt/epifiz/operations/booking-context-20261022')
 folder.mkdir(mode=0o700,exist_ok=True)
-helpers=[["infra/operations/preview-auth-ux-overlay.py","721de4991acd38a89d8154ebdc2c790a8f858f70"],["infra/operations/preview-booking-context-overlay.py","7945048d38e0ed464050ca11307962102f1b454c"],["infra/operations/check-preview-booking-context.cjs","6cc1ea963222f726b3502b95ef6803f02fd6d8c8"]]
+helpers=[["infra/operations/preview-auth-ux-overlay.py","721de4991acd38a89d8154ebdc2c790a8f858f70"],["infra/operations/preview-booking-context-overlay.py","7945048d38e0ed464050ca11307962102f1b454c"],["infra/operations/check-preview-booking-context.cjs","1cebd8f7178e725d08ba9f0ef8709648e92c2512"]]
 loaded=[]
 for index,(rel,expected) in enumerate(helpers):
-    with urllib.request.urlopen('https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/f6b570200f703367db2a1b2dc6106a0980b5297f/'+rel,timeout=20) as response: data=response.read(20000)
+    with urllib.request.urlopen('https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/4a62b65a201c3a04441aae77f4882c66fb1f86f1/'+rel,timeout=20) as response: data=response.read(20000)
     actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
     if actual!=expected: raise SystemExit('Pinned test helper integrity mismatch')
     path=folder/pathlib.Path(rel).name
@@ -39,7 +39,7 @@ try:
         result=subprocess.run(['docker','start','-a',name],stdout=out,stderr=subprocess.STDOUT,timeout=600)
     log=(folder/'build.log').read_text(errors='replace')
     for line in log.splitlines():
-        if line.endswith(': PASS'): print(line,flush=True)
+        if line.endswith(': PASS') or line.startswith('Changed-module diagnostic code:'): print(line,flush=True)
     if result.returncode:
         for marker in ['regression failed','JavaScript heap out of memory','error TS','EACCES']:
             print('Build classification '+marker+': '+str(marker in log))
