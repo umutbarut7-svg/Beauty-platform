@@ -33,7 +33,7 @@ if run(['docker','inspect','beauty-preview-gateway-1','--format','{{.Image}}'])!
 name='epifiz-auth-ux-build'
 log=folder/'build.log'
 try:
-    run(['docker','create','--name',name,'--network','none','--memory','640m','--cpus','1','-e','CI=1','-e','EXPO_NO_TELEMETRY=1','-e','NODE_OPTIONS=--max-old-space-size=448','-e','EXPO_PUBLIC_API_URL=https://preview.13-51-112-228.sslip.io/api','--entrypoint','sh',migrate,'-c','cd /repo && pnpm --filter @beauty-platform/mobile typecheck && pnpm --filter @beauty-platform/mobile build'])
+    run(['docker','create','--name',name,'--user','0:0','--network','none','--memory','640m','--cpus','1','-e','CI=1','-e','EXPO_NO_TELEMETRY=1','-e','NODE_OPTIONS=--max-old-space-size=448','-e','EXPO_PUBLIC_API_URL=https://preview.13-51-112-228.sslip.io/api','--entrypoint','sh',migrate,'-c','cd /repo && pnpm --filter @beauty-platform/mobile typecheck && pnpm --filter @beauty-platform/mobile build'])
     run(['docker','cp',str(overlay),name+':/repo/apps/mobile/App.tsx'])
     with log.open('w') as out:
         built=subprocess.run(['docker','start','-a',name],stdout=out,stderr=subprocess.STDOUT,timeout=720)
