@@ -1,54 +1,38 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import pathlib,subprocess,json,time,urllib.request,re
+import subprocess,json,urllib.request
 
-def run(args,timeout=30):
-    p=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
-    if p.returncode: raise RuntimeError('Reviewed command failed: '+args[0])
-    return p.stdout.strip()
-def inspect(service,fmt):return run(['docker','inspect','beauty-preview-'+service+'-1','--format',fmt])
-old='sha256:7a7f80f9184476c9855a3e21ba8f3697dec28e92fa40ace802c50a32a8e28394'
-new='sha256:277e9e190f04712f1771beea5eaefc221ae51a28501da19f47cf89d6726dc723'
-if inspect('gateway','{{.Image}}')!=old:raise SystemExit('Unexpected live gateway; no change')
-if run(['docker','image','inspect','epifiz-gateway:customer-cancellation-20261022','--format','{{.Id}}'])!=new:raise SystemExit('Candidate differs from tested image')
-unchanged=['api','worker','postgres','prepare-secrets','admin']
-before={s:inspect(s,'{{.State.StartedAt}}') for s in unchanged}
-folder=pathlib.Path('/opt/epifiz/operations/customer-cancellation-20261022')
-previous=pathlib.Path('/opt/epifiz/operations/booking-context-20261022')
-values=dict(line.split('=',1) for line in (previous/'live.env').read_text().splitlines() if '=' in line)
-if values.get('GATEWAY_IMAGE')!=old:raise SystemExit('Unexpected prior compose image')
-current=folder/'publish.env';rollback=folder/'rollback.env'
-for path,image in [(current,new),(rollback,old)]:
-    path.write_text(''.join(k+'='+v+'\n' for k,v in {**values,'GATEWAY_IMAGE':image}.items()));path.chmod(0o600)
-def compose(env):return run(['docker','compose','--env-file',str(env),'-f','/opt/epifiz/application-123e7339/infra/preview/compose.yml','-f',str(previous/'mvp.yml'),'up','-d','--no-deps','--pull','never','gateway'],timeout=120)
-def check():
-    origin='https://preview.13-51-112-228.sslip.io'
-    with urllib.request.urlopen(origin+'/',timeout=10) as r:html=r.read().decode()
-    scripts=re.findall(r'<script[^>]+src="([^"]+)"',html)
-    bodies=[]
-    for path in scripts:
-        if path.endswith('.js') and path.startswith('/'):
-            with urllib.request.urlopen(origin+path,timeout=10) as r:bodies.append(r.read().decode())
-    text=''.join(bodies)
-    if not all(marker in text for marker in ['Randevuyu iptal et','ptali onayla','bookForSelf']):raise RuntimeError('Customer cancellation/booking UI markers absent')
-    for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
-        origin='https://'+host
-        with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=10) as r:
-            if r.status!=200 or r.headers.get('Access-Control-Allow-Origin')!=origin:raise RuntimeError('Public API health/CORS check failed')
-try:
-    compose(current)
-    for attempt in range(12):
-        try:check();break
-        except (OSError,RuntimeError):time.sleep(2)
-    else:raise RuntimeError('Public acceptance deadline')
-    for service in unchanged:
-        if inspect(service,'{{.State.StartedAt}}')!=before[service]:raise RuntimeError('Unrelated service restarted')
-except Exception:
-    compose(rollback)
-    if inspect('gateway','{{.Image}}')!=old:raise SystemExit('Rollback needs operator review')
-    raise SystemExit('Publication failed; previous gateway restored')
-print('Public cancellation confirmation and existing booking UI: PASS')
-print('Public API health/CORS and unrelated service restart isolation: PASS')
-print('CUSTOMER CANCELLATION UI PUBLICATION: PASS; browser acceptance pending')
+def inspect(service):
+    p=subprocess.run(['docker','inspect','beauty-preview-'+service+'-1'],capture_output=True,text=True,timeout=15)
+    if p.returncode:raise SystemExit('Required preview service unavailable: '+service)
+    return json.loads(p.stdout)[0]
+services=['api','worker','postgres','admin','gateway']
+for service in services:
+    value=inspect(service)
+    state=value['State']
+    if not state.get('Running') or state.get('OOMKilled'):raise SystemExit('Service running/OOM check failed: '+service)
+    if value.get('HostConfig',{}).get('RestartPolicy',{}).get('Name')!='unless-stopped':raise SystemExit('Restart policy failed: '+service)
+    if service in ['api','postgres'] and state.get('Health',{}).get('Status')!='healthy':raise SystemExit('Healthcheck failed: '+service)
+    print(service+' running, no OOM, restart policy configured: PASS')
+    print(service+' restart count: '+str(value.get('RestartCount',0)))
+    if service=='postgres' and not any(m.get('Type')=='volume' and m.get('Destination')=='/var/lib/postgresql/data' for m in value.get('Mounts',[])):raise SystemExit('PostgreSQL named volume absent')
+print('PostgreSQL named volume configured: PASS')
+expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:277e9e190f04712f1771beea5eaefc221ae51a28501da19f47cf89d6726dc723'}
+for service,digest in expected.items():
+    if inspect(service)['Image']!=digest:raise SystemExit('Tested image mismatch: '+service)
+print('Tested booking API and cancellation gateway still active: PASS')
+for service in ['api','worker']:
+    values=dict(item.split('=',1) for item in inspect(service).get('Config',{}).get('Env',[]) if '=' in item)
+    if values.get('STAGE33_MVP_ENABLED')!='true':raise SystemExit('Core rollout unexpectedly closed: '+service)
+    for name in ['MVP_AI_ENABLED','MVP_SEMANTIC_ENABLED','MVP_PHOTO_POLICY_REVIEWED','MVP_VERIFICATION_POLICY_REVIEWED']:
+        if values.get(name)!='false':raise SystemExit('Policy/provider flag differs from reviewed state: '+service)
+print('Core enabled and unreviewed AI/photo/verification flags closed: PASS')
+for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
+    origin='https://'+host
+    with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=10) as r:
+        if r.status!=200 or r.headers.get('Access-Control-Allow-Origin')!=origin:raise SystemExit('Public health/CORS failed')
+print('Both public API health and CORS: PASS')
+print('READ-ONLY SNAPSHOT COMPLETE; no restart, reboot, deletion, migration or new resources')
+print('Reboot recovery, backup restoration and continuous cleanup correctness remain untested')
 PY

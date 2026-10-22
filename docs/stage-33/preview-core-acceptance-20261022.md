@@ -1,11 +1,25 @@
-# Preview acceptance — 22 October 2026
+# Preview core acceptance — 22 October 2026
 
-Status: core journey observed on an iPhone browser; Stage 33 remains NOT PASS.
+Status: core browser scenarios observed; Stage 33 overall NOT PASS. This records an iPhone Safari web test, not a native iOS app test.
 
-Owner-operated test confirmed: customer booking appears in both customer and business lists; business status reaches COMPLETED; a result explicitly marked as a test with no real service is saved; customer reads the result, submits UNSURE, and sees it in Beauty Passport. After browser reload and sign-in, both history and booking reappear. Intermediate transitions were not individually observed because multiple status buttons were pressed.
+| Scenario | Observed result |
+| --- | --- |
+| Customer booking and lists | Booking created and visible on customer and business sides. |
+| Business lifecycle | Test booking reached COMPLETED; intermediate transitions were not individually verified because several buttons were pressed. |
+| Result and feedback | Explicit test/no-real-service summary saved; customer submitted UNSURE. |
+| Beauty Passport and reload | Summary and feedback reloaded after browser refresh and sign-in; booking also reappeared. |
+| Customer cancellation | Explicit confirmation displayed; customer cancellation persisted and appeared as CANCELLED on business side. |
+| Released availability | Same time was booked again after cancellation; the second test booking was also cancelled. Two cancelled history entries are separate reservations. |
+| Business selection | Multiple same-name business entries were visible. Empty list cleared after selecting the correct entry; identity disambiguation remains a UX issue. |
 
-Publication run: https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39826341816 (success). Public synthetic booking, cancellation and access-isolation assertions passed in its logs.
+Independent synthetic customer API test: [39830217320](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39830217320), success. Covers customer booking/cancel, owner lists, cross-customer read/cancel denial, unauthorized customer status changes, duplicate-slot denial and released availability.
 
-Next prepared operation: test-independent-customer.sh creates only a private synthetic business and generated example.test accounts. Checks independent-customer booking, owner/customer lists, cross-customer read/cancel denial, customer status-management denial, duplicate-slot denial, customer cancellation, persisted cancelled status, and released availability. Cleanup cancels a remaining test appointment, deactivates the private fixture, and logs out test sessions. No deployment, real-salon writes, payment, new infrastructure or secret output. Live outcome is pending execution.
+Cancellation UI build: [39831672558](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39831672558), success. Ten behavior checks, full mobile typecheck and Expo web production export passed.
 
-Known UI gap: the pinned customer screen has no cancellation button, although the cancellation API exists. API acceptance does not establish customer UI cancellation acceptance. Other open acceptance areas include real-photo quality, policies and remaining device checks; do not mark all Stage 33 PASS from this journey.
+Full regression gate on PR 21: [39832266767](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39832266767), success, including Prisma/migrations, API/workspace tests/builds, formatting/typecheck/lint.
+
+Cancellation publication: [39832861875](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39832861875), success. Public UI bundle and API health/CORS passed; unrelated services were unchanged.
+
+Next prepared check: inspect-preview-runtime.sh is strictly a read-only runtime snapshot. It checks running services/OOM state, configured restart policies, named database volume, pinned live images, rollout flag boundaries and public health/CORS. It cannot establish host reboot recovery, backup restoration, sustained capacity or continuous privacy cleanup correctness.
+
+Still open: reviewed identity/contact/photo/verification policy configuration; real-photo PLAN/follow-up/match quality; live AI/photo UX; physical native Android/iOS acceptance; continuous privacy operations and recovery. No real payment integration or production-ready claim is made.
