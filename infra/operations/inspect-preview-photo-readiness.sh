@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import json,subprocess
+import json,subprocess,pathlib
 
 def command(args):
     result=subprocess.run(args,capture_output=True,text=True,timeout=20)
@@ -47,9 +47,22 @@ for service in ['api','worker']:
     for label,ready in checks.items():print(service+' '+label+': '+('CONFIGURED' if ready else 'CONFIGURATION_REQUIRED'))
 if settings['api']!=settings['worker']:raise SystemExit('Selected API/worker settings differ')
 print('Selected API and worker configuration agreement: PASS')
-processes=command(['docker','top','beauty-preview-worker-1','-eo','args']).splitlines()[1:]
-if not any('dist/worker.js' in line and '--once' not in line for line in processes):raise SystemExit('Continuous worker process not observed')
-print('Long-running worker process observed: PASS; sweep completion is not established')
+worker=inspect('worker')
+queue=[worker['State'].get('Pid',0)]
+seen=set()
+observed=False
+try:
+    while queue and len(seen)<20:
+        pid=queue.pop()
+        if not pid or pid in seen:continue
+        seen.add(pid)
+        process=pathlib.Path('/proc')/str(pid)
+        args=(process/'cmdline').read_bytes().split(b'\0')
+        if any(value.endswith(b'dist/worker.js') for value in args) and b'--once' not in args:observed=True
+        children=process/'task'/str(pid)/'children'
+        queue.extend(int(value) for value in children.read_text().split())
+except (OSError,ValueError):pass
+print('Long-running worker process observed: '+('PASS' if observed else 'UNVERIFIED')+'; sweep completion is not established')
 print('PHOTO/AI ACTIVATION BLOCKED: reviewed identity/contact/notice and provider/policy acceptance remain required')
 print('READ ONLY: no account, photo, AI call, database write, service restart or configuration change')
 print('Storage/IAM safety, secret binding, cleanup success, recovery and native/photo quality are NOT certified by configuration presence')
