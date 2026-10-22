@@ -1,40 +1,34 @@
 #!/bin/bash
 set -euo pipefail
-exec 9>/var/lock/epifiz-admin-build.lock
-flock -n 9 || { echo "Another managed admin build is running"; exit 1; }
-cd /opt/epifiz/application-123e7339
-test -f infra/preview/Dockerfile.dockerignore
-install -d -m 700 /opt/epifiz/operations
+image=sha256:fc18e8b3deffb8939f8dbd8735ecbc6bb769462138f7a65b9c377c0cc2814b4c
+name="epifiz-admin-smoke-$(date +%s)"
+docker run -d --rm --name "$name" --label epifiz.operation=admin-smoke --init --memory 256m --cpus 0.5 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --publish 127.0.0.1:13000:3000 "$image" > /dev/null
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 python3 - <<'PY'
-import pathlib
-source=pathlib.Path('infra/preview/Dockerfile').read_text()
-old='RUN pnpm --filter @beauty-platform/admin build'
-new='RUN NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @beauty-platform/admin exec next build --webpack'
-if source.count(old)!=1: raise SystemExit('Unexpected Dockerfile; no build started')
-pathlib.Path('/tmp/epifiz-admin-webpack-managed.Dockerfile').write_text(source.replace(old,new))
-pathlib.Path('/tmp/epifiz-admin-webpack-managed.Dockerfile.dockerignore').write_bytes(pathlib.Path('infra/preview/Dockerfile.dockerignore').read_bytes())
-print('Isolated Dockerfile and original context exclusions prepared')
+import urllib.request,urllib.error,time,json,pathlib,re
+for attempt in range(30):
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:13000/',timeout=3) as response:
+            body=response.read(200000).decode(errors='replace')
+            if response.status==200 and '<html' in body and '/_next/' in body:
+                print('ADMIN HTTP SMOKE PASS: 200, HTML and Next assets confirmed')
+                break
+    except (OSError,urllib.error.URLError):
+        pass
+    time.sleep(2)
+else:
+    raise SystemExit('ADMIN HTTP SMOKE FAIL')
+allowed={'API_IMAGE','MIGRATE_IMAGE','ADMIN_IMAGE','GATEWAY_IMAGE','PREVIEW_HOST','ADMIN_HOST','HTTP_BIND','HTTPS_BIND'}
+files=[p for p in pathlib.Path('/opt/epifiz').rglob('*') if p.is_file() and (p.name=='.env' or p.suffix=='.env') and 'node_modules' not in p.parts]
+for path in files:
+    values={}
+    for line in path.read_text(errors='replace').splitlines():
+        key,sep,value=line.partition('=')
+        if sep and key.strip() in allowed:
+            value=value.strip().strip('"').strip("'")
+            if re.fullmatch(r'[a-zA-Z0-9._:/@-]+',value):
+                values[key.strip()]=value
+    if values: print('Non-secret preview settings:',json.dumps(values))
 PY
-set +e
-timeout --signal=TERM --kill-after=15s 360 docker build --progress=plain --target admin --build-arg ADMIN_API_URL=https://admin.13-51-112-228.sslip.io/api -f /tmp/epifiz-admin-webpack-managed.Dockerfile -t epifiz-admin:webpack-test . > /opt/epifiz/operations/admin-webpack-managed.log 2>&1
-rc=$?
-set -e
-printf 'Admin build exit code: %s\n' "$rc"
-python3 - <<'PY'
-import pathlib,re,json
-text=pathlib.Path('/opt/epifiz/operations/admin-webpack-managed.log').read_text(errors='replace')
-markers={'next_started':'Next.js 16','compiled':'Compiled successfully','page_data':'Collecting page data','image_export':'exporting to image','heap_oom':'heap out of memory','killed':'Killed','dns_error':'EAI_AGAIN','module_missing':'Module not found','typescript_error':'Type error:','tls_error':'certificate','dependency_retry':'Will retry'}
-print('Managed build phase flags:',json.dumps({k:v in text for k,v in markers.items()}))
-print('Cached build steps:',text.count('CACHED'))
-allowed={'builder','tls-base','admin-build','admin','internal'}
-stages=[]
-for stage,step,total in re.findall(r'\[([a-z-]+) ([0-9]+)/([0-9]+)\]',text):
-    if stage in allowed:
-        entry=[stage,int(step),int(total)]
-        if not stages or stages[-1]!=entry: stages.append(entry)
-print('Build stages reached:',json.dumps(stages[-12:]))
-PY
-if [ "$rc" -eq 0 ]; then
-  docker image inspect epifiz-admin:webpack-test --format 'Admin image ready: {{.Id}}'
-fi
-exit "$rc"
+docker inspect "$name" --format 'Smoke container state: {{.State.Status}}; OOM killed: {{.State.OOMKilled}}'
+docker stats --no-stream "$name" --format 'Smoke container memory: {{.MemUsage}}'
