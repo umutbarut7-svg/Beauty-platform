@@ -65,7 +65,7 @@ name='epifiz-booking-context-build'
 migrate='sha256:9ecf655d9b97645eb91f040489baa1d3da5befb11d6b324a2e539b48fcf19286'
 command='cd /repo && pnpm --filter @beauty-platform/api exec vitest run src/appointments/appointments.service.test.ts && pnpm --filter @beauty-platform/api build && pnpm --filter @beauty-platform/mobile typecheck && pnpm --filter @beauty-platform/mobile build'
 try:
-    run(['docker','create','--name',name,'--user','0:0','--network','none','--memory','768m','--cpus','1','-e','CI=1','-e','EXPO_NO_TELEMETRY=1','-e','NODE_OPTIONS=--max-old-space-size=512','-e','EXPO_PUBLIC_API_URL=https://preview.13-51-112-228.sslip.io/api','--entrypoint','sh',migrate,'-c',command])
+    run(['docker','create','--name',name,'--user','0:0','--network','none','--memory','1024m','--cpus','1','-e','CI=1','-e','EXPO_NO_TELEMETRY=1','-e','NODE_OPTIONS=--max-old-space-size=768','-e','EXPO_PUBLIC_API_URL=https://preview.13-51-112-228.sslip.io/api','--entrypoint','sh',migrate,'-c',command])
     for rel in ['apps/api/src/appointments/appointments.service.ts','apps/api/src/appointments/appointment.dto.ts','apps/api/src/appointments/appointments.service.test.ts','apps/mobile/App.tsx']:
         run(['docker','cp',str(source/rel),name+':/repo/'+rel])
     with (folder/'build.log').open('w') as out:
