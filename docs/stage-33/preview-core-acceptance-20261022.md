@@ -2,15 +2,16 @@
 
 Status: core browser scenarios observed; Stage 33 overall NOT PASS. This records an iPhone Safari web test, not a native iOS app test.
 
-| Scenario                   | Observed result                                                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Customer booking and lists | Booking created and visible on customer and business sides.                                                                                         |
-| Business lifecycle         | Test booking reached COMPLETED; intermediate transitions were not individually verified because several buttons were pressed.                       |
-| Result and feedback        | Explicit test/no-real-service summary saved; customer submitted UNSURE.                                                                             |
-| Beauty Passport and reload | Summary and feedback reloaded after browser refresh and sign-in; booking also reappeared.                                                           |
-| Customer cancellation      | Explicit confirmation displayed; customer cancellation persisted and appeared as CANCELLED on business side.                                        |
-| Released availability      | Same time was booked again after cancellation; the second test booking was also cancelled. Two cancelled history entries are separate reservations. |
-| Business selection         | Multiple same-name business entries were visible. Empty list cleared after selecting the correct entry; identity disambiguation remains a UX issue. |
+| Scenario                   | Observed result                                                                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer booking and lists | Booking created and visible on customer and business sides.                                                                                                                              |
+| Business lifecycle         | Test booking reached COMPLETED; intermediate transitions were not individually verified because several buttons were pressed.                                                            |
+| Result and feedback        | Explicit test/no-real-service summary saved; customer submitted UNSURE.                                                                                                                  |
+| Beauty Passport and reload | Summary and feedback reloaded after browser refresh and sign-in; booking also reappeared.                                                                                                |
+| Customer cancellation      | Explicit confirmation displayed; customer cancellation persisted and appeared as CANCELLED on business side.                                                                             |
+| Released availability      | Same time was booked again after cancellation; the second test booking was also cancelled. Two cancelled history entries are separate reservations.                                      |
+| Revenue without payment    | Same business showed the completed and two cancelled test bookings alongside INSUFFICIENT_DATA (no ledger records / no collected-revenue claim). This verifies the no-payment path only. |
+| Business selection         | Multiple same-name business entries were visible. Empty list cleared after selecting the correct entry; identity disambiguation remains a UX issue.                                      |
 
 Independent synthetic customer API test: [39830217320](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39830217320), success. Covers customer booking/cancel, owner lists, cross-customer read/cancel denial, unauthorized customer status changes, duplicate-slot denial and released availability.
 
