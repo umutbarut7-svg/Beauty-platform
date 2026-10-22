@@ -5,10 +5,7 @@ import pathlib, subprocess, re
 folder=pathlib.Path('/opt/epifiz/operations/auth-ux-20261022')
 text=''.join(p.read_text(errors='replace') for p in (folder/'dist').rglob('*.js'))
 text=re.sub(r'\\u([0-9a-fA-F]{4})',lambda m:chr(int(m.group(1),16)),text)
-print('Export files: '+','.join(str(p.relative_to(folder/'dist')) for p in (folder/'dist').rglob('*') if p.is_file())[:1500])
-print('JavaScript characters: '+str(len(text)))
-for fragment in ['Yeni hesap','12 karakter','zaten kay','authenticate','Hesap oluşturmak']:
-    print('Static marker '+fragment+': '+str(fragment in text))
+text=re.sub(r'\\x([0-9a-fA-F]{2})',lambda m:chr(int(m.group(1),16)),text)
 for marker in ['Yeni hesap için şifre en az 12 karakter olmalı.','Bu e-posta zaten kayıtlı.']:
     if marker not in text: raise SystemExit('Auth UX compiled copy check failed')
 old='sha256:05686cfe8cee185657590777e7b3b53a28adbd4fdee769095ff6dbb02242391f'
