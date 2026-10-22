@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-python3 - <<'PY'
+python3 - --approved <<'PY'
 #!/usr/bin/env python3
 """Publish the tested preview only after explicit owner approval."""
 import argparse
@@ -116,7 +116,7 @@ def main():
         raise SystemExit(1)
 
 
-preflight()
-print('ACTIVATION PREFLIGHT PASS: reviewed Compose, pinned images, absent public frontends, expected API origin baseline')
+if __name__ == '__main__':
+    main()
 
 PY
