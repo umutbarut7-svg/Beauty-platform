@@ -1,6 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM node:24-bookworm-slim AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+# Node supplies a bundled public CA store even when the slim image lacks Debian's
+# ca-certificates package. Bootstrap HTTPS without disabling certificate checks.
+FROM node:24-bookworm-slim AS tls-base
+RUN node -e "const f=require('node:fs'),p='/etc/ssl/certs/ca-certificates.crt';f.mkdirSync('/etc/ssl/certs',{recursive:true});if(!f.existsSync(p))f.writeFileSync(p,require('node:tls').rootCertificates.join('\n')+'\n')" \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
+FROM tls-base AS builder
+RUN apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=3 update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/* && npm install -g pnpm@10.28.1
 WORKDIR /repo
 COPY . .
@@ -19,8 +25,8 @@ RUN pnpm --filter @beauty-platform/api --prod deploy --legacy --frozen-lockfile 
     && node -e 'const f=require("node:fs"),p=require("node:path");const d=p.dirname(f.realpathSync(require.resolve("@prisma/client",{paths:["/repo/apps/api"]})));const c=p.dirname(require.resolve(".prisma/client/default",{paths:[d]}));f.cpSync(c,"/out/api/node_modules/.prisma/client",{recursive:true})' \
     && cd /out/api && node -e 'require("@prisma/client");require("sharp");require("./dist/mvp/providers/private-photo-store.js")'
 
-FROM node:24-bookworm-slim AS api
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+FROM tls-base AS api
+RUN apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=3 update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /application
