@@ -2,16 +2,16 @@
 
 Status: core browser scenarios observed; Stage 33 overall NOT PASS. This records an iPhone Safari web test, not a native iOS app test.
 
-| Scenario                   | Observed result                                                                                                                                                                          |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Customer booking and lists | Booking created and visible on customer and business sides.                                                                                                                              |
-| Business lifecycle         | Test booking reached COMPLETED; intermediate transitions were not individually verified because several buttons were pressed.                                                            |
-| Result and feedback        | Explicit test/no-real-service summary saved; customer submitted UNSURE.                                                                                                                  |
-| Beauty Passport and reload | Summary and feedback reloaded after browser refresh and sign-in; booking also reappeared.                                                                                                |
-| Customer cancellation      | Explicit confirmation displayed; customer cancellation persisted and appeared as CANCELLED on business side.                                                                             |
-| Released availability      | Same time was booked again after cancellation; the second test booking was also cancelled. Two cancelled history entries are separate reservations.                                      |
-| Revenue without payment    | Same business showed the completed and two cancelled test bookings alongside INSUFFICIENT_DATA (no ledger records / no collected-revenue claim). This verifies the no-payment path only. |
-| Business selection         | Multiple same-name business entries were visible. Empty list cleared after selecting the correct entry; identity disambiguation remains a UX issue.                                      |
+| Scenario                   | Observed result                                                                                                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer booking and lists | Booking created and visible on customer and business sides.                                                                                                                                                 |
+| Business lifecycle         | Test booking reached COMPLETED; intermediate transitions were not individually verified because several buttons were pressed.                                                                               |
+| Result and feedback        | Explicit test/no-real-service summary saved; customer submitted UNSURE.                                                                                                                                     |
+| Beauty Passport and reload | Summary and feedback reloaded after browser refresh and sign-in; booking also reappeared.                                                                                                                   |
+| Customer cancellation      | Explicit confirmation displayed; customer cancellation persisted and appeared as CANCELLED on business side.                                                                                                |
+| Released availability      | Same time was booked again after cancellation; the second test booking was also cancelled. Two cancelled history entries are separate reservations.                                                         |
+| Revenue without payment    | Same business showed the completed and two cancelled test bookings alongside INSUFFICIENT_DATA (no ledger records / no collected-revenue claim). This verifies the no-payment path only.                    |
+| Business selection         | Multiple same-name business entries were visible. Empty list cleared after selecting the correct entry; same-name labels were subsequently corrected; browser acceptance of the correction remains pending. |
 
 Independent synthetic customer API test: [39830217320](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39830217320), success. Covers customer booking/cancel, owner lists, cross-customer read/cancel denial, unauthorized customer status changes, duplicate-slot denial and released availability.
 
@@ -21,10 +21,16 @@ Full regression gate on PR 21: [39832266767](https://github.com/umutbarut7-svg/B
 
 Cancellation publication: [39832861875](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39832861875), success. Public UI bundle and API health/CORS passed; unrelated services were unchanged.
 
-Next prepared check: inspect-preview-runtime.sh is strictly a read-only runtime snapshot. It checks running services/OOM state, configured restart policies, named database volume, pinned live images, rollout flag boundaries and public health/CORS. It cannot establish host reboot recovery, backup restoration, sustained capacity or continuous privacy cleanup correctness.
+The completed inspect-preview-runtime.sh check is strictly a read-only runtime snapshot. It checks running services/OOM state, configured restart policies, named database volume, pinned live images, rollout flag boundaries and public health/CORS. It cannot establish host reboot recovery, backup restoration, sustained capacity or continuous privacy cleanup correctness.
 
 Still open: reviewed identity/contact/photo/verification policy configuration; real-photo PLAN/follow-up/match quality; live AI/photo UX; physical native Android/iOS acceptance; continuous privacy operations and recovery. No real payment integration or production-ready claim is made.
 
 ## Runtime snapshot
 
 Read-only run [39835540045](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39835540045) passed. API, worker, PostgreSQL, admin and gateway were running without current OOM state and had unless-stopped restart policies; API/database healthchecks and both public API/CORS checks passed. The database named volume and tested API/gateway images were confirmed. Core remained enabled; AI, semantic and policy-review flags remained closed. Worker restart count was 1, all other checked restart counts were 0; the cause of that historical worker restart was not established. No services were restarted by this inspection. This snapshot does not prove continuous cleanup, reboot recovery or backup restoration.
+
+## Business selection correction
+
+Same-name owned-business entries now include a short stable ID suffix; suffix length increases when needed to avoid collisions between same-name entries. The selected row and selected-business heading show “Seçili ✓”. Distinct names retain their existing labels. No business was renamed, merged or deleted.
+
+Local checks covered duplicate names, suffix collisions, selected/unselected records and reordered lists. Candidate build [39837674188](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39837674188) passed the ten existing cancellation behavior checks, mobile typecheck and Expo web production export. Publication [39838379397](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39838379397) passed candidate/public UI markers, both public API health/CORS checks and unchanged unrelated service timestamps. The first publication attempt [39838026026](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39838026026) rolled back after its text-marker check failed; acceptance now normalizes JavaScript Unicode/hex escapes and validates candidate markers before changing the gateway. Browser acceptance of the selection labels remains pending. This does not close the remaining Stage 33 acceptance gates.
