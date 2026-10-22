@@ -22,6 +22,11 @@ current=folder/'publish.env';rollback=folder/'rollback.env'
 for path,image in [(current,new),(rollback,old)]:
     path.write_text(''.join(k+'='+v+'\n' for k,v in {**values,'GATEWAY_IMAGE':image}.items()));path.chmod(0o600)
 def compose(env):return run(['docker','compose','--env-file',str(env),'-f','/opt/epifiz/application-123e7339/infra/preview/compose.yml','-f',str(previous/'mvp.yml'),'up','-d','--no-deps','--pull','never','gateway'],timeout=120)
+def normalize(text):
+    return re.sub(r"\\(?:u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2}))", lambda match: chr(int(match.group(1) or match.group(2), 16)), text)
+preflight=normalize(''.join(path.read_text() for path in (folder/'web').rglob('*.js')))
+if not all(marker in preflight for marker in ['Seçili', 'Randevuyu iptal et', 'İptali onayla', 'bookForSelf']):raise SystemExit('Candidate UI preflight failed; live gateway unchanged')
+print('Candidate bundle selection and cancellation markers: PASS',flush=True)
 def check():
     origin='https://preview.13-51-112-228.sslip.io'
     with urllib.request.urlopen(origin+'/',timeout=10) as r:html=r.read().decode()
@@ -30,9 +35,9 @@ def check():
     for path in scripts:
         if path.endswith('.js') and path.startswith('/'):
             with urllib.request.urlopen(origin+path,timeout=10) as r:bodies.append(r.read().decode())
-    text=''.join(bodies)
+    text=normalize(''.join(bodies))
     if not all(marker in text for marker in ['Randevuyu iptal et','ptali onayla','bookForSelf']):raise RuntimeError('Customer cancellation/booking UI markers absent')
-    if not ('Seçili' in text or r'Se\u00e7ili' in text):raise RuntimeError('Business selection marker absent')
+    if 'Seçili' not in text:raise RuntimeError('Business selection marker absent')
     for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
         origin='https://'+host
         with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=10) as r:
@@ -45,7 +50,8 @@ try:
     else:raise RuntimeError('Public acceptance deadline')
     for service in unchanged:
         if inspect(service,'{{.State.StartedAt}}')!=before[service]:raise RuntimeError('Unrelated service restarted')
-except Exception:
+except Exception as error:
+    if isinstance(error, RuntimeError) and str(error) in ['Business selection marker absent','Customer cancellation/booking UI markers absent','Public API health/CORS check failed','Public acceptance deadline','Unrelated service restarted']: print(str(error),flush=True)
     compose(rollback)
     if inspect('gateway','{{.Image}}')!=old:raise SystemExit('Rollback needs operator review')
     raise SystemExit('Publication failed; previous gateway restored')
