@@ -29,8 +29,8 @@ try:
     auth=expect('Customer login',200,call('/auth/login','POST',{'email':email,'password':password}))
     me=expect('Authenticated identity',200,call('/auth/me',token=auth['accessToken']))
     if me['id']!=result['user']['id']: raise SystemExit('Identity mismatch')
-    expect('Own booking list',200,call('/mvp/v1/bookings',token=auth['accessToken']))
-    expect('Own passport list',200,call('/mvp/v1/passport',token=auth['accessToken']))
+    expect('Closed MVP booking gate',503,call('/mvp/v1/bookings',token=auth['accessToken']))
+    expect('Closed MVP passport gate',503,call('/mvp/v1/passport',token=auth['accessToken']))
     policy=expect('Photo policy capability',200,call('/mvp/v1/photos/policy',token=auth['accessToken']))
     if policy.get('available') is not False: raise SystemExit('Photo policy gate FAIL')
     print('Photo feature remains closed: PASS')
@@ -44,3 +44,4 @@ except SystemExit: raise
 except Exception:
     raise SystemExit('Acceptance transport or schema check failed; request and response withheld')
 PY
+docker inspect beauty-preview-api-1 beauty-preview-gateway-1 beauty-preview-migrate-1 --format '{{.Name}} {{.Image}} {{.State.Status}}'
