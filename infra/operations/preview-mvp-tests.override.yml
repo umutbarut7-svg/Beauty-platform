@@ -1,0 +1,7 @@
+services:
+  api:
+    environment:
+      STAGE33_MVP_ENABLED: "true"
+  worker:
+    environment:
+      STAGE33_MVP_ENABLED: "true"

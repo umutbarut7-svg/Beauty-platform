@@ -122,3 +122,46 @@ Still open: owner-selected account registration and operator authorization,
 reviewed photo/verification policies, native device acceptance, real-photo
 quality and full enabled end-to-end acceptance. No Stage 33 or production PASS
 is claimed.
+
+## Owner-approved core MVP activation
+
+The owner explicitly approved opening the service-detail and booking test flow.
+The active pinned Compose file still defaults the MVP gate to false. A dedicated
+override changes only STAGE33_MVP_ENABLED to true for API and worker, retaining
+all image IDs, CORS, memory limits, authentication and provider/policy gates.
+
+The first activation attempt
+[39790038128](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39790038128)
+passed authenticated service-catalog access, booking and passport reads, but
+rolled back because future availability setup acceptance was not established.
+No owner data was modified to satisfy the check.
+
+Run [39790730962](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39790730962)
+then successfully activated the core while reporting future-slot acceptance
+separately. Authenticated catalog, discovery, booking-list and passport-list reads
+returned 200; unauthenticated catalog access returned 401. Private-photo, visual
+analysis and semantic capabilities remain unavailable. API and worker share the
+enabled core gate so a later result-publication job is not rejected solely by a
+disabled worker rollout flag. Database, secret helper, admin and gateway start
+times were unchanged. No migration, appointment, payment, role change, owner
+credential change, AI call or policy approval occurred. The successful run logged
+out its synthetic test session; synthetic account records remain unprivileged.
+
+Future-slot acceptance is **SETUP_REVIEW_REQUIRED**, not PASS. The owner's
+professional/service/location selection and availability need review before
+claiming that a test booking can be completed. This run does not establish a full
+booking-to-result journey or Stage 33 completion.
+
+Active public-settings env:
+`/opt/epifiz/operations/mvp-test-20261022/live.env`.
+Active override:
+`/opt/epifiz/operations/mvp-test-20261022/mvp-test.yml`.
+For later API/worker operations, include this override with the original pinned
+Compose file; using only the base file restores the disabled gate. The
+`infra/operations/preview-mvp-tests.override.yml` repository copy documents the
+exact override. Rollback is a base-only `up -d --no-deps --pull never api worker`
+using the same public-settings env. No database/volume operation is required.
+
+Default checked-in server operation has been restored to read-only runtime,
+provider-isolation and HTTPS/CORS verification. No customer response body,
+identifier, database aggregate or credential is emitted by that operation.
