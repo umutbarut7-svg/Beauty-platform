@@ -1,85 +1,46 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import json,urllib.request
-def exercise_customer_booking(base):
-    import urllib.error,urllib.parse,secrets,datetime,json
-    sessions=[]
-    appointment=None
-    business=None
-    token=None
-    customer=None
-    def call(path,method='GET',body=None,auth=None):
-        headers={'Content-Type':'application/json'} if body is not None else {}
-        if auth: headers['Authorization']='Bearer '+auth
-        q=urllib.request.Request(base+path,method=method,headers=headers,data=json.dumps(body).encode() if body is not None else None)
-        try:
-            with urllib.request.urlopen(q,timeout=15) as r: return r.status,r.read()
-        except urllib.error.HTTPError as e: return e.code,e.read()
-    def expect(label,status,result):
-        code,body=result
-        if code!=status: raise RuntimeError(label+' FAIL HTTP '+str(code))
-        print(label+': PASS',flush=True)
-        return json.loads(body) if body else None
-    try:
-        suffix=secrets.token_hex(8)
-        owner=expect('Synthetic owner registration',201,call('/auth/register','POST',{'email':'epifiz-booking-'+suffix+'@example.test','password':secrets.token_urlsafe(24)}))
-        sessions.append(owner)
-        token=owner['accessToken']
-        business=expect('Private synthetic salon creation',201,call('/businesses','POST',{'name':'EPIFIZ private QA '+suffix},token))
-        if business.get('isPublic') is not False: raise RuntimeError('Synthetic salon unexpectedly public')
-        p='/businesses/'+business['id']
-        expect('Fixture booking settings',200,call(p+'/settings','PATCH',{'bookingEnabled':True,'onlinePaymentEnabled':False,'cancellationEnabled':True,'cancellationWindowMinutes':0},token))
-        location=expect('Fixture location',201,call(p+'/locations','POST',{'name':'Private QA location','address':'Synthetic address','city':'Test City'},token))
-        staff=expect('Fixture professional',201,call(p+'/staff','POST',{'firstName':'Synthetic','lastName':'Professional','displayName':'Private QA','locationIds':[location['id']]},token))
-        category=expect('Fixture category',201,call(p+'/service-categories','POST',{'name':'Synthetic QA'},token))
-        service=expect('Fixture service',201,call(p+'/services','POST',{'categoryId':category['id'],'name':'Synthetic QA service','price':'10.00','currency':'TRY','durationMinutes':30},token))
-        expect('Fixture service assignment',201,call(p+'/staff/'+staff['id']+'/services/'+service['id'],'POST',{},token))
-        days=['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY']
-        expect('Fixture business schedule',200,call(p+'/working-hours','PUT',{'hours':[{'dayOfWeek':d,'isOpen':True,'openTime':'09:00','closeTime':'18:00'} for d in days]},token))
-        expect('Fixture professional schedule',200,call(p+'/staff/'+staff['id']+'/working-hours','PUT',{'hours':[{'dayOfWeek':d,'isActive':True,'startTime':'09:00','endTime':'18:00'} for d in days]},token))
-        date=(datetime.date.today()+datetime.timedelta(days=3)).isoformat()
-        query=urllib.parse.urlencode({'locationId':location['id'],'serviceId':service['id'],'staffMemberId':staff['id'],'date':date})
-        slots=expect('Synthetic future availability',200,call(p+'/availability?'+query,auth=token))
-        if not slots: raise RuntimeError('Synthetic future slots absent')
-        payload={'locationId':location['id'],'serviceId':service['id'],'staffMemberId':slots[0]['staffId'],'startsAt':slots[0]['startsAt']}
-        customer=expect('Independent customer registration',201,call('/auth/register','POST',{'email':'epifiz-customer-'+suffix+'@example.test','password':secrets.token_urlsafe(24)}))
-        sessions.append(customer)
-        ct=customer['accessToken']
-        appointment=expect('Independent customer booking created',201,call(p+'/appointments','POST',{**payload,'bookForSelf':True},ct))
-        assert appointment['status']=='PENDING', 'Invalid initial status'
-        path=p+'/appointments/'+appointment['id']
-        rows=expect('Independent customer booking list',200,call('/mvp/v1/bookings',auth=ct))['items']
-        assert any(x['id']==appointment['id'] for x in rows), 'Customer booking absent'
-        other=expect('Unrelated customer registration',201,call('/auth/register','POST',{'email':'epifiz-other-'+suffix+'@example.test','password':secrets.token_urlsafe(24)}))
-        sessions.append(other)
-        expect('Unrelated customer read denied',404,call(path,auth=other['accessToken']))
-        expect('Unrelated customer cancellation denied',403,call(path+'/cancel','POST',{'reason':'Synthetic denied attempt'},other['accessToken']))
-        expect('Customer cannot confirm own appointment',403,call(path+'/status','PATCH',{'status':'CONFIRMED'},ct))
-        expect('Duplicate slot denied',409,call(p+'/appointments','POST',{**payload,'bookForSelf':True},ct))
-        rows=expect('Owner sees independent customer booking',200,call(p+'/appointments',auth=token))
-        assert any(x['id']==appointment['id'] for x in rows), 'Owner booking absent'
-        cancelled=expect('Customer cancels own appointment',201,call(path+'/cancel','POST',{'reason':'Synthetic acceptance test; no real service'},ct))
-        assert cancelled['status']=='CANCELLED', 'Cancellation did not persist'
-        appointment=cancelled
-        rows=expect('Customer sees cancelled booking',200,call('/mvp/v1/bookings',auth=ct))['items']
-        assert any(x['id']==appointment['id'] and x['status']=='CANCELLED' for x in rows), 'Customer cancellation absent'
-        current=expect('Owner sees cancelled status',200,call(path,auth=token))
-        assert current['status']=='CANCELLED', 'Owner cancellation absent'
-        available=expect('Availability after cancellation',200,call(p+'/availability?'+query,auth=ct))
-        assert any(x['startsAt']==payload['startsAt'] and x['staffId']==payload['staffMemberId'] for x in available), 'Cancelled slot not released'
-        print('Independent customer booking, cancellation, isolation and released slot: PASS',flush=True)
-    finally:
-        if appointment and token and business and appointment.get('status')!='CANCELLED':
-            try:
-                result=expect('Synthetic appointment cancelled',200,call('/businesses/'+business['id']+'/appointments/'+appointment['id']+'/status','PATCH',{'status':'CANCELLED'},token))
-                if result.get('status')!='CANCELLED': raise RuntimeError('Test cancellation did not persist')
-            except Exception: raise RuntimeError('Synthetic appointment cleanup needs review; no real salon was touched')
-        if business and token:
-            expect('Synthetic salon kept private and deactivated',200,call('/businesses/'+business['id'],'PATCH',{'isPublic':False,'status':'INACTIVE'},token))
-        for session in sessions:
-            expect('Synthetic refresh session logged out',204,call('/auth/logout','POST',{'refreshToken':session['refreshToken']}))
+EXPECTED_SOURCE='a9acff34e35bd9a108876581de37923387eae7aa88a4933c1faedea62f8cda11'
+HELPER_SOURCE='#!/usr/bin/env python3\n"""Add explicit customer cancellation confirmation to the pinned preview UI."""\nimport pathlib\nEDITS = [(\'  const [selected, setSelected] = useState<MvpBooking | null>(null);\', \'  const [selected, setSelected] = useState<MvpBooking | null>(null);\\n  const [cancelTarget, setCancelTarget] = useState<string | null>(null);\'), (\'    keys.current.clear();\', \'    setCancelTarget(null);\\n    keys.current.clear();\'), (\'                    setSelected(b);\', \'                    setCancelTarget(null);\\n                    setSelected(b);\'), (\'  async function loadBookings() {\', \'  async function cancelSelectedAppointment() {\\n    if (mode !== "customer" || !selected || cancelTarget !== selected.id ||\\n        !["PENDING", "CONFIRMED", "CHECKED_IN"].includes(selected.status) ||\\n        Date.parse(selected.startsAt) <= Date.now()) return;\\n    const cancelled = await api.request<MvpBooking>(\\n      `/businesses/${selected.businessId}/appointments/${selected.id}/cancel`,\\n      "POST",\\n      { reason: "Müşteri tarafından iptal edildi." },\\n    );\\n    if (cancelled.id !== selected.id || cancelled.status !== "CANCELLED")\\n      throw new Error("Unexpected cancellation response");\\n    setSelected(cancelled);\\n    setBookings((current) => current.map((item) => item.id === cancelled.id ? cancelled : item));\\n    setCancelTarget(null);\\n    setSlots([]);\\n    setNotice("Randevunuz iptal edildi. Güncel saatler için müsaitlik aramasını yenileyin.");\\n  }\\n  async function loadBookings() {\'), (\'                {mode === "business" && (\\n                  <>\\n                    {[\', \'                {mode === "customer" &&\\n                  ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(selected.status) &&\\n                  Date.parse(selected.startsAt) > Date.now() && (\\n                    <>\\n                      {cancelTarget === selected.id ? (\\n                        <>\\n                          <Text style={styles.body}>Bu randevuyu iptal etmek istiyor musunuz? İptal koşulları işletme tarafından kontrol edilir.</Text>\\n                          {button("İptali onayla", cancelSelectedAppointment)}\\n                          {button("Vazgeç", async () => { setCancelTarget(null); })}\\n                        </>\\n                      ) : button("Randevuyu iptal et", async () => { setCancelTarget(selected.id); })}\\n                    </>\\n                  )}\\n                {mode === "business" && (\\n                  <>\\n                    {[\')]\ndef patch(path):\n    path=pathlib.Path(path)\n    text=path.read_text()\n    if "async function cancelSelectedAppointment()" in text: raise SystemExit("Cancellation already patched; no repeat")\n    for before,after in EDITS:\n        if text.count(before)!=1: raise SystemExit("Cancellation source drift; patch blocked")\n        text=text.replace(before,after,1)\n    path.write_text(text)\n'
+TEST_SOURCE="const fs = require('node:fs');\nconst assert = require('node:assert/strict');\nconst { stripTypeScriptTypes } = require('node:module');\nconst app = fs.readFileSync(process.argv[2], 'utf8');\nconst handler = app.slice(app.indexOf('  async function cancelSelectedAppointment()'), app.indexOf('  async function loadBookings()'));\nassert.ok(handler.length > 300);\nasync function check(label, options = {}) {\n  let calls=0, selected={id:'own',businessId:'private',status:'PENDING',startsAt:'2099-01-01T09:00:00Z',...options.booking};\n  let rows=[selected,{id:'other',status:'CONFIRMED'}], notice='', cleared=false;\n  const api={request:async(path,method,body)=>{\n    calls++; assert.equal(path,'/businesses/private/appointments/own/cancel');assert.equal(method,'POST');assert.ok(body.reason);\n    if(options.reject) throw new Error('API rejected');\n    return {...selected,status:options.badResponse?'PENDING':'CANCELLED'};\n  }};\n  const fn=new Function('api','mode','selected','cancelTarget','setSelected','setBookings','setCancelTarget','setSlots','setNotice',stripTypeScriptTypes(handler)+';return cancelSelectedAppointment;')(\n    api,options.mode||'customer',selected,options.unconfirmed?null:'own',x=>selected=x,fn=>rows=fn(rows),()=>{},()=>cleared=true,x=>notice=x);\n  if(options.reject||options.badResponse) await assert.rejects(fn()); else await fn();\n  if(options.blocked){assert.equal(calls,0);assert.equal(notice,'');}\n  else if(options.reject||options.badResponse){assert.equal(selected.status,'PENDING');assert.equal(notice,'');assert.equal(cleared,false);}\n  else {assert.equal(calls,1);assert.equal(selected.status,'CANCELLED');assert.equal(rows[0].status,'CANCELLED');assert.equal(rows[1].status,'CONFIRMED');assert.equal(cleared,true);assert.ok(notice.includes('iptal edildi'));}\n  console.log(label+': PASS');\n}\n(async()=>{\n await check('Confirmed customer cancellation updates detail/list and clears stale slots');\n await check('Cancellation requires explicit confirmation',{unconfirmed:true,blocked:true});\n await check('Business mode cannot call customer action',{mode:'business',blocked:true});\n for(const status of ['IN_PROGRESS','COMPLETED','CANCELLED','NO_SHOW']) await check('Cancellation blocked for '+status,{booking:{status},blocked:true});\n await check('Past appointment cancellation blocked',{booking:{startsAt:'2000-01-01T09:00:00Z'},blocked:true});\n await check('API rejection preserves detail and list',{reject:true});\n await check('Unexpected response cannot claim success',{badResponse:true});\n})().catch(e=>{console.error(e.message);process.exitCode=1;});\n"
+import pathlib,subprocess,hashlib,json
 
-exercise_customer_booking('https://preview.13-51-112-228.sslip.io/api')
-print('INDEPENDENT CUSTOMER ACCEPTANCE: PASS; no deployment or real salon writes')
+def run(args,timeout=30):
+ p=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
+ if p.returncode: raise RuntimeError('Build command failed: '+args[0])
+ return p.stdout.strip()
+def image(service):return run(['docker','inspect','beauty-preview-'+service+'-1','--format','{{.Image}}'])
+expected_gateway='sha256:7a7f80f9184476c9855a3e21ba8f3697dec28e92fa40ace802c50a32a8e28394'
+if image('gateway')!=expected_gateway: raise SystemExit('Unexpected gateway; build blocked')
+services=['api','gateway','worker','postgres','prepare-secrets','admin']
+before={s:run(['docker','inspect','beauty-preview-'+s+'-1','--format','{{.State.StartedAt}}']) for s in services}
+folder=pathlib.Path('/opt/epifiz/operations/customer-cancellation-20261022');folder.mkdir(mode=0o700,exist_ok=True)
+source=pathlib.Path('/opt/epifiz/operations/booking-context-20261022/source/apps/mobile/App.tsx').read_bytes()
+if hashlib.sha256(source).hexdigest()!=EXPECTED_SOURCE: raise SystemExit('Booking UI source drift; build blocked')
+app=folder/'App.tsx';app.write_bytes(source)
+namespace={};exec(HELPER_SOURCE,namespace);namespace['patch'](app)
+(folder/'cancellation.test.cjs').write_text(TEST_SOURCE)
+name='epifiz-cancellation-build'
+try:
+ run(['docker','create','--name',name,'--user','0:0','--network','none','--memory','896m','--cpus','1','-e','CI=1','-e','EXPO_NO_TELEMETRY=1','-e','NODE_OPTIONS=--max-old-space-size=640','-e','EXPO_PUBLIC_API_URL=https://preview.13-51-112-228.sslip.io/api','--entrypoint','sh','sha256:9ecf655d9b97645eb91f040489baa1d3da5befb11d6b324a2e539b48fcf19286','-c','cd /repo && node cancellation.test.cjs apps/mobile/App.tsx && pnpm --filter @beauty-platform/mobile typecheck && pnpm --filter @beauty-platform/mobile build'])
+ run(['docker','cp',str(app),name+':/repo/apps/mobile/App.tsx'])
+ run(['docker','cp',str(folder/'cancellation.test.cjs'),name+':/repo/cancellation.test.cjs'])
+ with (folder/'build.log').open('w') as out: result=subprocess.run(['docker','start','-a',name],stdout=out,stderr=subprocess.STDOUT,timeout=600)
+ log=(folder/'build.log').read_text(errors='replace')
+ for line in log.splitlines():
+  if line.endswith(': PASS'):print(line,flush=True)
+ if result.returncode:raise SystemExit('UI typecheck/export failed; raw build output retained privately on host')
+ (folder/'web').mkdir(exist_ok=True)
+ run(['docker','cp',name+':/repo/apps/mobile/dist/.',str(folder/'web')])
+finally:subprocess.run(['docker','rm','-f',name],capture_output=True)
+if image('gateway')!=expected_gateway:raise SystemExit('Gateway changed; packaging blocked')
+run(['docker','tag',expected_gateway,'epifiz-gateway:cancellation-base-20261022'])
+(folder/'Gateway.Dockerfile').write_text('FROM epifiz-gateway:cancellation-base-20261022\nCOPY web/ /srv/web/\n')
+run(['docker','build','--network','none','--pull=false','-f',str(folder/'Gateway.Dockerfile'),'-t','epifiz-gateway:customer-cancellation-20261022',str(folder)],timeout=90)
+for s in services:
+ if run(['docker','inspect','beauty-preview-'+s+'-1','--format','{{.State.StartedAt}}'])!=before[s]:raise SystemExit('Unexpected live restart')
+print('Customer cancellation UI typecheck and production export: PASS')
+print('Candidate gateway: '+run(['docker','image','inspect','epifiz-gateway:customer-cancellation-20261022','--format','{{.Id}}']))
+print('BUILD ONLY; existing preview unchanged; no publication')
 PY
