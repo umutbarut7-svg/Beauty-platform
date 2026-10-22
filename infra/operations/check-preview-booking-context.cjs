@@ -15,8 +15,9 @@ for(const name of ['appointments.service','appointment.dto']){
  assert.ok(original.includes('exports.'),'Expected existing CommonJS production output');
  const result=ts.transpileModule(fs.readFileSync(input,'utf8'),{
   fileName:input,reportDiagnostics:true,
-  compilerOptions:{...parsed.options,module:ts.ModuleKind.CommonJS,moduleResolution:ts.ModuleResolutionKind.Node10,declaration:false,sourceMap:false,incremental:false},
+  compilerOptions:{...parsed.options,declaration:false,sourceMap:false,incremental:false},
  });
+ for(const d of result.diagnostics||[]) if(d.category===ts.DiagnosticCategory.Error) console.log('Changed-module diagnostic code: '+d.code);
  assert.ok(!(result.diagnostics||[]).some(d=>d.category===ts.DiagnosticCategory.Error),'Changed-module compilation diagnostic');
  fs.writeFileSync(output,result.outputText);
 }
