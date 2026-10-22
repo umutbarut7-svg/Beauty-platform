@@ -9,6 +9,7 @@ def run(args,timeout=30):
 def inspect(service,fmt): return run(['docker','inspect','beauty-preview-'+service+'-1','--format',fmt])
 api=run(['docker','image','inspect','epifiz-api:booking-context-20261022','--format','{{.Id}}'])
 gateway=run(['docker','image','inspect','epifiz-gateway:booking-context-20261022','--format','{{.Id}}'])
+if api!='sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64' or gateway!='sha256:7a7f80f9184476c9855a3e21ba8f3697dec28e92fa40ace802c50a32a8e28394': raise SystemExit('Candidate image differs from reviewed build')
 oldapi='sha256:d6f15b40595f4abce6e4c5c185158a292d10dea9b1057288e67dff5049633dfe'
 oldgateway='sha256:12795b0505df58bd349a803b76887a2452b77ba15c919a95e541f0f1bee502df'
 if inspect('api','{{.Image}}')!=oldapi or inspect('gateway','{{.Image}}')!=oldgateway: raise SystemExit('Unexpected live image; no replacement')
@@ -141,6 +142,7 @@ try:
         try: publiccheck();break
         except (OSError,RuntimeError): time.sleep(2)
     else: raise RuntimeError('Public acceptance failed')
+    exercise_customer_booking('https://preview.13-51-112-228.sslip.io/api')
 except Exception:
     compose(rollback,'up','-d','--no-deps','--pull','never','api','gateway')
     ready()

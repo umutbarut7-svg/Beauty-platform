@@ -15,7 +15,7 @@ oldgateway='sha256:12795b0505df58bd349a803b76887a2452b77ba15c919a95e541f0f1bee50
 if inspect('api','{{.Image}}')!=oldapi or inspect('gateway','{{.Image}}')!=oldgateway: raise SystemExit('Unexpected live image; no replacement')
 for value in [api,gateway]:
     if not re.fullmatch(r'sha256:[0-9a-f]{64}',value): raise SystemExit('Candidate image invalid')
-unchanged=['api','gateway','worker','postgres','prepare-secrets','admin']
+unchanged=['worker','postgres','prepare-secrets','admin']
 before={s:inspect(s,'{{.State.StartedAt}}') for s in unchanged}
 
 def exercise_customer_booking(base):
@@ -99,8 +99,61 @@ try:
     exercise_customer_booking('http://127.0.0.1:13001')
 finally:
     subprocess.run(['docker','rm','-f',name],capture_output=True)
-for service in unchanged:
-    if inspect(service,'{{.State.StartedAt}}')!=before[service]: raise SystemExit('Unexpected live service restart')
-print('All existing preview services unchanged: PASS')
-print('CANDIDATE BOOKING ACCEPTANCE ONLY: PASS; nothing published')
+folder=pathlib.Path('/opt/epifiz/operations/booking-context-20261022')
+webtext=''.join(p.read_text(errors='replace') for p in (folder/'web').rglob('*.js'))
+if 'bookForSelf' not in webtext: raise SystemExit('Customer booking intent absent from exported UI')
+base='/opt/epifiz/application-123e7339/infra/preview/compose.yml'
+values={s.upper()+'_IMAGE':inspect(s,'{{.Image}}') for s in ['api','migrate','admin','gateway']}
+values.update(PREVIEW_HOST='preview.13-51-112-228.sslip.io',ADMIN_HOST='admin.13-51-112-228.sslip.io',HTTP_BIND='0.0.0.0:80',HTTPS_BIND='0.0.0.0:443')
+def writeenv(path,v):
+    path.write_text(''.join(k+'='+x+'\n' for k,x in v.items()));path.chmod(0o600)
+current=folder/'live.env';rollback=folder/'rollback.env';override=folder/'mvp.yml'
+writeenv(rollback,values)
+writeenv(current,{**values,'API_IMAGE':api,'GATEWAY_IMAGE':gateway})
+override.write_text('services:\n  api:\n    environment:\n      STAGE33_MVP_ENABLED: "true"\n  worker:\n    image: '+oldapi+'\n    environment:\n      STAGE33_MVP_ENABLED: "true"\n')
+override.chmod(0o600)
+def compose(envfile,*args):
+    return run(['docker','compose','--env-file',str(envfile),'-f',base,'-f',str(override)]+list(args),timeout=120)
+def ready():
+    for _ in range(35):
+        if inspect('api','{{.State.Health.Status}}')=='healthy': return
+        time.sleep(2)
+    raise RuntimeError('Live API health deadline')
+def publiccheck():
+    for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
+        origin='https://'+host
+        q=urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin})
+        with urllib.request.urlopen(q,timeout=10) as r:
+            if r.status!=200 or r.headers.get('Access-Control-Allow-Origin')!=origin: raise RuntimeError('Public API/CORS failure')
+    origin='https://preview.13-51-112-228.sslip.io'
+    with urllib.request.urlopen(origin+'/',timeout=10) as r: html=r.read().decode()
+    urls=re.findall(r'<script[^>]+src="([^"]+)"',html)
+    if not urls: raise RuntimeError('Public script absent')
+    bodies=[]
+    for url in urls:
+        if url.endswith('.js'):
+            with urllib.request.urlopen(origin+url,timeout=10) as r: bodies.append(r.read().decode())
+    if 'bookForSelf' not in ''.join(bodies): raise RuntimeError('Public customer booking intent missing')
+try:
+    compose(current,'up','-d','--no-deps','--pull','never','api')
+    ready()
+    compose(current,'up','-d','--no-deps','--pull','never','gateway')
+    for _ in range(12):
+        try: publiccheck();break
+        except (OSError,RuntimeError): time.sleep(2)
+    else: raise RuntimeError('Public acceptance failed')
+    exercise_customer_booking('https://preview.13-51-112-228.sslip.io/api')
+except Exception:
+    compose(rollback,'up','-d','--no-deps','--pull','never','api','gateway')
+    ready()
+    raise SystemExit('Publication failed; previous API and gateway restored')
+for s in unchanged:
+    if inspect(s,'{{.State.StartedAt}}')!=before[s]: raise SystemExit('Unexpected unrelated restart')
+flags=json.loads(inspect('api','{{json .Config.Env}}'))
+flagmap=dict(x.split('=',1) for x in flags)
+if flagmap.get('STAGE33_MVP_ENABLED')!='true' or any(flagmap.get(k)!='false' for k in ['MVP_AI_ENABLED','MVP_SEMANTIC_ENABLED','MVP_PHOTO_POLICY_REVIEWED','MVP_VERIFICATION_POLICY_REVIEWED']): raise SystemExit('Rollout isolation failed')
+print('Public HTTPS, API/CORS and explicit customer UI bundle: PASS')
+print('Worker, database, secret helper and admin restart isolation: PASS')
+print('Core remains enabled; photo, AI and reviewed-policy flags remain closed: PASS')
+print('BOOKING CONTEXT FIX PUBLICATION: PASS')
 PY
