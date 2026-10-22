@@ -1,0 +1,63 @@
+name: Preview booking context regression
+on:
+  push:
+    paths:
+      - .github/workflows/preview-booking-context-regression.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  booking-context:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+      DATABASE_URL: postgresql://unused:unused@127.0.0.1:5432/unused
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          path: application
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 4a62b65a201c3a04441aae77f4882c66fb1f86f1
+          path: correction
+          persist-credentials: false
+      - name: Apply pinned preview corrections and regressions
+        run: |
+          python3 - <<'PY'
+          import importlib.util, pathlib
+          root=pathlib.Path('application')
+          for name in ['preview-auth-ux-overlay','preview-booking-context-overlay']:
+              spec=importlib.util.spec_from_file_location('helper',pathlib.Path('correction/infra/operations')/(name+'.py'))
+              module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+              if 'auth' in name: module.patch(root/'apps/mobile/App.tsx')
+              else:
+                  module.apply_booking(root)
+                  module.add_regressions(root)
+          PY
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install pinned dependencies
+        working-directory: application
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client and shared types
+        working-directory: application
+        run: |
+          pnpm --filter @beauty-platform/api prisma:generate
+          pnpm --filter @beauty-platform/types build
+      - name: Run original and added booking regressions
+        working-directory: application
+        run: pnpm --filter @beauty-platform/api exec vitest run src/appointments/appointments.service.test.ts
+      - name: Type-check complete API
+        working-directory: application
+        run: pnpm --filter @beauty-platform/api typecheck
+      - name: Build complete API
+        working-directory: application
+        run: pnpm --filter @beauty-platform/api build
