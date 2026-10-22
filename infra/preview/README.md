@@ -129,8 +129,7 @@ resulting tested image digests before any deployment.
 
 ## Owner CloudShell handoff
 
-The owner approved the stated base-cost estimate in this session on 21 October
-2026. No stack was started from the assistant environment: its available AWS
+The owner approved the stated base-cost estimate in this session on 21 October 2026. No stack was started from the assistant environment: its available AWS
 roles cover audit/synthetic tests, not infrastructure creation. The owner-run
 bootstrap is pinned to the tested source at `f4bc9f4a0bdf6a6f5cabb7c401dd8bf1beba34e6`:
 

@@ -66,7 +66,23 @@ jobs:
           role-session-name: stage33-adapters-${{ github.run_id }}
           role-duration-seconds: 900
           mask-aws-account-id: true
-          allowed-account-ids: 926642724499
+
+      - name: Verify assumed AWS account and role before accessing data
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import json, subprocess
+          result = subprocess.run(
+              ["aws", "sts", "get-caller-identity", "--output", "json", "--no-cli-pager",
+               "--cli-connect-timeout", "5", "--cli-read-timeout", "20"],
+              capture_output=True, text=True, timeout=35, check=True,
+          )
+          identity = json.loads(result.stdout)
+          expected = "arn:aws:sts::926642724499:assumed-role/BeautyPlatformLiveAdapterTest/"
+          if identity.get("Account") != "926642724499" or not identity.get("Arn", "").startswith(expected):
+              raise SystemExit("AWS test identity rejected; provider access blocked")
+          print("Expected synthetic-test account and role verified")
+          PYTHON
 
       - name: Run application adapters with in-memory secret binding
         working-directory: application/apps/api
