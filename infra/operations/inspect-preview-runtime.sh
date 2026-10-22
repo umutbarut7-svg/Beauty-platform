@@ -18,7 +18,7 @@ for service in services:
     print(service+' restart count: '+str(value.get('RestartCount',0)))
     if service=='postgres' and not any(m.get('Type')=='volume' and m.get('Destination')=='/var/lib/postgresql/data' for m in value.get('Mounts',[])):raise SystemExit('PostgreSQL named volume absent')
 print('PostgreSQL named volume configured: PASS')
-expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:277e9e190f04712f1771beea5eaefc221ae51a28501da19f47cf89d6726dc723'}
+expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:00521d1995ea85e58a024c2561195e432e9481c5ce93d029b66eec490130acd2'}
 for service,digest in expected.items():
     if inspect(service)['Image']!=digest:raise SystemExit('Tested image mismatch: '+service)
 print('Tested booking API and cancellation gateway still active: PASS')

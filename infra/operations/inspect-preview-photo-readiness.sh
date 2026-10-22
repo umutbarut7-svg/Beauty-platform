@@ -17,7 +17,7 @@ def integer(values,name,minimum,maximum):
         return bool(raw) and minimum<=int(raw)<=maximum and float(raw)==int(raw)
     except (ValueError,OverflowError):return False
 
-expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:f69ee2a5ed267d2c5d8701466c87671a6c9af5b9569977354ba7a4d4281ac9db'}
+expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:00521d1995ea85e58a024c2561195e432e9481c5ce93d029b66eec490130acd2'}
 for service,image in expected.items():
     if inspect(service)['Image']!=image:raise SystemExit('Reviewed release differs: '+service)
 print('Reviewed booking and business-selection release: PASS')
