@@ -61,3 +61,64 @@ This supersedes the earlier pending-public-TLS note for this activation only.
 Authenticated user journeys, independent operator authorization, native/real-photo
 acceptance, restart/reboot acceptance and all remaining Stage 33 gates are still
 not established by these checks. Production readiness is not claimed.
+
+## Public authentication acceptance and user-reported signup correction
+
+On 22 October, a user reported a generic error on signup/sign-in. The backend
+requires a minimum of 12 password characters for registration, but the deployed
+web UI did not show this rule. The screenshot alone does not establish the
+user's password length or account state.
+
+Live synthetic HTTP acceptance run
+[39784234670](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39784234670)
+passed registration (201), login (200), authenticated identity (200), duplicate
+email rejection (409), wrong-password denial (401), short-password rejection
+(400), refresh rotation and reuse denial, logout and revoked-refresh denial.
+New users remain CUSTOMER. Credentials and tokens stayed in process memory and
+were not emitted to public logs. Two isolated @example.test customer records were
+created across the initial and corrected acceptance runs. They were retained
+without elevated privileges; the completed run revoked its refresh sessions.
+The initial run stopped at a closed MVP route before logout; its synthetic
+sessions retain their normal expiry. No owner account was inspected or changed.
+
+The first run
+[39783862889](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39783862889)
+incorrectly expected booking reads to be enabled. The deployed MVP rollout is
+intentionally closed, so 503 is the correct result for booking/passport routes.
+The corrected run confirms those gates and the unavailable photo capability.
+These expected denials do not establish a working enabled booking journey.
+
+The preview release remains based on application commit
+123e7339e2ab2a9e8e94f391a8431b73afc28efe, with a narrow, source-pinned App.tsx
+overlay in infra/operations/preview-auth-ux-overlay.py. Main contains older
+application code and was not substituted for the deployed release.
+
+The overlay adds the 12-character registration hint, validates email and short
+registration passwords before sending a request, normalizes email, and provides
+separate messages for invalid credentials, duplicate account, validation, and
+rate limiting. Existing login passwords are not subject to a new local minimum.
+Seven focused handler regression cases passed locally using Node 24; the reusable
+test accepts the patched App.tsx path as its first argument.
+
+The isolated 640 MiB / one-CPU build completed mobile TypeScript checking and an
+Expo production web export. Packaging run
+[39785849221](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39785849221)
+verified the compiled Turkish copy and produced gateway image
+sha256:12795b0505df58bd349a803b76887a2452b77ba15c919a95e541f0f1bee502df.
+Earlier preparation attempts failed before publication because of build workspace
+permissions, escaped text assertions, and local base-image resolution. They did
+not alter the running gateway.
+
+Gateway-only release run
+[39786082654](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/39786082654)
+passed isolated HTML/JS/copy/API-proxy acceptance, then public HTTPS, updated
+JavaScript and both API proxies. The prior gateway image was retained for rollback;
+rollback was unnecessary. API, worker, database, admin, and secret-helper start
+times were unchanged. No migrations, AWS capacity, policy flag, owner password,
+or user role changed. A fresh cloud-browser reload displayed the new 12-character
+hint; no user credentials were entered in the browser.
+
+Still open: owner-selected account registration and operator authorization,
+reviewed photo/verification policies, native device acceptance, real-photo
+quality and full enabled end-to-end acceptance. No Stage 33 or production PASS
+is claimed.
