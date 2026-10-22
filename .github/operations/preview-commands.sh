@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
-# Deliberately do not print environment variables, Docker configuration or app logs.
 date -u
 free -h
 df -h /
-docker ps --format 'table {{.Names}}\t{{.Status}}'
-docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+docker image inspect epifiz-admin:webpack-test --format '{{.Id}} {{.Created}}' 2>/dev/null || true
+ps -eo pid,comm,pcpu,pmem --sort=-pcpu | head -10

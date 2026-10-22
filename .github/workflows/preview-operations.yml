@@ -48,6 +48,8 @@ jobs:
           identity = aws('sts', 'get-caller-identity')
           if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
               raise SystemExit('Unexpected account or role; execution blocked')
+          previous = aws('ssm', 'get-command-invocation', '--command-id', '4fa99e42-d5e3-48d1-b5f3-533a3f74d412', '--instance-id', 'i-09fe7fdb5f10d63b6')
+          print('Previous webpack build status only:', json.dumps({key: previous.get(key) for key in ['Status', 'StatusDetails', 'ResponseCode', 'ExecutionElapsedTime']}), flush=True)
           request = json.loads(pathlib.Path('.github/operations/preview-request.json').read_text())
           if set(request) != {'request_id', 'mode'} or request['mode'] not in {'inspect', 'approved-maintenance'}:
               raise SystemExit('Unsupported operation request')
