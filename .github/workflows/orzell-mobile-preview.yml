@@ -1,0 +1,77 @@
+name: ORZELL mobile preview
+
+on:
+  pull_request:
+    paths:
+      - assets/brand/orzell/**
+      - config/brand/orzell.json
+      - scripts/prepare-stage33-native.py
+      - .github/workflows/stage33-native-builds.yml
+      - scripts/prepare-orzell-mobile.py
+      - scripts/test-prepare-orzell-mobile.py
+      - scripts/check-orzell-preview.cjs
+      - scripts/check-orzell-photo-journey.cjs
+      - .github/workflows/orzell-mobile-preview.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          path: application
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Verify original asset and prepare isolated preview
+        run: |
+          python3 harness/scripts/test-prepare-orzell-mobile.py
+          python3 harness/scripts/prepare-stage33-native.py application
+          python3 harness/scripts/prepare-orzell-mobile.py application
+          node harness/infra/operations/preview-auth-ux.test.cjs application/apps/mobile/App.tsx
+          node harness/infra/operations/preview-cancellation.test.cjs application/apps/mobile/App.tsx
+      - name: Install pinned dependencies and check mobile
+        working-directory: application
+        run: |
+          pnpm install --frozen-lockfile --filter @beauty-platform/mobile...
+          pnpm --filter @beauty-platform/types build
+          pnpm --filter @beauty-platform/mobile typecheck
+          pnpm --filter @beauty-platform/mobile build
+      - name: Check narrow and wide browser layouts offline
+        run: |
+          npm install --prefix "$RUNNER_TEMP/orzell-browser" --no-save --ignore-scripts playwright@1.58.2
+          node "$RUNNER_TEMP/orzell-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/orzell-browser/node_modules" node harness/scripts/check-orzell-photo-journey.cjs application/apps/mobile/dist browser-checks
+      - name: Upload browser review images
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-browser-review
+          path: browser-checks/
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-web-preview
+          path: application/apps/mobile/dist/
+          if-no-files-found: error
+          retention-days: 7

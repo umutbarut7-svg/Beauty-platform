@@ -1,6 +1,17 @@
 name: Stage 33 native preview builds
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/stage33-native-builds.yml
+      - scripts/prepare-stage33-native.py
+      - scripts/prepare-orzell-mobile.py
+      - scripts/test-prepare-orzell-mobile.py
+      - assets/brand/orzell/**
+      - config/brand/orzell.json
+      - infra/operations/preview-*-overlay.py
+      - infra/operations/preview-*.test.cjs
+      - docs/stage-33/native-preview-readme.md
   workflow_dispatch:
   push:
     branches: [main]
@@ -10,13 +21,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: stage33-native-builds
+  group: stage33-native-builds-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   native:
     name: ${{ matrix.platform }} native preview
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -67,7 +78,11 @@ jobs:
           java-version: "17"
       - name: Prepare exact preview UI without cloud credentials
         run: |
+          python3 ../harness/scripts/test-prepare-orzell-mobile.py
           python3 ../harness/scripts/prepare-stage33-native.py .
+          python3 ../harness/scripts/prepare-orzell-mobile.py .
+          node ../harness/infra/operations/preview-auth-ux.test.cjs apps/mobile/App.tsx
+          node ../harness/infra/operations/preview-cancellation.test.cjs apps/mobile/App.tsx
           pnpm install --frozen-lockfile --filter @beauty-platform/mobile...
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/mobile typecheck
@@ -80,8 +95,8 @@ jobs:
           ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
           test -s app/build/outputs/apk/release/app-release.apk
           mkdir -p "$GITHUB_WORKSPACE/native-output"
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/native-output/EPIFIZ-android-preview-arm64.apk"
-          sha256sum "$GITHUB_WORKSPACE/native-output/EPIFIZ-android-preview-arm64.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/native-output/ORZELL-android-preview-arm64.apk"
+          sha256sum "$GITHUB_WORKSPACE/native-output/ORZELL-android-preview-arm64.apk"
       - name: Build iOS simulator application
         if: matrix.platform == 'ios'
         working-directory: application/apps/mobile/ios
@@ -96,8 +111,8 @@ jobs:
           app_paths=("$RUNNER_TEMP/epifiz-ios/Build/Products/Release-iphonesimulator/"*.app)
           test "${#app_paths[@]}" -eq 1
           mkdir -p "$GITHUB_WORKSPACE/native-output"
-          ditto -c -k --sequesterRsrc --keepParent "${app_paths[0]}" "$GITHUB_WORKSPACE/native-output/EPIFIZ-ios-simulator.zip"
-          shasum -a 256 "$GITHUB_WORKSPACE/native-output/EPIFIZ-ios-simulator.zip"
+          ditto -c -k --sequesterRsrc --keepParent "${app_paths[0]}" "$GITHUB_WORKSPACE/native-output/ORZELL-ios-simulator.zip"
+          shasum -a 256 "$GITHUB_WORKSPACE/native-output/ORZELL-ios-simulator.zip"
       - name: Add artifact acceptance boundary
         run: |
           cp ../harness/docs/stage-33/native-preview-readme.md "$GITHUB_WORKSPACE/native-output/README.md"
@@ -105,7 +120,7 @@ jobs:
       - name: Upload native preview only
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: EPIFIZ-${{ matrix.platform }}-preview
+          name: ORZELL-${{ matrix.platform }}-preview
           path: native-output/
           if-no-files-found: error
           retention-days: 7
