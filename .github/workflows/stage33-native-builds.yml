@@ -1,6 +1,17 @@
 name: Stage 33 native preview builds
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/stage33-native-builds.yml
+      - scripts/prepare-stage33-native.py
+      - scripts/prepare-orzell-mobile.py
+      - scripts/test-prepare-orzell-mobile.py
+      - assets/brand/orzell/**
+      - config/brand/orzell.json
+      - infra/operations/preview-*-overlay.py
+      - infra/operations/preview-*.test.cjs
+      - docs/stage-33/native-preview-readme.md
   workflow_dispatch:
   push:
     branches: [main]
@@ -10,13 +21,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: stage33-native-builds
+  group: stage33-native-builds-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   native:
     name: ${{ matrix.platform }} native preview
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:

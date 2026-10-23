@@ -10,4 +10,6 @@ Build success does not establish device launch, registration, booking, photo pic
 
 The earlier successful EPIFIZ native build does not validate this updated ORZELL build harness. New native compilation and physical-device acceptance remain pending until separately observed.
 
+Pull requests that change the native harness, original brand assets or preview overlays compile both platforms in disposable runners. They receive repository read permission only, use no cloud credentials or signing secrets, and publish temporary test artifacts. These builds do not deploy the preview server or change policy flags.
+
 Build method references: [Expo local builds](https://docs.expo.dev/guides/local-app-overview/), [native project generation](https://docs.expo.dev/workflow/prebuild/). Only generated native projects in disposable CI checkouts are built; existing servers and user data are not changed.
