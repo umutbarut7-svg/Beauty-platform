@@ -96,9 +96,14 @@ def main():
     try:
         if owned_boot:
             run('xcrun', 'simctl', 'boot', udid)
+        print('Waiting for simulator boot', flush=True)
         run('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=240)
+        # Start the display client as well as CoreSimulator before capturing UI.
+        run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
+        print('Simulator display client started', flush=True)
         run('xcrun', 'simctl', 'install', udid, str(app), timeout=120)
         for attempt in (1, 2):
+            print(f'Cold launch {attempt}', flush=True)
             launched = run('xcrun', 'simctl', 'launch', '--terminate-running-process', udid, BUNDLE)
             match = re.search(r': (\d+)\s*$', launched)
             if not match:
@@ -109,7 +114,11 @@ def main():
             command = run('ps', '-p', str(pid), '-o', 'comm=').strip()
             if pathlib.Path(command).name != executable:
                 raise RuntimeError('Launched app process no longer running')
-            run('xcrun', 'simctl', 'io', udid, 'screenshot', str(output / f'ios-launch-{attempt}.png'))
+            print(f'Capture launch {attempt}', flush=True)
+            screenshot = output / f'ios-launch-{attempt}.png'
+            run('xcrun', 'simctl', 'io', udid, 'screenshot', str(screenshot), timeout=120)
+            if screenshot.stat().st_size < 1000:
+                raise RuntimeError('Simulator screenshot missing image content')
             run('xcrun', 'simctl', 'terminate', udid, BUNDLE)
         evidence = {
             'status': 'PASS', 'scope': 'simulator install and two cold launches only',
