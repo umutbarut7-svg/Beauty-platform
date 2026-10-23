@@ -14,18 +14,12 @@
       "rule": "Exact original owner-approved O/Z emblem; do not regenerate, trace, restyle or recolor"
     },
     "wordmark": "original-emblem-as-O + RZELL",
-    "palette": [
-      "black",
-      "metallic-purple",
-      "lavender"
-    ],
+    "palette": ["black", "metallic-purple", "lavender"],
     "splashCompositionLocked": false
   },
   "rollout": {
     "runtimeRebrandApproved": false,
-    "technicalIdentifiersToPreserve": [
-      "EPIFIZ"
-    ],
+    "technicalIdentifiersToPreserve": ["EPIFIZ"],
     "plannedAiSubbrand": "ORZELAI"
   }
 }
