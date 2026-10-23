@@ -10,7 +10,7 @@
     "canonicalLogo": {
       "file": "assets/brand/orzell/orzell-original-reference.jpg",
       "sha256": "16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4",
-      "embeddedInRepo": false,
+      "embeddedInRepo": true,
       "rule": "Exact original owner-approved O/Z emblem; do not regenerate, trace, restyle or recolor"
     },
     "wordmark": "original-emblem-as-O + RZELL",

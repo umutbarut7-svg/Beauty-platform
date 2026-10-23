@@ -14,7 +14,7 @@ Status: chosen working brand, pending trademark clearance and domain purchase. T
 
 ## Asset status
 
-The original JPEG was provided directly in ChatGPT, but is **NOT yet checked in to this GitHub repository**. Do not treat an AI-generated imitation as its replacement. Before integration, upload exact original asset bytes to a dedicated brand assets directory and verify the visual against the reference.
+The exact original JPEG is checked in at `assets/brand/orzell/orzell-original-reference.jpg`. Its SHA-256 matches the canonical checksum in `config/brand/orzell.json`: `16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4`. The source was visually verified. It is a complete reference board, not a standalone transparent emblem or a production app icon. Runtime integration and layout remain separate work; do not display the full board as the app icon or substitute a generated imitation.
 
 ## Release gates
 
