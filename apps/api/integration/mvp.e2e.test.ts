@@ -836,9 +836,15 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         (await request("/mvp/v1/bookings", browserCustomer.accessToken)).body
           .items,
       ).toHaveLength(0);
+      const bookingCreated = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().endsWith(`/businesses/${businessId}/appointments`),
+      );
       await page
         .getByRole("button", { name: "Randevuyu onayla", exact: true })
         .click();
+      expect((await bookingCreated).status()).toBe(201);
       await page
         .getByRole("button", { name: /Real booking fixture.*Onay bekliyor/ })
         .waitFor();

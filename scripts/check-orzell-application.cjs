@@ -17,7 +17,9 @@ main(async (browser, origin, output) => {
   page.on("pageerror", (e) => errors.push(e.message));
   let bookings = [],
     deny = false;
-  const startsAt = new Date(Date.now() + 86400000 * 3).toISOString();
+  const startsAt =
+    new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) +
+    "T10:00:00.000Z";
   const business = {
     id: "business-1",
     name: "Deneme Salonu",
@@ -94,7 +96,10 @@ main(async (browser, origin, output) => {
       request.method() === "POST"
     ) {
       const body = request.postDataJSON();
-      assert.equal(body.bookForSelf, true);
+      assert.deepEqual(
+        Object.keys(body).sort(),
+        ["locationId", "serviceId", "staffMemberId", "startsAt"].sort(),
+      );
       assert.equal(body.staffMemberId, "staff-1");
       assert.equal(body.serviceId, service.id);
       value = {
