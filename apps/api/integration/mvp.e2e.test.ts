@@ -743,6 +743,14 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     await once(mobile, "listening");
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    // Never let a wrongly configured export send synthetic credentials to a remote API.
+    await page.route("**/*", (route) =>
+      ["localhost", "127.0.0.1"].includes(
+        new URL(route.request().url()).hostname,
+      )
+        ? route.continue()
+        : route.abort(),
+    );
     try {
       const tab = (name: string) =>
         page.getByRole("tab", { name, exact: true }).click();

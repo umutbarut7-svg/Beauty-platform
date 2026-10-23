@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 30
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
+      EXPO_PUBLIC_API_URL: http://localhost:3001
 
     services:
       redis:

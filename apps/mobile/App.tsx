@@ -881,7 +881,217 @@ export default function App() {
                             selectedService.price,
                             selectedService.currency,
                           )}
- …2349 tokens truncated…t>
+                        </Text>
+                        <Text style={styles.small}>
+                          Onayladığında randevu talebin işletmeye iletilir. Bu
+                          adımda ödeme alınmaz.
+                        </Text>
+                        {button("Randevuyu onayla", async () => {
+                          const created = await api.request<MvpBooking>(
+                            `/businesses/${catalog.id}/appointments`,
+                            "POST",
+                            {
+                              locationId,
+                              serviceId,
+                              staffMemberId: pendingSlot.staffId,
+                              bookForSelf: true,
+                              startsAt: pendingSlot.startsAt,
+                            },
+                          );
+                          setSlots([]);
+                          setPendingSlot(null);
+                          setSelected(created);
+                          setResult(null);
+                          setScreen("bookings");
+                          setNotice(
+                            "Randevun kaydedildi. İşletmenin yanıtını Randevular ekranından takip edebilirsin.",
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+            {mode === "customer" && screen === "consultation" && (
+              <>
+                {button(
+                  "Keşfete dön",
+                  async () => {
+                    setScreen("discover");
+                  },
+                  true,
+                )}
+                <View style={styles.hero}>
+                  <Text style={styles.eyebrow}>SANA ÖZEL DANIŞMANLIK</Text>
+                  <Text style={styles.title}>Aklındaki görünüm.</Text>
+                  <Text style={styles.body}>
+                    İsteğini ve hedefini paylaş. Fotoğrafın için izin her zaman
+                    senin kontrolünde.
+                  </Text>
+                </View>
+                <View style={styles.card}>
+                  {input("İsteğiniz", intent, setIntent)}
+                  {input("Hedefiniz", target, setTarget)}
+                  <VisualJourney
+                    key={user.id}
+                    api={api}
+                    intent={intent}
+                    target={target}
+                    busy={busy}
+                    run={run}
+                    choose={choose}
+                  />
+                </View>
+              </>
+            )}
+            {mode === "customer" && screen === "passport" && (
+              <>
+                <View style={styles.hero}>
+                  <Text style={styles.eyebrow}>SENİN BAKIM GEÇMİŞİN</Text>
+                  <Text style={styles.title}>Bakımım</Text>
+                  <Text style={styles.body}>
+                    Tamamlanan deneyimlerin ve kaydedilmiş sonuçların burada.
+                  </Text>
+                </View>
+                {button(
+                  "Bakım geçmişimi yenile",
+                  async () => {
+                    setRefresh((value) => value + 1);
+                  },
+                  true,
+                )}
+                {!loading && !passport.length && (
+                  <View style={styles.empty}>
+                    <Text style={styles.emptyMark}>✧</Text>
+                    <Text style={styles.heading}>Hikâyen burada birikecek</Text>
+                    <Text style={styles.body}>
+                      İşletmenin kaydettiği sonuç ve senin memnuniyet bildirimin
+                      tamamlandığında bakım geçmişin güncellenir.
+                    </Text>
+                  </View>
+                )}
+                {passport.map((item) => (
+                  <View key={item.id} style={styles.card}>
+                    <Text style={styles.small}>
+                      {new Date(item.createdAt).toLocaleDateString("tr-TR", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </Text>
+                    <Text style={styles.heading}>{item.summary}</Text>
+                    <Text style={styles.badge}>
+                      Memnuniyet:{" "}
+                      {item.satisfaction
+                        ? (outcomeLabels[item.satisfaction.outcome] ??
+                          "Bildirildi")
+                        : "Henüz bildirilmedi"}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+            {mode === "business" && screen === "workspace" && (
+              <>
+                <View style={styles.hero}>
+                  <Text style={styles.eyebrow}>ORZELL İŞLETME</Text>
+                  <Text style={styles.title}>İşletmene hoş geldin.</Text>
+                  <Text style={styles.body}>
+                    Ekibini, hizmetlerini ve randevularını tek yerden yönet.
+                  </Text>
+                </View>
+                <View style={styles.card}>
+                  <Text style={styles.heading}>İşletmeni seç</Text>
+                  {businesses.map((item) =>
+                    button(
+                      businessLabel(item, businesses, business?.id),
+                      async () => {
+                        setBusiness(item);
+                        setName(item.name);
+                        setBookings([]);
+                        setSelected(null);
+                        setResult(null);
+                        setRevenue(null);
+                      },
+                      item.id !== business?.id,
+                    ),
+                  )}
+                  {!loading && !businesses.length && (
+                    <Text style={styles.body}>
+                      Henüz bir işletmen yok. İlk işletmeni ekleyerek
+                      başlayabilirsin.
+                    </Text>
+                  )}
+                  {button(
+                    "İşletmelerimi yenile",
+                    async () => {
+                      setRefresh((value) => value + 1);
+                    },
+                    true,
+                  )}
+                </View>
+                {business && (
+                  <View style={styles.featureCard}>
+                    <View style={styles.grow}>
+                      <Text style={styles.heading}>{business.name}</Text>
+                      <Text style={styles.small}>
+                        {business.isVerified
+                          ? "Doğrulanmış işletme"
+                          : "Doğrulama bekleniyor"}
+                      </Text>
+                      {button("İşletme ayarları", async () => {
+                        setScreen("setup");
+                      })}
+                      {button(
+                        "İşletme randevularını gör",
+                        async () => {
+                          setScreen("bookings");
+                        },
+                        true,
+                      )}
+                    </View>
+                  </View>
+                )}
+                {button(
+                  "Yeni işletme ekle",
+                  async () => {
+                    setCreatingBusiness(!creatingBusiness);
+                    setName("");
+                  },
+                  true,
+                )}
+                {creatingBusiness && (
+                  <View style={styles.card}>
+                    {input("İşletme / profil adı", name, setName)}
+                    {button("İşletme oluştur", async () => {
+                      const value = await api.request<Business>(
+                        "/businesses",
+                        "POST",
+                        { name },
+                      );
+                      setBusiness(value);
+                      setBusinesses((values) => [...values, value]);
+                      setName(value.name);
+                      setCreatingBusiness(false);
+                      setNotice(
+                        "İşletmen kaydedildi. Hizmetlerini ve çalışma saatlerini ekleyebilirsin.",
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            )}
+            {mode === "business" && screen === "setup" && business && (
+              <>
+                {button(
+                  "İşletmeme dön",
+                  async () => {
+                    setScreen("workspace");
+                  },
+                  true,
+                )}
+                <Text style={styles.title}>{business.name}</Text>
                 <View style={styles.card}>
                   <Text style={styles.heading}>Profil</Text>
                   {input("İşletme / profil adı", name, setName)}
