@@ -88,7 +88,11 @@ def main():
                   for d in group if d.get('isAvailable') and d['name'].startswith('iPhone')]
     if not candidates:
         raise RuntimeError('No available iPhone simulator')
-    runtime, device = sorted(candidates, key=lambda item: (item[0], item[1]['name']))[-1]
+    candidates.sort(key=lambda item: (item[0], item[1]['name']), reverse=True)
+    preferred = ('iPhone 16e', 'iPhone 16', 'iPhone 17', 'iPhone 17 Pro')
+    runtime, device = next((item for name in preferred for item in candidates
+                            if item[1]['name'] == name), candidates[0])
+    print(f"Selected simulator: {device['name']} / {runtime}", flush=True)
     udid = device['udid']
     if not re.fullmatch(r'[0-9A-Fa-f-]{36}', udid):
         raise ValueError('Invalid simulator identity')
@@ -96,11 +100,11 @@ def main():
     try:
         if owned_boot:
             run('xcrun', 'simctl', 'boot', udid)
-        print('Waiting for simulator boot', flush=True)
-        run('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=240)
-        # Start the display client as well as CoreSimulator before capturing UI.
+        # Start the display client while the device boots, before waiting for SpringBoard.
         run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
-        print('Simulator display client started', flush=True)
+        print('Simulator display client started; waiting for boot', flush=True)
+        run('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=360)
+        print('Simulator boot completed', flush=True)
         run('xcrun', 'simctl', 'install', udid, str(app), timeout=120)
         for attempt in (1, 2):
             print(f'Cold launch {attempt}', flush=True)
