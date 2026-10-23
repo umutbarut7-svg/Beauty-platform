@@ -1,0 +1,76 @@
+name: Privacy worker loop and restart
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/privacy-worker-recovery.yml
+      - scripts/check-privacy-worker-recovery.cjs
+      - scripts/privacy-loop-preload.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_loop_ci?schema=public
+      PRIVACY_LOOP_FIXTURE: confirmed
+      NODE_ENV: test
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17-trixie
+        env:
+          POSTGRES_DB: beauty_privacy_loop_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d beauty_privacy_loop_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout recovery harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Checkout reviewed application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          path: application
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: application/pnpm-lock.yaml
+      - name: Build application and migrate disposable database
+        working-directory: application
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/api prisma:generate
+          pnpm --filter @beauty-platform/types build
+          pnpm --filter @beauty-platform/api build
+          pnpm --filter @beauty-platform/api prisma:migrate
+          cp ../harness/scripts/check-privacy-worker-recovery.cjs apps/api/
+          cp ../harness/scripts/privacy-loop-preload.cjs apps/api/
+      - name: Exercise continuous cleanup, process crash and retry
+        working-directory: application/apps/api
+        run: node check-privacy-worker-recovery.cjs
+      - name: Upload counters only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: privacy-worker-loop-evidence
+          path: application/apps/api/privacy-loop-evidence.json
+          if-no-files-found: error
+          retention-days: 7
