@@ -4,7 +4,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
-async function main() {
+async function main(journey) {
   const root = path.resolve(process.argv[2]);
   const output = path.resolve(process.argv[3]);
   await fs.mkdir(output, { recursive: true });
@@ -83,13 +83,17 @@ async function main() {
         `ORZELL header, original image loading, no overflow or runtime errors at ${width}px: PASS`,
       );
     }
+    if (journey) await journey(browser, origin, output);
   } finally {
     if (browser) await browser.close();
     await new Promise((resolve) => server.close(resolve));
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+module.exports = { main };
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

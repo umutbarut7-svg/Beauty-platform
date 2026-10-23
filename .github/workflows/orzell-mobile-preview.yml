@@ -8,6 +8,7 @@ on:
       - scripts/prepare-orzell-mobile.py
       - scripts/test-prepare-orzell-mobile.py
       - scripts/check-orzell-preview.cjs
+      - scripts/check-orzell-photo-journey.cjs
       - .github/workflows/orzell-mobile-preview.yml
   workflow_dispatch:
 
@@ -57,7 +58,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/orzell-browser" --no-save --ignore-scripts playwright@1.58.2
           node "$RUNNER_TEMP/orzell-browser/node_modules/playwright/cli.js" install --with-deps chromium
-          NODE_PATH="$RUNNER_TEMP/orzell-browser/node_modules" node harness/scripts/check-orzell-preview.cjs application/apps/mobile/dist browser-checks
+          NODE_PATH="$RUNNER_TEMP/orzell-browser/node_modules" node harness/scripts/check-orzell-photo-journey.cjs application/apps/mobile/dist browser-checks
       - name: Upload browser review images
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
