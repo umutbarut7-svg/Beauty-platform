@@ -1,12 +1,6 @@
+import { AppText as Text, palette } from "./ui";
 import { useRef, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import type {
   MvpApiClient,
@@ -289,6 +283,7 @@ export function VisualJourney({
                 <View key={`${session.attempts}-${i}`}>
                   <Text>{question}</Text>
                   <TextInput
+                    placeholderTextColor={palette.muted}
                     accessibilityLabel={`Danışmanlık yanıtı ${i + 1}`}
                     value={answers[i] ?? ""}
                     maxLength={500}
@@ -361,20 +356,21 @@ export function VisualJourney({
 }
 const styles = StyleSheet.create({
   panel: { gap: 12 },
-  heading: { fontSize: 18, fontWeight: "600", color: "#23382f" },
-  button: { backgroundColor: "#264e3d", borderRadius: 8, padding: 12 },
+  heading: { fontSize: 18, fontWeight: "600", color: palette.text },
+  button: { backgroundColor: palette.primary, borderRadius: 8, padding: 12 },
   white: { color: "white" },
   check: {
     padding: 12,
     borderWidth: 1,
-    borderColor: "#d4dcd4",
+    borderColor: palette.border,
     borderRadius: 8,
   },
   input: {
     padding: 12,
     borderWidth: 1,
-    borderColor: "#d4dcd4",
+    borderColor: palette.border,
     borderRadius: 8,
-    backgroundColor: "white",
+    backgroundColor: palette.field,
+    color: palette.text,
   },
 });

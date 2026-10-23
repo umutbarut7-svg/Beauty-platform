@@ -27,6 +27,7 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -49,12 +50,12 @@ jobs:
           node scripts/stage33-native-config.cjs
           pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ${{ matrix.platform }} --no-install --skip-dependency-update expo,react,react-native
           git diff --exit-code -- pnpm-lock.yaml
-      - name: Compile Android debug APK
+      - name: Build self-contained Android preview APK
         if: matrix.platform == 'android'
         working-directory: apps/mobile/android
         run: |
           java -version
-          ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64 --no-daemon --max-workers=2
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
       - name: Install iOS pods
         if: matrix.platform == 'ios'
         working-directory: apps/mobile/ios
@@ -65,16 +66,21 @@ jobs:
         if: matrix.platform == 'ios'
         run: |
           set -o pipefail
-          xcodebuild -workspace apps/mobile/ios/BeautyPlatform.xcworkspace -scheme BeautyPlatform -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/stage33-ios CODE_SIGNING_ALLOWED=NO build > /tmp/stage33-xcode.log 2>&1 || { tail -n 160 /tmp/stage33-xcode.log; exit 1; }
-          ditto -c -k --sequesterRsrc --keepParent /tmp/stage33-ios/Build/Products/Debug-iphonesimulator/BeautyPlatform.app /tmp/stage33-ios-simulator.zip
+          workspace=$(find apps/mobile/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/stage33-ios CODE_SIGNING_ALLOWED=NO build > /tmp/stage33-xcode.log 2>&1 || { tail -n 160 /tmp/stage33-xcode.log; exit 1; }
+          app=$(find /tmp/stage33-ios/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" /tmp/stage33-ios-simulator.zip
       - name: Preserve Android compilation artifact
         if: matrix.platform == 'android'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: stage33-android-debug
-          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          name: orzell-android-preview
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 7
       - name: Preserve iOS compilation artifact
         if: matrix.platform == 'ios'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -82,4 +88,4 @@ jobs:
           name: stage33-ios-simulator
           path: /tmp/stage33-ios-simulator.zip
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 7

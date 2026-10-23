@@ -1,5 +1,6 @@
+import { AppText as Text, palette } from "./ui";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import type { MvpApiClient } from "@beauty-platform/types";
 
 const windows = [
@@ -177,9 +178,14 @@ export function BusinessDemand({
 }
 const styles = StyleSheet.create({
   panel: { gap: 12, marginVertical: 16 },
-  heading: { fontSize: 18, fontWeight: "600", color: "#23382f" },
+  heading: { fontSize: 18, fontWeight: "600", color: palette.text },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  button: { padding: 12, backgroundColor: "#264e3d", borderRadius: 8 },
+  button: { padding: 12, backgroundColor: palette.primary, borderRadius: 8 },
   white: { color: "white" },
-  signal: { gap: 6, padding: 12, backgroundColor: "#f3eee6", borderRadius: 8 },
+  signal: {
+    gap: 6,
+    padding: 12,
+    backgroundColor: palette.raised,
+    borderRadius: 8,
+  },
 });

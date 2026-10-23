@@ -744,7 +744,18 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     try {
+      const tab = (name: string) =>
+        page.getByRole("tab", { name, exact: true }).click();
+      const logout = async () => {
+        await tab("Hesabım");
+        await page
+          .getByRole("button", { name: "Çıkış yap", exact: true })
+          .click();
+      };
       const login = async (email: string) => {
+        await page
+          .getByRole("button", { name: "Giriş yap ekranı", exact: true })
+          .click();
         await page
           .getByRole("textbox", { name: "E-posta", exact: true })
           .fill(email);
@@ -754,12 +765,13 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         await page
           .getByRole("button", { name: "Giriş yap", exact: true })
           .click();
-        await page
-          .getByRole("button", { name: "Çıkış yap", exact: true })
-          .waitFor();
+        await page.getByRole("tab", { name: "Keşfet", exact: true }).waitFor();
       };
       await page.goto("http://localhost:8081");
       const browserCustomerEmail = `browser-customer-${key}@example.test`;
+      await page
+        .getByRole("button", { name: "Hesap oluştur ekranı", exact: true })
+        .click();
       await page
         .getByRole("textbox", { name: "E-posta", exact: true })
         .fill(browserCustomerEmail);
@@ -769,22 +781,15 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await page
         .getByRole("button", { name: "Hesap oluştur", exact: true })
         .click();
-      await page
-        .getByRole("button", { name: "Çıkış yap", exact: true })
-        .waitFor();
+      await page.getByRole("tab", { name: "Keşfet", exact: true }).waitFor();
       const browserCustomer = await create("/auth/login", "", {
         email: browserCustomerEmail,
         password: "Isolated-strong-password-33",
       });
       await page
-        .getByRole("textbox", { name: "İsteğiniz", exact: true })
+        .getByRole("textbox", { name: "Hizmet veya işletme ara", exact: true })
         .fill(`Stage33-${key}`);
-      await page
-        .getByRole("textbox", { name: "Hedefiniz", exact: true })
-        .fill("Test care goal");
-      await page
-        .getByRole("button", { name: "Katalogda ara", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Ara", exact: true }).click();
       await page
         .getByRole("button", {
           name: `Stage33-${key} hizmetlerini gör`,
@@ -792,37 +797,49 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         })
         .click();
       await page
-        .getByRole("button", { name: /Real booking fixture ·/ })
+        .getByRole("button", {
+          name: "Real booking fixture hizmetini seç",
+          exact: true,
+        })
         .click();
       await page
-        .getByRole("button", { name: "Test location", exact: true })
+        .getByRole("button", { name: /^Test location(?: ✓)?$/ })
         .click();
       await page
         .getByRole("button", { name: "Test Professional", exact: true })
         .click();
       await page
-        .getByRole("textbox", { name: "Tarih (YYYY-MM-DD)", exact: true })
+        .getByRole("textbox", { name: "Başka tarih (YYYY-MM-DD)", exact: true })
         .fill(new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10));
       await page
         .getByRole("button", { name: "Müsait saatleri bul", exact: true })
         .click();
       await page
-        .getByRole("button", { name: /^Rezerve et:/ })
+        .getByRole("button", { name: /^Saat seç:/ })
         .first()
         .click();
+      // Choosing a slot alone must not create a reservation.
+      expect(
+        (await request("/mvp/v1/bookings", browserCustomer.accessToken)).body
+          .items,
+      ).toHaveLength(0);
       await page
-        .getByRole("button", { name: /Real booking fixture.*PENDING/ })
-        .waitFor();
-      await page
-        .getByRole("button", { name: "Çıkış yap", exact: true })
+        .getByRole("button", { name: "Randevuyu onayla", exact: true })
         .click();
-      await login(`owner-${key}@example.test`);
-      await page.getByRole("button", { name: "İşletme", exact: true }).click();
       await page
-        .getByRole("button", { name: "İşletmelerimi yükle", exact: true })
+        .getByRole("button", { name: /Real booking fixture.*Onay bekliyor/ })
+        .waitFor();
+      await logout();
+      await login(`owner-${key}@example.test`);
+      await tab("Hesabım");
+      await page
+        .getByRole("button", { name: "İşletme alanına geç", exact: true })
         .click();
       await page
         .getByRole("button", { name: `Stage33-${key}`, exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "İşletme ayarları", exact: true })
         .click();
       // Exercise the real setup forms, rather than treating backend fixtures as UI acceptance.
       const field = (name: string) =>
@@ -941,6 +958,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           where: { businessId, staffId: browserStaff.id, dayOfWeek: "MONDAY" },
         }),
       ).toMatchObject({ startTime: "09:00", endTime: "17:00" });
+      await tab("Özet");
       await page
         .getByRole("button", { name: "Talep verilerini yükle", exact: true })
         .click();
@@ -997,9 +1015,11 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           { exact: true },
         )
         .waitFor();
+      await tab("İşletmem");
       await page
         .getByRole("button", { name: `Other-${key}`, exact: true })
         .click();
+      await tab("Özet");
       await page
         .getByText("Seçilen dönem için talep verilerini yükleyin.", {
           exact: true,
@@ -1010,22 +1030,26 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         .getByRole("button", { name: "Talep verilerini yükle", exact: true })
         .click();
       await page.getByText("Talep özeti: Veri yok", { exact: true }).waitFor();
+      await tab("İşletmem");
       await page
         .getByRole("button", { name: `Stage33-${key}`, exact: true })
         .click();
+      await tab("Randevular");
       await page
         .getByRole("button", { name: "Randevuları yenile", exact: true })
         .click();
       await page
-        .getByRole("button", { name: /Real booking fixture.*PENDING/ })
+        .getByRole("button", { name: /Real booking fixture.*Onay bekliyor/ })
         .click();
-      for (const status of ["CHECKED_IN", "IN_PROGRESS", "COMPLETED"]) {
+      for (const label of [
+        "Müşteri geldi",
+        "İşlemi başlat",
+        "İşlemi tamamla",
+      ]) {
+        await page.getByRole("button", { name: label, exact: true }).click();
         await page
-          .getByRole("button", { name: `Durum: ${status}`, exact: true })
-          .click();
-        await page
-          .getByRole("button", { name: `Durum: ${status}`, exact: true })
-          .waitFor({ state: "visible" });
+          .getByRole("button", { name: label, exact: true })
+          .waitFor({ state: "hidden" });
         await page.waitForFunction(
           () => !document.querySelector('[aria-label="Yükleniyor"]'),
         );
@@ -1039,34 +1063,29 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await page
         .getByText("Browser recorded outcome", { exact: true })
         .waitFor();
+      await tab("Özet");
       await page
-        .getByRole("button", { name: "Gelir özetini yükle", exact: true })
-        .click();
-      await page
-        .getByText("Ledger kaydı yok; tahsil edilmiş gelir iddiası yok.", {
+        .getByText("Henüz kayıtlı tahsilat yok.", {
           exact: true,
         })
         .waitFor();
-      await page
-        .getByRole("button", { name: "Çıkış yap", exact: true })
-        .click();
+      await logout();
       await login(browserCustomerEmail);
+      await tab("Randevular");
       await page
         .getByRole("button", { name: "Randevuları yenile", exact: true })
         .click();
       await page
-        .getByRole("button", { name: /Real booking fixture.*COMPLETED/ })
+        .getByRole("button", { name: /Real booking fixture.*Tamamlandı/ })
         .first()
         .click();
       await page
         .getByText("Browser recorded outcome", { exact: true })
         .waitFor();
       await page.getByRole("button", { name: "Memnunum", exact: true }).click();
-      await page.getByText("Memnuniyet: SATISFIED", { exact: true }).waitFor();
+      await page.getByText("Memnuniyet: Memnun", { exact: true }).waitFor();
       await worker();
-      await page
-        .getByRole("button", { name: "Bakım geçmişimi yükle", exact: true })
-        .click();
+      await tab("Bakımım");
       await page
         .getByText(/Browser recorded outcome/)
         .first()
@@ -1245,6 +1264,9 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       });
       await page.goto("http://localhost:8081");
       await login(browserCustomerEmail);
+      await page
+        .getByRole("button", { name: "Fotoğraflı danışmanlık", exact: true })
+        .click();
       await page
         .getByRole("textbox", { name: "İsteğiniz", exact: true })
         .fill("Saç bakımı");
