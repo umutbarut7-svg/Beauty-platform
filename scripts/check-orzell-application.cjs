@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-/* global require, module, process, console, URL, document, innerWidth */
+/* global require, process, console, URL, document, innerWidth */
 // Synthetic UI contract tests. Every non-local request is intercepted or aborted.
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -177,6 +177,9 @@ main(async (browser, origin, output) => {
   await click("Deneme Salonu hizmetlerini gör");
   await click("Saç bakımı hizmetini seç");
   await click("Deneme Uzmanı");
+  await page
+    .getByLabel("Başka tarih (YYYY-MM-DD)", { exact: true })
+    .fill(startsAt.slice(0, 10));
   await click("Müsait saatleri bul");
   await page.getByRole("button", { name: /^Saat seç:/ }).click();
   await expect(page.getByText("Randevun hazır", { exact: true })).toBeVisible();
@@ -186,6 +189,9 @@ main(async (browser, origin, output) => {
     ).length,
     0,
   );
+  await page
+    .getByRole("button", { name: "Randevuyu onayla", exact: true })
+    .scrollIntoViewIfNeeded();
   await shot("booking-review");
   await click("Randevuyu onayla");
   await expect(

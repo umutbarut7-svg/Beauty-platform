@@ -1,4 +1,4 @@
-import { Text as NativeText, type TextProps } from "react-native";
+import { Text as NativeText, Platform, type TextProps } from "react-native";
 
 export const palette = {
   background: "#0b0910",
@@ -13,7 +13,23 @@ export const palette = {
 };
 
 export function AppText({ style, ...props }: TextProps) {
-  return <NativeText {...props} style={[{ color: palette.text }, style]} />;
+  return (
+    <NativeText
+      {...props}
+      style={[
+        {
+          color: palette.text,
+          fontFamily:
+            Platform.OS === "web"
+              ? "system-ui"
+              : Platform.OS === "ios"
+                ? "System"
+                : "sans-serif",
+        },
+        style,
+      ]}
+    />
+  );
 }
 
 export * from "./presentation";

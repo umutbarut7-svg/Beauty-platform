@@ -760,10 +760,11 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           .getByRole("button", { name: "Çıkış yap", exact: true })
           .click();
       };
-      const login = async (email: string) => {
-        await page
-          .getByRole("button", { name: "Giriş yap ekranı", exact: true })
-          .click();
+      const login = async (email: string, mobileApp = true) => {
+        if (mobileApp)
+          await page
+            .getByRole("button", { name: "Giriş yap ekranı", exact: true })
+            .click();
         await page
           .getByRole("textbox", { name: "E-posta", exact: true })
           .fill(email);
@@ -773,7 +774,11 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         await page
           .getByRole("button", { name: "Giriş yap", exact: true })
           .click();
-        await page.getByRole("tab", { name: "Keşfet", exact: true }).waitFor();
+        await (
+          mobileApp
+            ? page.getByRole("tab", { name: "Keşfet", exact: true })
+            : page.getByRole("button", { name: "Çıkış yap", exact: true })
+        ).waitFor();
       };
       await page.goto("http://localhost:8081");
       const browserCustomerEmail = `browser-customer-${key}@example.test`;
@@ -1136,7 +1141,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       }
       expect(ready).toBe(true);
       await page.goto("http://localhost:3000");
-      await login(`owner-${key}@example.test`);
+      await login(`owner-${key}@example.test`, false);
       await page
         .getByRole("button", { name: "İşletmeleri yükle", exact: true })
         .click();
