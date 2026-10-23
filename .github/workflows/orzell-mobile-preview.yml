@@ -7,6 +7,7 @@ on:
       - config/brand/orzell.json
       - scripts/prepare-orzell-mobile.py
       - scripts/test-prepare-orzell-mobile.py
+      - scripts/check-orzell-preview.cjs
       - .github/workflows/orzell-mobile-preview.yml
   workflow_dispatch:
 
@@ -52,6 +53,19 @@ jobs:
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/mobile typecheck
           pnpm --filter @beauty-platform/mobile build
+      - name: Check narrow and wide browser layouts offline
+        run: |
+          npm install --prefix "$RUNNER_TEMP/orzell-browser" --no-save --ignore-scripts playwright@1.58.2
+          node "$RUNNER_TEMP/orzell-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/orzell-browser/node_modules" node harness/scripts/check-orzell-preview.cjs application/apps/mobile/dist browser-checks
+      - name: Upload browser review images
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-browser-review
+          path: browser-checks/
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ORZELL-web-preview
