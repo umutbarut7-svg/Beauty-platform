@@ -37,7 +37,7 @@ jobs:
               const token=input+"."+crypto.sign("sha256",Buffer.from(input),{key,dsaEncoding:"ieee-p1363"}).toString("base64url");
               console.log("::add-mask::"+token);
               const r=await fetch("https://api.appstoreconnect.apple.com/v1/"+path,{method,headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined,redirect:"error",signal:AbortSignal.timeout(30000)});
-              if(!r.ok) throw new Error("Apple "+method+" "+path.split("?")[0]+" returned HTTP "+r.status);
+              if(!r.ok) { const errors=await r.json().catch(()=>({})); throw new Error("Apple "+method+" "+path.split("?")[0]+" returned HTTP "+r.status+": "+JSON.stringify(errors.errors?.map(e=>({code:e.code,title:e.title,detail:e.detail})))); }
               return r.status===204?null:r.json();
             }
             const apps=await api("GET","apps?filter[bundleId]=com.orzell.app&limit=2");
@@ -69,6 +69,8 @@ jobs:
               await api("PATCH","builds/"+encodeURIComponent(build.id),{data:{type:"builds",id:build.id,attributes:{usesNonExemptEncryption:false}}});
               console.log("Platform HTTPS-only encryption exemption recorded for reviewed build 1011.");
             }
+            const before=await api("GET","builds/"+encodeURIComponent(build.id)+"/buildBetaDetail");
+            console.log("Internal state before group assignment: "+before.data.attributes.internalBuildState);
             const current=await api("GET","betaGroups/"+encodeURIComponent(group.id)+"/builds?limit=200");
             if(!current.data.some(b=>b.id===build.id)){
               await api("POST","betaGroups/"+encodeURIComponent(group.id)+"/relationships/builds",{data:[{type:"builds",id:build.id}]});
