@@ -17,6 +17,7 @@ import {
   type MvpCatalog,
   type MvpResult,
 } from "@beauty-platform/types";
+import { locationLabel, staffForBooking } from "./booking-options";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
 import { BusinessDemand } from "./BusinessDemand";
@@ -116,6 +117,7 @@ export default function App() {
   const [locationId, setLocationId] = useState("");
   const [staffId, setStaffId] = useState("");
   const [date, setDate] = useState(todayIso());
+  const [availabilityNotice, setAvailabilityNotice] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
   const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
   const [bookings, setBookings] = useState<MvpBooking[]>([]);
@@ -143,6 +145,7 @@ export default function App() {
     setServiceId("");
     setLocationId("");
     setStaffId("");
+    setAvailabilityNotice("");
     setSlots([]);
     setPendingSlot(null);
     setDate(todayIso());
@@ -348,6 +351,7 @@ export default function App() {
   }
   async function choose(b: Business) {
     setCatalog(null);
+    setAvailabilityNotice("");
     setSlots([]);
     setPendingSlot(null);
     setServiceId("");
@@ -391,6 +395,7 @@ export default function App() {
       values.map((item) => (item.id === cancelled.id ? cancelled : item)),
     );
     setCancelTarget(null);
+    setAvailabilityNotice("");
     setSlots([]);
     setPendingSlot(null);
     setNotice("Randevunuz iptal edildi.");
@@ -673,6 +678,7 @@ export default function App() {
                       async () => {
                         setCatalog(null);
                         setPendingSlot(null);
+                        setAvailabilityNotice("");
                         setSlots([]);
                       },
                       true,
@@ -703,6 +709,7 @@ export default function App() {
                           onPress={() => {
                             setServiceId(service.id);
                             setStaffId("");
+                            setAvailabilityNotice("");
                             setSlots([]);
                             setPendingSlot(null);
                           }}
@@ -733,9 +740,11 @@ export default function App() {
                         </Text>
                         {catalog.locations.map((location) =>
                           button(
-                            `${location.name}${locationId === location.id ? " ✓" : ""}`,
+                            `${locationLabel(location, catalog.locations)}${locationId === location.id ? " ✓" : ""}`,
                             async () => {
                               setLocationId(location.id);
+                              setStaffId("");
+                              setAvailabilityNotice("");
                               setSlots([]);
                               setPendingSlot(null);
                             },
@@ -743,125 +752,162 @@ export default function App() {
                           ),
                         )}
                         <Text style={styles.fieldLabel}>Profesyonel</Text>
-                        {catalog.staff
-                          .filter((staff) =>
-                            staff.services.some(
-                              (service) => service.serviceId === serviceId,
-                            ),
-                          )
-                          .map((staff) =>
-                            button(
-                              `${staff.displayName}${staffId === staff.id ? " ✓" : ""}`,
-                              async () => {
-                                setStaffId(staff.id);
-                                setSlots([]);
-                                setPendingSlot(null);
-                              },
-                              staffId !== staff.id,
-                            ),
+                        {!locationId && (
+                          <Text style={styles.small}>Önce şubeni seç.</Text>
+                        )}
+                        {locationId &&
+                          !staffForBooking(catalog, serviceId, locationId)
+                            .length && (
+                            <Text style={styles.body}>
+                              Bu şubede seçtiğin hizmet için rezervasyona açık
+                              profesyonel yok. Başka bir şube seçebilirsin.
+                            </Text>
+                          )}
+                        {locationId &&
+                          staffForBooking(catalog, serviceId, locationId).map(
+                            (staff) =>
+                              button(
+                                `${staff.displayName}${staffId === staff.id ? " ✓" : ""}`,
+                                async () => {
+                                  setStaffId(staff.id);
+                                  setAvailabilityNotice("");
+                                  setSlots([]);
+                                  setPendingSlot(null);
+                                },
+                                staffId !== staff.id,
+                              ),
                           )}
                       </View>
                     )}
-                    {serviceId && locationId && (
-                      <View style={styles.card}>
-                        <Text style={styles.step}>03 · ZAMANIN</Text>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.dateRow}
-                        >
-                          {Array.from({ length: 7 }, (_, index) =>
-                            todayIso(index),
-                          ).map((value) => (
-                            <Pressable
-                              key={value}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Tarih seç: ${value}`}
-                              accessibilityState={{ selected: date === value }}
-                              disabled={busy}
-                              onPress={() => {
-                                setDate(value);
-                                setSlots([]);
-                                setPendingSlot(null);
-                              }}
-                              style={[
-                                styles.dateChip,
-                                date === value && styles.choiceSelected,
-                              ]}
+                    {serviceId &&
+                      locationId &&
+                      staffForBooking(catalog, serviceId, locationId).length >
+                        0 && (
+                        <View style={styles.card}>
+                          <Text style={styles.step}>03 · ZAMANIN</Text>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.dateRow}
+                          >
+                            {Array.from({ length: 7 }, (_, index) =>
+                              todayIso(index),
+                            ).map((value) => (
+                              <Pressable
+                                key={value}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Tarih seç: ${value}`}
+                                accessibilityState={{
+                                  selected: date === value,
+                                }}
+                                disabled={busy}
+                                onPress={() => {
+                                  setDate(value);
+                                  setAvailabilityNotice("");
+                                  setSlots([]);
+                                  setPendingSlot(null);
+                                }}
+                                style={[
+                                  styles.dateChip,
+                                  date === value && styles.choiceSelected,
+                                ]}
+                              >
+                                <Text style={styles.fieldLabel}>
+                                  {new Date(
+                                    `${value}T12:00:00`,
+                                  ).toLocaleDateString("tr-TR", {
+                                    day: "numeric",
+                                    month: "short",
+                                  })}
+                                </Text>
+                                <Text style={styles.small}>
+                                  {new Date(
+                                    `${value}T12:00:00`,
+                                  ).toLocaleDateString("tr-TR", {
+                                    weekday: "short",
+                                  })}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                          {input("Başka tarih (YYYY-MM-DD)", date, (value) => {
+                            setDate(value);
+                            setAvailabilityNotice("");
+                            setSlots([]);
+                            setPendingSlot(null);
+                          })}
+                          {button("Müsait saatleri bul", async () => {
+                            setAvailabilityNotice("");
+                            setSlots([]);
+                            setPendingSlot(null);
+                            const dateError = bookingDateError(date);
+                            if (dateError) {
+                              setAvailabilityNotice(dateError);
+                              setNotice(dateError);
+                              return;
+                            }
+                            const query = new URLSearchParams({
+                              locationId,
+                              serviceId,
+                              date,
+                              ...(staffId ? { staffMemberId: staffId } : {}),
+                            });
+                            try {
+                              const value = await api.request<Slot[]>(
+                                `/businesses/${catalog.id}/availability?${query}`,
+                              );
+                              setSlots(value);
+                              if (!value.length)
+                                setAvailabilityNotice(
+                                  "Bu tarih için müsait saat bulunamadı. Başka bir gün veya şube seçebilirsin.",
+                                );
+                            } catch (error) {
+                              setAvailabilityNotice(
+                                error instanceof ApiError &&
+                                  error.status === 404
+                                  ? "Seçilen şube, hizmet ve profesyonel birlikte rezervasyona açık değil. Başka bir şube veya profesyonel seçebilirsin."
+                                  : error instanceof ApiError
+                                    ? error.message
+                                    : "Müsait saatler yüklenemedi. Yeniden deneyebilirsin.",
+                              );
+                              throw error;
+                            }
+                          })}
+                          {availabilityNotice ? (
+                            <Text
+                              accessibilityLiveRegion="polite"
+                              style={styles.notice}
                             >
-                              <Text style={styles.fieldLabel}>
-                                {new Date(
-                                  `${value}T12:00:00`,
-                                ).toLocaleDateString("tr-TR", {
-                                  day: "numeric",
-                                  month: "short",
-                                })}
-                              </Text>
-                              <Text style={styles.small}>
-                                {new Date(
-                                  `${value}T12:00:00`,
-                                ).toLocaleDateString("tr-TR", {
-                                  weekday: "short",
-                                })}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </ScrollView>
-                        {input("Başka tarih (YYYY-MM-DD)", date, (value) => {
-                          setDate(value);
-                          setSlots([]);
-                          setPendingSlot(null);
-                        })}
-                        {button("Müsait saatleri bul", async () => {
-                          setSlots([]);
-                          setPendingSlot(null);
-                          const dateError = bookingDateError(date);
-                          if (dateError) {
-                            setNotice(dateError);
-                            return;
-                          }
-                          const query = new URLSearchParams({
-                            locationId,
-                            serviceId,
-                            date,
-                            ...(staffId ? { staffMemberId: staffId } : {}),
-                          });
-                          const value = await api.request<Slot[]>(
-                            `/businesses/${catalog.id}/availability?${query}`,
-                          );
-                          setSlots(value);
-                          if (!value.length)
-                            setNotice(
-                              "Bu tarih için müsait saat bulunamadı. Başka bir gün deneyebilirsin.",
-                            );
-                        })}
-                        <View style={styles.row}>
-                          {slots.map((slot) => (
-                            <Pressable
-                              key={`${slot.startsAt}-${slot.staffId}`}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Saat seç: ${new Date(slot.startsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`}
-                              accessibilityState={{
-                                selected: pendingSlot === slot,
-                              }}
-                              disabled={busy}
-                              onPress={() => setPendingSlot(slot)}
-                              style={[
-                                styles.timeChip,
-                                pendingSlot === slot && styles.choiceSelected,
-                              ]}
-                            >
-                              <Text style={styles.fieldLabel}>
-                                {new Date(slot.startsAt).toLocaleTimeString(
-                                  "tr-TR",
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )}
-                              </Text>
-                            </Pressable>
-                          ))}
+                              {availabilityNotice}
+                            </Text>
+                          ) : null}
+                          <View style={styles.row}>
+                            {slots.map((slot) => (
+                              <Pressable
+                                key={`${slot.startsAt}-${slot.staffId}`}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Saat seç: ${new Date(slot.startsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`}
+                                accessibilityState={{
+                                  selected: pendingSlot === slot,
+                                }}
+                                disabled={busy}
+                                onPress={() => setPendingSlot(slot)}
+                                style={[
+                                  styles.timeChip,
+                                  pendingSlot === slot && styles.choiceSelected,
+                                ]}
+                              >
+                                <Text style={styles.fieldLabel}>
+                                  {new Date(slot.startsAt).toLocaleTimeString(
+                                    "tr-TR",
+                                    { hour: "2-digit", minute: "2-digit" },
+                                  )}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
                         </View>
-                      </View>
-                    )}
+                      )}
                     {pendingSlot && selectedService && (
                       <View style={styles.confirmCard}>
                         <Text style={styles.eyebrow}>SON BİR KONTROL</Text>
@@ -900,6 +946,7 @@ export default function App() {
                               startsAt: pendingSlot.startsAt,
                             },
                           );
+                          setAvailabilityNotice("");
                           setSlots([]);
                           setPendingSlot(null);
                           setSelected(created);
