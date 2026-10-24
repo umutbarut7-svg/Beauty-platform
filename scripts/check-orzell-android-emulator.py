@@ -123,7 +123,10 @@ def main():
                     continue
                 if class_name and node.attrib.get('class') != class_name:
                     continue
-                if node.attrib.get('content-desc') != label and node.attrib.get('text') != label:
+                # Explicit accessibility names distinguish tabs from submit buttons
+                # even when their visible child text is identical.
+                name = node.attrib.get('content-desc') or node.attrib.get('text')
+                if name != label:
                     continue
                 r = rectangle(node)
                 if not r or node.attrib.get('enabled') != 'true':
