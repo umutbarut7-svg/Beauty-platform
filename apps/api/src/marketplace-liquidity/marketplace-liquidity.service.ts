@@ -49,10 +49,27 @@ export class MarketplaceLiquidityService {
         }
       : { status: "NO_DATA", snapshot: null };
   }
-  async demand(user: AuthenticatedUser, businessId: string, limit = 20) {
+  async demand(
+    user: AuthenticatedUser,
+    businessId: string,
+    limit = 20,
+    window?: LiquidityWindow,
+  ) {
     await this.authorize(user, businessId);
+    const now = new Date();
     return this.db.marketplaceDemandSignal.findMany({
-      where: { businessId },
+      where: {
+        businessId,
+        ...(window
+          ? {
+              timeWindow: window,
+              observedAt: {
+                gte: new Date(now.getTime() - this.days(window) * 86_400_000),
+                lte: now,
+              },
+            }
+          : {}),
+      },
       orderBy: { observedAt: "desc" },
       take: Math.min(100, limit),
       select: {

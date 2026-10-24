@@ -23,7 +23,7 @@ export class MarketplaceLiquidityController {
     @Param("businessId", ResourceIdPipe) businessId: string,
     @Query() query: LiquidityQueryDto,
   ) {
-    return this.service.demand(user, businessId, query.limit);
+    return this.service.demand(user, businessId, query.limit, query.window);
   }
   @Get("supply") supply(
     @CurrentUser() user: AuthenticatedUser,
