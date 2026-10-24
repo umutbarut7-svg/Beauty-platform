@@ -12,10 +12,15 @@ const SOURCE =
   "postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_backup_ci?schema=public";
 const TARGET =
   "postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_restore_ci?schema=public";
+const BOUNDARY = process.env.PRIVACY_SNAPSHOT_BOUNDARY;
+const BEFORE_WITHDRAWAL = BOUNDARY === "BEFORE_WITHDRAWAL_COMMIT";
 const POLICY = "synthetic-restore-fixture-not-public-policy";
 let stage = "isolated-configuration";
 async function main() {
   assert.equal(process.env.CI, "true");
+  assert.ok(
+    ["BEFORE_WITHDRAWAL_COMMIT", "AFTER_WITHDRAWAL_COMMIT"].includes(BOUNDARY),
+  );
   assert.equal(process.env.PRIVACY_RESTORE_FIXTURE, "confirmed");
   assert.equal(process.env.NODE_ENV, "test");
   assert.equal(process.env.DATABASE_URL, SOURCE);
@@ -54,10 +59,10 @@ async function main() {
       maxBuffer: 64 * 1024 * 1024,
       ...options,
     });
-  async function fixture(expiresAt) {
+  async function fixture(expiresAt, fixtureOwnerId = ownerId) {
     const consent = await source.mvpPhotoConsent.create({
       data: {
-        ownerId,
+        ownerId: fixtureOwnerId,
         policyVersion: POLICY,
         noticeHash: "0".repeat(64),
         expiresAt,
@@ -69,7 +74,7 @@ async function main() {
     await fs.writeFile(file, "synthetic restore fixture");
     const photo = await source.mvpPhoto.create({
       data: {
-        ownerId,
+        ownerId: fixtureOwnerId,
         consentId: consent.id,
         objectKey: `private/mvp/${keyId}`,
         mime: "image/jpeg",
@@ -80,7 +85,7 @@ async function main() {
     });
     const analysis = await source.mvpPhotoAnalysis.create({
       data: {
-        ownerId,
+        ownerId: fixtureOwnerId,
         photoId: photo.id,
         expiresAt,
         status: "PLAN",
@@ -94,7 +99,11 @@ async function main() {
   }
   async function hidden(item) {
     await assert.rejects(
-      () => restoredVisual.get(owner, item.analysis.id),
+      () =>
+        restoredVisual.get(
+          { id: item.photo.ownerId, role: "CUSTOMER" },
+          item.analysis.id,
+        ),
       (error) => error.getStatus?.() === 404,
     );
   }
@@ -143,10 +152,31 @@ async function main() {
         passwordHash: "not-a-login-hash",
       },
     });
+    const otherOwnerId = `restore-other-${randomUUID()}`;
+    await source.user.create({
+      data: {
+        id: otherOwnerId,
+        email: `${otherOwnerId}@example.test`,
+        passwordHash: "not-a-login-hash",
+      },
+    });
+    const other = await fixture(future(), otherOwnerId);
     const retained = await fixture(future());
     const expired = await fixture(new Date(Date.now() + 2000));
     const revoked = await fixture(future());
-    stage = "authoritative-withdrawal-before-backup";
+    const snapshot = () =>
+      docker([
+        container,
+        "pg_dump",
+        "-U",
+        "postgres",
+        "--format=custom",
+        "--no-owner",
+        "--dbname=beauty_privacy_backup_ci",
+      ]);
+    stage = "snapshot-before-withdrawal";
+    const earlierDump = BEFORE_WITHDRAWAL ? snapshot() : null;
+    stage = "authoritative-withdrawal";
     const withdrawal = await sourceVisual.withdraw(owner, revoked.consent.id);
     assert.equal(withdrawal.physicalErasure, "PENDING_WORKER");
     assert.equal(
@@ -158,20 +188,12 @@ async function main() {
       null,
     );
     stage = "postgres-custom-backup";
-    const dump = docker([
-      container,
-      "pg_dump",
-      "-U",
-      "postgres",
-      "--format=custom",
-      "--no-owner",
-      "--dbname=beauty_privacy_backup_ci",
-    ]);
+    const dump = earlierDump ?? snapshot();
     assert.ok(dump.length > 1000);
     await fs.writeFile(path.join(root, "snapshot.dump"), dump, { mode: 0o600 });
     await source.$disconnect();
     console.log(
-      "PASS: actual pg_dump snapshot captured after authoritative withdrawal; source connection closed",
+      `PASS: actual pg_dump snapshot boundary ${BOUNDARY}; source withdrawal committed and source connection closed`,
     );
     stage = "restore-into-separate-database";
     docker([
@@ -206,18 +228,18 @@ async function main() {
           where: { id: revoked.consent.id },
         })
       ).revokedAt instanceof Date,
-      true,
+      !BEFORE_WITHDRAWAL,
     );
-    assert.equal(
-      (
-        await restored.mvpPhotoAnalysis.findUniqueOrThrow({
-          where: { id: revoked.analysis.id },
-        })
-      ).output,
-      null,
-    );
+    const recoveredOutput = (
+      await restored.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: revoked.analysis.id },
+      })
+    ).output;
+    if (BEFORE_WITHDRAWAL)
+      assert.deepEqual(recoveredOutput, { steps: ["synthetic plan"] });
+    else assert.equal(recoveredOutput, null);
     console.log(
-      "PASS: real pg_restore into separate PostgreSQL database preserved withdrawn consent and scrubbed result",
+      "PASS: real pg_restore into separate PostgreSQL database matched its actual snapshot boundary",
     );
     // Enable only the local read-query fixture, without an API listener, provider or cloud storage.
     process.env.STAGE33_MVP_ENABLED = "true";
@@ -231,18 +253,94 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 100));
     stage = "read-guards-before-cleanup";
     await hidden(expired);
-    await hidden(revoked);
-    assert.equal(
-      (await restoredVisual.get(owner, retained.analysis.id)).status,
-      "PLAN",
-    );
+    if (BEFORE_WITHDRAWAL) {
+      // No listener exists: deliberately show why an old backup MUST stay offline.
+      assert.equal(
+        (await restoredVisual.get(owner, revoked.analysis.id)).status,
+        "PLAN",
+      );
+      stage = "offline-conservative-quarantine";
+      const sql = await fs.readFile("quarantine-restored-photos.sql", "utf8");
+      const psql = (input) =>
+        docker(
+          [
+            "-i",
+            container,
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            "postgres",
+            "--dbname=beauty_privacy_restore_ci",
+            "--file=-",
+          ],
+          { input, stdio: ["pipe", "pipe", "pipe"] },
+        );
+      assert.throws(() => psql(sql));
+      assert.equal(
+        (await restoredVisual.get(owner, retained.analysis.id)).status,
+        "PLAN",
+      );
+      assert.equal(
+        await restored.mvpPrivacyEvent.count({
+          where: { action: "photo.restore.invalidated" },
+        }),
+        0,
+      );
+      assert.throws(() =>
+        psql(
+          "SET orzell.restore_quarantine = 'confirmed-offline';\nSET orzell.restore_database = 'wrong_database';\n" +
+            sql,
+        ),
+      );
+      const acknowledged =
+        "SET orzell.restore_quarantine = 'confirmed-offline';\nSET orzell.restore_database = 'beauty_privacy_restore_ci';\n" +
+        sql;
+      psql(acknowledged);
+      psql(acknowledged);
+      assert.equal(
+        await restored.mvpPhotoConsent.count({ where: { revokedAt: null } }),
+        0,
+      );
+      assert.equal(
+        await restored.mvpPrivacyEvent.count({
+          where: { ownerId, action: "photo.restore.invalidated" },
+        }),
+        3,
+      );
+      assert.equal(
+        await restored.mvpPrivacyEvent.count({
+          where: { ownerId, action: "photo.consent.withdrawn" },
+        }),
+        0,
+      );
+      assert.equal(
+        await restored.mvpPrivacyEvent.count({
+          where: { ownerId: otherOwnerId, action: "photo.restore.invalidated" },
+        }),
+        1,
+      );
+      for (const item of [retained, expired, revoked, other])
+        await hidden(item);
+      console.log(
+        "PASS: old snapshot stayed offline; guarded quarantine invalidated all restored consents and scrubbed plans; replay emitted no duplicate or fabricated user-withdrawal events",
+      );
+    } else await hidden(revoked);
+    if (!BEFORE_WITHDRAWAL)
+      assert.equal(
+        (await restoredVisual.get(owner, retained.analysis.id)).status,
+        "PLAN",
+      );
     console.log(
-      "PASS: actual restored read query denies expired/withdrawn sessions before cleanup while valid owner plan remains readable",
+      "PASS: restored read guards deny unavailable sessions before worker cleanup",
     );
     stage = "restored-worker-erasure";
     await cleanupWorker();
     await cleanupWorker();
-    for (const item of [expired, revoked]) {
+    for (const item of BEFORE_WITHDRAWAL
+      ? [retained, expired, revoked, other]
+      : [expired, revoked]) {
       assert.equal(await exists(item.file), false);
       assert.ok(
         (
@@ -262,7 +360,7 @@ async function main() {
       assert.equal(
         await restored.mvpPrivacyEvent.count({
           where: {
-            ownerId,
+            ownerId: item.photo.ownerId,
             resourceId: item.photo.id,
             action: "photo.object.erased",
           },
@@ -277,34 +375,64 @@ async function main() {
       );
       await hidden(item);
     }
-    assert.equal(await exists(retained.file), true);
+    assert.equal(await exists(retained.file), !BEFORE_WITHDRAWAL);
+    assert.equal(await exists(other.file), !BEFORE_WITHDRAWAL);
     assert.equal(
-      (await restoredVisual.get(owner, retained.analysis.id)).status,
-      "PLAN",
+      await restored.user.count({
+        where: { id: { in: [ownerId, otherOwnerId] } },
+      }),
+      2,
     );
+    for (const item of [retained, expired, revoked, other]) {
+      assert.equal(
+        (
+          await restored.mvpPhotoConsent.findUniqueOrThrow({
+            where: { id: item.consent.id },
+          })
+        ).auditExpiresAt.getTime(),
+        item.consent.auditExpiresAt.getTime(),
+      );
+      if (BEFORE_WITHDRAWAL) {
+        const analysis = await restored.mvpPhotoAnalysis.findUniqueOrThrow({
+          where: { id: item.analysis.id },
+        });
+        assert.equal(analysis.intent, "");
+        assert.equal(analysis.target, "");
+        assert.deepEqual(analysis.answers, []);
+        assert.equal(analysis.status, "REVOKED");
+      }
+    }
+    if (!BEFORE_WITHDRAWAL)
+      assert.equal(
+        (await restoredVisual.get(owner, retained.analysis.id)).status,
+        "PLAN",
+      );
     assert.equal(
       await restored.mvpPrivacyEvent.count({
         where: { ownerId, action: "photo.consent.withdrawn" },
       }),
-      1,
+      BEFORE_WITHDRAWAL ? 0 : 1,
     );
     console.log(
-      "PASS: restored real worker erases only eligible local fixtures; replay is idempotent and unexpired content/audit evidence survives",
+      "PASS: restored real worker erases only eligible local fixtures; replay is idempotent and audit evidence survives",
     );
     await fs.writeFile(
       "privacy-restore-evidence.json",
       JSON.stringify(
         {
           status: "PASS",
-          application: "123e7339e2ab2a9e8e94f391a8431b73afc28efe",
-          snapshotBoundary: "AFTER_WITHDRAWAL_COMMIT",
+          application: "3be316d1b2458c49fde162147244aa8077a1f614",
+          snapshotBoundary: BOUNDARY,
+          conservativeInvalidationTested: BEFORE_WITHDRAWAL,
+          productionRecoveryExecuted: false,
           snapshotSha256: createHash("sha256").update(dump).digest("hex"),
           actualPgDumpRestore: true,
           separateDatabase: true,
           authoritativeReadQueries: true,
           storage: "LOCAL_FILESYSTEM_FIXTURE",
           cleanupWorkerRuns: 2,
-          earlierSnapshotsReconciled: false,
+          durableWithdrawalReplayTested: false,
+          allRestoredOwnersInvalidated: BEFORE_WITHDRAWAL,
           productionBackupEncryptionTested: false,
           realS3RecoveryTested: false,
           physicalDeviceAcceptance: false,
