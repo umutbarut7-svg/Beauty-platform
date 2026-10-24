@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   upload:
-    if: github.ref == 'refs/heads/codex/orzell-testflight-upload'
+    if: github.ref == 'refs/heads/codex/orzell-testflight-upload' && (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip testflight]'))
     runs-on: macos-26
     timeout-minutes: 60
     env:
