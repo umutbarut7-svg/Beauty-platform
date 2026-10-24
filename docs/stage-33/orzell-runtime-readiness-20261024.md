@@ -52,15 +52,16 @@ Owner-confirmed details on 24 October 2026:
 | Field | Confirmed value |
 | --- | --- |
 | Product/business display name | ORZELL App |
+| Individual legal operator (owner declaration) | Umut Barut |
 | Public support/contact email | orzellapp@gmail.com |
 | Visual brand/wordmark | ORZELL; existing original emblem and styling preserved |
 
-These confirm the display name and public contact channel. They do not establish
-a registered company title or the legal individual/company operating the platform.
+The owner selected Umut Barut as the individual operating ORZELL App. This records
+the owner's declaration; it does not verify identity or establish a registered
+company title. The original ORZELL visual brand remains unchanged.
 
-The remaining factual inputs are that legal operator identity, launch market and
-official registry source for business checks, and the independent reviewer's
-assignment. The supplied email has not been independently tested for delivery.
+The remaining factual inputs are launch market, official registry source for
+business checks, and the independent reviewer's assignment. The supplied email has not been independently tested for delivery.
 Previously selected 24-hour consultation/photo and 90-day evidence retention
 remain unchanged.
 
