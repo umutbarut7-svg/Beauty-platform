@@ -103,13 +103,22 @@ def main():
             candidates, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
         # Android may report the full ScrollView bounds behind the IME.
         # Keep both swipes and taps above the observed keyboard window.
-        keyboards = [rectangle(n) for n in tree.iter()
-                     if n.attrib.get('package', '').startswith('com.google.android.inputmethod')
-                     or n.attrib.get('package', '').startswith('com.android.inputmethod')]
-        keyboard_tops = [r[1] for r in keyboards if r and r[3] > r[1]
-                         and r[2] > left and r[0] < right and r[1] > top]
-        if keyboard_tops:
-            bottom = min(bottom, min(keyboard_tops))
+        if keyboard_shown():
+            # UIAutomator's active-app hierarchy omits the separate IME window.
+            windows = adb('shell', 'dumpsys', 'window', 'windows')
+            frames = []
+            for block in re.split(r'(?m)^\\s*Window #', windows):
+                if not re.search(r'Window\\{[^\\n}]*\\bInputMethod\\}', block):
+                    continue
+                match = re.search(
+                    r'mFrame=\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]', block)
+                if match:
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    if x2 > left and x1 < right and y2 > y1 > top:
+                        frames.append(y1)
+            if not frames:
+                raise RuntimeError('Visible keyboard window frame unavailable')
+            bottom = min(bottom, min(frames))
         if bottom - top < 100:
             raise RuntimeError('Native app viewport obscured')
         return left, top, right, bottom
