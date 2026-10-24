@@ -26,6 +26,7 @@ import {
   AppText as Text,
   palette,
   todayIso,
+  bookingDateError,
   statusLabels,
   outcomeLabels,
   formatPrice,
@@ -814,8 +815,9 @@ export default function App() {
                         {button("Müsait saatleri bul", async () => {
                           setSlots([]);
                           setPendingSlot(null);
-                          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                            setNotice("Tarihi YYYY-MM-DD biçiminde girin.");
+                          const dateError = bookingDateError(date);
+                          if (dateError) {
+                            setNotice(dateError);
                             return;
                           }
                           const query = new URLSearchParams({
