@@ -1,0 +1,98 @@
+name: Stage 33 live storage erasure acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/operations/live-storage-request.json]
+
+permissions: {}
+
+concurrency:
+  group: stage33-live-storage
+  cancel-in-progress: false
+
+jobs:
+  adapters:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      DATABASE_URL: postgresql://unused:unused@127.0.0.1:5432/not_connected
+    steps:
+      - name: Check out trusted test harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+
+      - name: Check out reviewed application revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # Explicit reviewed Stage 33 head; never accept an arbitrary ref input.
+          ref: 3be316d1b2458c49fde162147244aa8077a1f614
+          path: application
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: application/pnpm-lock.yaml
+
+      - name: Build reviewed adapters before accessing credentials
+        working-directory: application
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/api prisma:generate
+          pnpm --filter @beauty-platform/types build
+          pnpm --filter @beauty-platform/api build
+          cp "$GITHUB_WORKSPACE/harness/scripts/stage33-live-storage.cjs" apps/api/stage33-live-storage.cjs
+
+      - name: Assume narrowly scoped synthetic-test role
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformLiveAdapterTest
+          aws-region: eu-north-1
+          role-session-name: stage33-adapters-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+
+      - name: Verify assumed AWS account and role before accessing data
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import json, subprocess
+          result = subprocess.run(
+              ["aws", "sts", "get-caller-identity", "--output", "json", "--no-cli-pager",
+               "--cli-connect-timeout", "5", "--cli-read-timeout", "20"],
+              capture_output=True, text=True, timeout=35, check=True,
+          )
+          identity = json.loads(result.stdout)
+          expected = "arn:aws:sts::926642724499:assumed-role/BeautyPlatformLiveAdapterTest/"
+          if identity.get("Account") != "926642724499" or not identity.get("Arn", "").startswith(expected):
+              raise SystemExit("AWS test identity rejected; provider access blocked")
+          print("Expected synthetic-test account and role verified")
+          PYTHON
+
+      - name: Verify synthetic storage without provider credentials
+        working-directory: application/apps/api
+        env:
+          STAGE33_LIVE_STORAGE_TEST: confirmed
+          NODE_ENV: production
+          MVP_S3_ENABLED: "true"
+          MVP_S3_BUCKET: beautyplatform-private-photos-dev
+          MVP_AI_ENABLED: "false"
+        run: node stage33-live-storage.cjs
