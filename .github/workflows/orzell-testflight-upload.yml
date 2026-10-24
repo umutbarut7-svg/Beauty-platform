@@ -1,0 +1,146 @@
+name: ORZELL signed iOS TestFlight upload
+
+on:
+  push:
+    branches: [codex/orzell-testflight-upload]
+    paths: [.github/workflows/orzell-testflight-upload.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: orzell-testflight-upload
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: github.ref == 'refs/heads/codex/orzell-testflight-upload' && (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip testflight]'))
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+    steps:
+      - name: Check out reviewed application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install pinned dependencies and shared types
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/types build
+      - name: Generate release project with real Apple identity
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require("node:fs");
+          const file="apps/mobile/app.json";
+          const c=JSON.parse(fs.readFileSync(file,"utf8"));
+          if(c.expo.ios.bundleIdentifier!=="com.orzell.app" || c.expo.ios.appleTeamId!=="CDL78S6U9A") throw new Error("Unexpected release identity");
+          c.expo.ios.buildNumber=String(1000+Number(process.env.GITHUB_RUN_NUMBER)*10+Number(process.env.GITHUB_RUN_ATTEMPT));
+          c.expo.icon="./assets/orzell-original-reference.jpg";
+          fs.writeFileSync(file,JSON.stringify(c,null,2)+"\n");
+          console.log("ORZELL iOS "+c.expo.version+" ("+c.expo.ios.buildNumber+"), original brand image retained.");
+          NODE
+          pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ios --no-install --skip-dependency-update expo,react,react-native
+          git diff --exit-code -- pnpm-lock.yaml
+      - name: Install iOS native dependencies
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -version
+          pod install
+      - name: Verify and install temporary signing identity
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/orzell-testflight-signing.cjs
+      - name: Archive signed physical-device app
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace=$(find apps/mobile/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          ruby <<'RUBY'
+          require 'xcodeproj'
+          files=Dir.glob('apps/mobile/ios/*.xcodeproj')
+          abort 'Expected exactly one app project' unless files.length==1
+          project=Xcodeproj::Project.open(files.first)
+          targets=project.targets.select { |t| t.product_type=='com.apple.product-type.application' }
+          abort 'Expected exactly one app target' unless targets.length==1
+          targets.first.build_configurations.each do |config|
+            config.build_settings['DEVELOPMENT_TEAM']='CDL78S6U9A'
+            config.build_settings['CODE_SIGN_STYLE']='Manual'
+            config.build_settings['CODE_SIGN_IDENTITY']=ENV.fetch('ORZELL_CERT_SHA1')
+            config.build_settings['PROVISIONING_PROFILE_SPECIFIER']=ENV.fetch('ORZELL_PROFILE_NAME')
+          end
+          project.save
+          RUBY
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/ORZELL.xcarchive" archive > "$RUNNER_TEMP/orzell-archive.log" 2>&1 || { tail -n 120 "$RUNNER_TEMP/orzell-archive.log"; exit 1; }
+          app=$(find "$RUNNER_TEMP/ORZELL.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app"
+          codesign --verify --deep --strict "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = com.orzell.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = 1.0.0
+      - name: Export App Store signed IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/ORZELL.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/orzell-signing/ExportOptions.plist" -exportPath "$RUNNER_TEMP/orzell-ipa" > "$RUNNER_TEMP/orzell-export.log" 2>&1 || { tail -n 120 "$RUNNER_TEMP/orzell-export.log"; exit 1; }
+          ipa=$(find "$RUNNER_TEMP/orzell-ipa" -maxdepth 1 -name '*.ipa' -print -quit)
+          test -n "$ipa"
+          echo "ORZELL_IPA=$ipa" >> "$GITHUB_ENV"
+          echo "Signed IPA exported. App Store submission has not been requested." >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate and upload to App Store Connect for TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/orzell-signing"
+          node <<'NODE'
+          const fs=require("node:fs");
+          process.umask(0o077);
+          if(!/^[A-Z0-9]+$/.test(process.env.ASC_KEY_ID)) throw new Error("Invalid key ID");
+          fs.mkdirSync("private_keys",{recursive:true,mode:0o700});
+          fs.writeFileSync("private_keys/AuthKey_"+process.env.ASC_KEY_ID+".p8",process.env.ASC_PRIVATE_KEY.trim()+"\n",{mode:0o600});
+          NODE
+          xcrun altool --validate-app -f "$ORZELL_IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format json > "$RUNNER_TEMP/orzell-validate.log" 2>&1 || { tail -n 120 "$RUNNER_TEMP/orzell-validate.log"; exit 1; }
+          xcrun altool --upload-app -f "$ORZELL_IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format json > "$RUNNER_TEMP/orzell-upload.log" 2>&1 || { tail -n 120 "$RUNNER_TEMP/orzell-upload.log"; exit 1; }
+          echo "Apple accepted the binary upload; server-side processing must complete before testing. No public release or App Review submission performed." >> "$GITHUB_STEP_SUMMARY"
+          echo "ORZELL TestFlight binary upload accepted."
+      - name: Remove all temporary credentials and signing keychain
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require("node:fs"),cp=require("node:child_process"),path=require("node:path");
+          const root=path.join(process.env.RUNNER_TEMP,"orzell-signing");
+          const old=path.join(root,"old-keychains.json");
+          if(fs.existsSync(old)){
+            const result=cp.spawnSync("security",["list-keychains","-d","user","-s",...JSON.parse(fs.readFileSync(old,"utf8"))],{stdio:"pipe"});
+            if(result.status!==0) console.log("::warning::Could not restore keychain search list.");
+          }
+          cp.spawnSync("security",["delete-keychain",path.join(root,"signing.keychain-db")],{stdio:"pipe"});
+          const installed=path.join(root,"installed-profile.txt");
+          if(fs.existsSync(installed)) fs.rmSync(fs.readFileSync(installed,"utf8"),{force:true});
+          fs.rmSync(root,{recursive:true,force:true});
+          console.log("Temporary signing credentials removed.");
+          NODE
