@@ -99,7 +99,20 @@ def main():
         candidates = [r for r in candidates if r and r[3] > r[1] + 100]
         if not candidates:
             raise RuntimeError('Native app scroll container unavailable')
-        return max(candidates, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+        left, top, right, bottom = max(
+            candidates, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+        # Android may report the full ScrollView bounds behind the IME.
+        # Keep both swipes and taps above the observed keyboard window.
+        keyboards = [rectangle(n) for n in tree.iter()
+                     if n.attrib.get('package', '').startswith('com.google.android.inputmethod')
+                     or n.attrib.get('package', '').startswith('com.android.inputmethod')]
+        keyboard_tops = [r[1] for r in keyboards if r and r[3] > r[1]
+                         and r[2] > left and r[0] < right and r[1] > top]
+        if keyboard_tops:
+            bottom = min(bottom, min(keyboard_tops))
+        if bottom - top < 100:
+            raise RuntimeError('Native app viewport obscured')
+        return left, top, right, bottom
 
     def swipe(direction):
         left, top, right, bottom = scroll_bounds(hierarchy())
@@ -107,6 +120,7 @@ def main():
         upper, lower = top + (bottom - top) // 4, top + (bottom - top) * 3 // 4
         start, end = (lower, upper) if direction == 'up' else (upper, lower)
         adb('shell', 'input', 'swipe', str(x), str(start), str(x), str(end), '350')
+        time.sleep(0.5)
 
     def top_of_form():
         for _ in range(3):
@@ -144,6 +158,7 @@ def main():
     def tap(label, class_name=None):
         node, (x, y) = seek(label, class_name, clickable=True)
         adb('shell', 'input', 'tap', str(x), str(y))
+        time.sleep(0.7)
         return node
 
     def require_label(expected):
