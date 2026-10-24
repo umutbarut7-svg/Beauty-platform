@@ -454,6 +454,15 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     ).toBe(503);
   });
   it("registers, books authoritative availability, completes a job, records result and customer satisfaction, publishes passport via real worker", async () => {
+    const catalog = await request(
+      `/mvp/v1/catalog/${businessId}`,
+      customerToken,
+    );
+    expect(catalog.status).toBe(200);
+    expect(
+      catalog.body.staff.find((staff: { id: string }) => staff.id === staffId)
+        .locations,
+    ).toContainEqual({ locationId });
     expect(
       (await request(`/mvp/v1/catalog/${businessId}`, customerToken)).body
         .services[0].id,
