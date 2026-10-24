@@ -71,6 +71,8 @@ jobs:
               "- No certificate/profile creation, upload, tester invitation or store submission performed."
             ].join("\n") + "\n";
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+            console.log("Unexpired distribution certificates visible: " + validCertificates);
+            console.log("Uploaded build visible: " + (builds.data.length > 0));
             console.log("ORZELL Apple authentication and read-only resource checks passed.");
           }
           main().catch(error => { console.error("::error::" + error.message); process.exitCode = 1; });
