@@ -21,7 +21,7 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
-      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+      EXPO_PUBLIC_API_URL: https://127.0.0.1:9/api
     steps:
       - name: Check out emulator harness
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -70,7 +70,7 @@ jobs:
       - name: Compile self-contained x86_64 emulator APK
         working-directory: application/apps/mobile/android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2
-      - name: Install, cold-launch twice and inspect sign-in controls
+      - name: Install, launch and exercise offline native forms
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
