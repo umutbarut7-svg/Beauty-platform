@@ -2,7 +2,7 @@
   "expo": {
     "name": "ORZELL",
     "slug": "beauty-platform",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "web": {
@@ -22,7 +22,9 @@
       "package": "dev.epifiz.preview"
     },
     "ios": {
-      "bundleIdentifier": "dev.epifiz.preview"
+      "bundleIdentifier": "com.orzell.app",
+      "appleTeamId": "CDL78S6U9A",
+      "buildNumber": "1"
     }
   }
 }
