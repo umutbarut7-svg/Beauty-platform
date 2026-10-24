@@ -1,21 +1,55 @@
 # Isolated privacy backup and restore acceptance
 
-The gate takes an actual PostgreSQL custom-format `pg_dump` **after** the application's authoritative withdrawal transaction commits. It restores into a separate disposable database, checks the current database identity, then runs the unchanged compiled `VisualService.get` queries and two real cleanup-worker processes. The source application revision is `123e7339e2ab2a9e8e94f391a8431b73afc28efe`.
+The workflow takes actual PostgreSQL custom-format pg_dump snapshots at both
+BEFORE_WITHDRAWAL_COMMIT and AFTER_WITHDRAWAL_COMMIT boundaries. Each snapshot
+is restored into a separate disposable database and checked with the compiled
+application queries and two real cleanup-worker processes. The tested application
+is `3be316d1b2458c49fde162147244aa8077a1f614`.
 
-Required observations:
+## Verified acceptance
 
-- Withdrawal and scrubbed analysis state survive the dump/restore boundary.
-- Restored expired and withdrawn sessions are denied before cleanup. A valid unexpired owner plan remains readable, so the negative checks cannot pass merely because all reads are disabled.
-- Cleanup physically removes eligible local fixture files, scrubs expired analysis content and records one erasure event per photo. A second worker run does not duplicate evidence.
-- Unexpired fixture content and unexpired 90-day consent/audit evidence survive.
-- The workflow uploads only fixed non-content evidence fields. The dump and fixture files stay in runner temporary storage and are removed in `finally`; the disposable database service is destroyed by CI.
+[Backup/restore run 40077665935](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40077665935)
+completed successfully. Inspect both matrix jobs when reviewing evidence.
 
-The synthetic read-query configuration is enabled only inside the test process. There is no API listener, AWS/OpenAI credential, live database, customer photo, production flag change, backup upload or restore into a running preview. Storage erasure uses reserved local test files, not real S3. The test uses the PostgreSQL service container's own dump/restore tools so server/client versions agree.
+- AFTER_WITHDRAWAL_COMMIT: withdrawal and scrubbed analysis survive restoration.
+  Expired and withdrawn owner reads are denied before cleanup; a valid unexpired
+  plan remains readable. Two cleanup runs erase eligible local files without
+  duplicate evidence while preserving valid content and audit expiration.
+- BEFORE_WITHDRAWAL_COMMIT: the isolated query first demonstrates that the older
+  snapshot lacks the later withdrawal. The quarantine SQL rejects missing
+  acknowledgement and a wrong database name. Correctly acknowledged quarantine
+  invalidates all restored owners' consents and scrubs consultation content.
+  Replay is idempotent and does not fabricate user-withdrawal events. Two cleanup
+  workers erase the eligible local fixtures and preserve audit expiration.
 
-## Acceptance boundary
+The detailed offline procedure is in [offline-photo-restore.md](offline-photo-restore.md).
+It is a prepared procedure, not authorization to invalidate live data.
 
-A successful run establishes this post-withdrawal snapshot scenario only. It does not establish encrypted production-backup storage, automated backup schedules, full disaster recovery, real S3 recovery or sustained retention operation. It also does not establish a real HTTP authentication journey; the owner-scoped application query itself is exercised against the restored database.
+[Worker loop/restart run 40102010117](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40102010117)
+also passed against the same application revision: repeated sweeps, expiry,
+injected storage failure, actual worker process crash, retry after restart,
+exactly-once erasure audit and preservation of unexpired content. This is separate
+evidence from the backup snapshot matrix.
 
-An older snapshot taken **before** a withdrawal cannot contain that later revocation transaction. A restore of such a snapshot needs a separately reviewed reconciliation mechanism (for example, replay of durable privacy events) or a conservative quarantine/invalidation procedure before exposing restored photo/consultation data. This test does not implement or approve that missing production procedure. Passing the narrower snapshot test must not be used to reopen public photo/AI gates or declare Stage 33 PASS.
+## Evidence limits
 
-Stage 33 remains **NOT PASS** while the previously recorded device, real-photo, reviewed-policy and production privacy/recovery acceptance items remain open.
+These tests use disposable PostgreSQL and local synthetic files. There is no
+public API listener, AWS/OpenAI credential, real customer photo, production flag
+change, production backup upload or restore into the running preview. Only fixed
+non-content evidence is uploaded; dumps and local fixture files are removed.
+The PostgreSQL container supplies matching dump/restore tools.
+
+Passing these tests does not establish encrypted production backups, automated
+backup schedules, live S3 erasure/recovery, storage URL isolation, host recovery
+or independently durable withdrawal replay. A live recovery must remain offline
+until its own checks pass. Conservative invalidation also makes previously valid
+restored consultations unavailable; it is not selective replay.
+
+The [read-only live snapshot 40102518367](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40102518367)
+verified service running/OOM state, restart policies, PostgreSQL volume, tested
+API/gateway images, closed policy/provider flags and both API health/CORS checks.
+It did not perform a restore or prove continuous live erasure.
+
+Stage 33 remains **NOT PASS** while real-photo quality, policy review, physical
+devices and live privacy/recovery acceptance remain open. Isolated evidence must
+not be used to enable public photo/AI flags.
