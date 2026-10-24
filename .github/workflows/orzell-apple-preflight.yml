@@ -60,6 +60,40 @@ jobs:
             if (bundle.data?.length !== 1) throw new Error("Confirmed bundle registration was not found.");
             const certificates = await get("certificates?filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION&limit=200");
             const validCertificates = certificates.data.filter(c => Date.parse(c.attributes.expirationDate) > Date.now()).length;
+
+            const expectedSpki = "4abe470c88f67bcee2eed6f9a0610251ec0f7fdfae8632749b50a9c3b5e24e6a";
+            const hashCert = raw => {
+              const cert = new crypto.X509Certificate(Buffer.from(raw,"base64"));
+              if (!cert.subject.split("\n").includes("OU=CDL78S6U9A")) throw new Error("Certificate team mismatch.");
+              return crypto.createHash("sha256").update(cert.publicKey.export({format:"der",type:"spki"})).digest("hex");
+            };
+            const matching = certificates.data.filter(c => Date.parse(c.attributes.expirationDate)>Date.now() && hashCert(c.attributes.certificateContent)===expectedSpki);
+            if (matching.length !== 1) throw new Error("Exactly one valid distribution certificate must match the original CSR.");
+            const profiles = await get("profiles?filter[name]=ORZELL%20App%20Store&include=bundleId,certificates&limit=20");
+            const profile = profiles.data.filter(p => p.attributes.name==="ORZELL App Store" && p.attributes.profileType==="IOS_APP_STORE" && p.attributes.profileState==="ACTIVE" && Date.parse(p.attributes.expirationDate)>Date.now());
+            if (profile.length!==1) throw new Error("Expected one active ORZELL App Store profile.");
+            const p=profile[0];
+            if (!p.relationships.certificates.data.some(c=>c.id===matching[0].id)) throw new Error("Profile does not contain the CSR-matched distribution certificate.");
+            const b=profiles.included.find(i=>i.type==="bundleIds" && i.id===p.relationships.bundleId.data.id);
+            if (b?.attributes.identifier!=="com.orzell.app") throw new Error("Profile bundle ID mismatch.");
+            const cp=require("node:child_process");
+            const cms=cp.spawnSync("openssl",["cms","-verify","-inform","DER","-noverify"],{input:Buffer.from(p.attributes.profileContent,"base64"),maxBuffer:4*1024*1024});
+            if(cms.status!==0) throw new Error("Profile CMS signature verification failed.");
+            const py=cp.spawnSync("python3",["-c",[
+              "import sys,plistlib,datetime",
+              "p=plistlib.loads(sys.stdin.buffer.read())",
+              "assert p['Name']=='ORZELL App Store'",
+              "assert p['TeamIdentifier']==['CDL78S6U9A']",
+              "assert p['Entitlements']['application-identifier']=='CDL78S6U9A.com.orzell.app'",
+              "assert p['Entitlements'].get('get-task-allow') is False",
+              "assert not p.get('ProvisionedDevices') and not p.get('ProvisionsAllDevices')",
+              "assert p['ExpirationDate']>datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)",
+              "print('App Store profile contents verified.')"
+            ].join("\n")],{input:cms.stdout,maxBuffer:1024*1024});
+            if(py.status!==0) throw new Error("Profile entitlements validation failed.");
+            console.log("CSR public key, distribution certificate and active App Store profile match.");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"\n- Original CSR public key matches the valid distribution certificate.\n- Active ORZELL App Store profile matches certificate, bundle ID and team.\n- Profile CMS signature and App Store entitlements verified (Apple chain trust is checked during Xcode signing).\n");
+
             const summary = [
               "## ORZELL Apple read-only preflight",
               "",
