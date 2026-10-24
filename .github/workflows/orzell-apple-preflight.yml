@@ -1,0 +1,77 @@
+name: ORZELL Apple read-only preflight
+on:
+  push:
+    branches: [codex/orzell-apple-preflight]
+    paths: [.github/workflows/orzell-apple-preflight.yml]
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: orzell-apple-preflight
+  cancel-in-progress: false
+jobs:
+  check:
+    if: github.ref == 'refs/heads/codex/orzell-apple-preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Authenticate and inspect Apple resources without mutations
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+          async function main() {
+            for (const name of ["ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_PRIVATE_KEY"]) {
+              if (!process.env[name]?.trim()) throw new Error("Missing secret: " + name);
+            }
+            let key;
+            try { key = crypto.createPrivateKey(process.env.ASC_PRIVATE_KEY.trim()); }
+            catch { throw new Error("ASC_PRIVATE_KEY is not a valid PEM private key; paste the complete .p8 text, including BEGIN/END lines."); }
+            if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1")
+              throw new Error("ASC_PRIVATE_KEY must be an Apple P-256 key.");
+            const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
+            const now = Math.floor(Date.now() / 1000);
+            const unsigned = encode({alg:"ES256",kid:process.env.ASC_KEY_ID.trim(),typ:"JWT"}) + "." +
+              encode({iss:process.env.ASC_ISSUER_ID.trim(),iat:now-5,exp:now+300,aud:"appstoreconnect-v1"});
+            const token = unsigned + "." + crypto.sign("sha256",Buffer.from(unsigned),{key,dsaEncoding:"ieee-p1363"}).toString("base64url");
+            console.log("::add-mask::" + token);
+            async function get(path) {
+              let response;
+              try { response = await fetch("https://api.appstoreconnect.apple.com/v1/" + path, {
+                headers:{Authorization:"Bearer " + token}, redirect:"error",signal:AbortSignal.timeout(30000)
+              }); } catch { throw new Error("Apple API network request failed."); }
+              if (!response.ok) throw new Error("Apple API returned HTTP " + response.status + " for " + path.split("?")[0]);
+              return response.json();
+            }
+            const apps = await get("apps?filter[bundleId]=com.orzell.app&limit=2");
+            if (apps.data?.length !== 1 || apps.data[0].attributes.bundleId !== "com.orzell.app")
+              throw new Error("Expected exactly one App Store Connect record for com.orzell.app.");
+            const appId = apps.data[0].id;
+            const builds = await get("builds?filter[app]=" + encodeURIComponent(appId) + "&limit=1");
+            const bundle = await get("bundleIds?filter[identifier]=com.orzell.app&limit=2");
+            if (bundle.data?.length !== 1) throw new Error("Confirmed bundle registration was not found.");
+            const certificates = await get("certificates?filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION&limit=200");
+            const validCertificates = certificates.data.filter(c => Date.parse(c.attributes.expirationDate) > Date.now()).length;
+            const summary = [
+              "## ORZELL Apple read-only preflight",
+              "",
+              "- Private key parsed and authenticated successfully.",
+              "- App record and bundle registration: com.orzell.app.",
+              "- At least one uploaded build: " + (builds.data.length > 0 ? "yes" : "no") + ".",
+              "- Unexpired distribution certificates visible: " + validCertificates + ".",
+              "- A certificate listing does not prove that its private signing key is available to CI.",
+              "- No certificate/profile creation, upload, tester invitation or store submission performed."
+            ].join("\n") + "\n";
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+            console.log("ORZELL Apple authentication and read-only resource checks passed.");
+          }
+          main().catch(error => { console.error("::error::" + error.message); process.exitCode = 1; });
+          NODE
