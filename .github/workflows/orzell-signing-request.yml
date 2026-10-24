@@ -1,0 +1,86 @@
+name: ORZELL distribution signing request
+on:
+  push:
+    branches: [codex/orzell-signing-request]
+    paths: [.github/workflows/orzell-signing-request.yml]
+permissions: {}
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/codex/orzell-signing-request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Prepare public CSR and authenticated encrypted key backup
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const crypto = require("node:crypto");
+          const cp = require("node:child_process");
+          const path = require("node:path");
+          process.umask(0o077);
+          const root = process.env.RUNNER_TEMP;
+          const secretDir = path.join(root, "orzell-signing-private");
+          const backupDir = path.join(root, "orzell-signing-encrypted");
+          const publicDir = path.join(root, "orzell-signing-public");
+          for (const dir of [secretDir, backupDir, publicDir]) fs.mkdirSync(dir, {recursive:true,mode:0o700});
+          try {
+            const appleKey = crypto.createPrivateKey(process.env.ASC_PRIVATE_KEY.trim());
+            if (appleKey.asymmetricKeyType !== "ec" || appleKey.asymmetricKeyDetails?.namedCurve !== "prime256v1")
+              throw new Error("Invalid Apple key type");
+            const material = appleKey.export({format:"der",type:"pkcs8"});
+            const pair = crypto.generateKeyPairSync("rsa",{modulusLength:2048});
+            const privatePem = pair.privateKey.export({format:"pem",type:"pkcs8"});
+            const privatePath = path.join(secretDir,"distribution.key");
+            fs.writeFileSync(privatePath,privatePem,{mode:0o600});
+            const csrPath=path.join(publicDir,"ORZELL-Distribution.certSigningRequest");
+            cp.execFileSync("openssl",["req","-new","-sha256","-key",privatePath,"-out",csrPath,"-subj","/CN=ORZELL Distribution/OU=CDL78S6U9A/O=Umut Barut/C=TR"],{stdio:"pipe"});
+            cp.execFileSync("openssl",["req","-in",csrPath,"-noout","-verify"],{stdio:"pipe"});
+            const csrPublic=cp.execFileSync("openssl",["req","-in",csrPath,"-pubkey","-noout"]);
+            const spki=crypto.createPublicKey(csrPublic).export({type:"spki",format:"der"});
+            if (!spki.equals(pair.publicKey.export({type:"spki",format:"der"}))) throw new Error("CSR public key mismatch");
+            const salt=crypto.randomBytes(32),iv=crypto.randomBytes(12);
+            const info="ORZELL distribution key backup v1";
+            const key=Buffer.from(crypto.hkdfSync("sha256",material,salt,info,32));
+            const cipher=crypto.createCipheriv("aes-256-gcm",key,iv);
+            const aad=Buffer.from("com.orzell.app|CDL78S6U9A|v1");
+            cipher.setAAD(aad);
+            const encrypted=Buffer.concat([cipher.update(privatePem,"utf8"),cipher.final()]);
+            const tag=cipher.getAuthTag();
+            const decipher=crypto.createDecipheriv("aes-256-gcm",key,iv);
+            decipher.setAAD(aad);decipher.setAuthTag(tag);
+            const restored=Buffer.concat([decipher.update(encrypted),decipher.final()]);
+            if (!restored.equals(Buffer.from(privatePem))) throw new Error("Backup verification failed");
+            const fingerprint=crypto.createHash("sha256").update(spki).digest("hex");
+            const manifest={version:1,bundleId:"com.orzell.app",teamId:"CDL78S6U9A",createdAt:new Date().toISOString(),publicKeySha256:fingerprint,runId:process.env.GITHUB_RUN_ID,info,aad:aad.toString(),salt:salt.toString("base64"),iv:iv.toString("base64"),tag:tag.toString("base64"),ciphertext:encrypted.toString("base64")};
+            fs.writeFileSync(path.join(backupDir,"ORZELL-distribution-key.encrypted.json"),JSON.stringify(manifest,null,2)+"\n",{mode:0o600});
+            fs.writeFileSync(path.join(publicDir,"README.txt"),"Public CSR only; no private key. Upload ORZELL-Distribution.certSigningRequest when creating an Apple Distribution certificate as Account Holder.\nBundle: com.orzell.app\nTeam: CDL78S6U9A\nPublic key SHA256: "+fingerprint+"\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"## ORZELL signing request\n\nPublic CSR verified. RSA-2048 key encrypted using AES-256-GCM with a key derived through HKDF-SHA256 from the canonical Apple API private key DER. Encryption round-trip verified. Keep the original Apple .p8 file to recover this backup. No Apple certificate was created and no app uploaded.\n\nPublic-key SHA256: "+fingerprint+"\n");
+            console.log("CSR verified; encrypted backup verified; no private key output.");
+          } catch {console.error("::error::Signing request preparation failed; private material was not logged.");process.exitCode=1;}
+          finally {fs.rmSync(secretDir,{recursive:true,force:true});}
+          NODE
+      - name: Preserve encrypted signing key before publishing public CSR
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-distribution-key-encrypted
+          path: ${{ runner.temp }}/orzell-signing-encrypted/ORZELL-distribution-key.encrypted.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish public signing request
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-distribution-CSR-public
+          path: ${{ runner.temp }}/orzell-signing-public/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Remove runner output
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/orzell-signing-private" "$RUNNER_TEMP/orzell-signing-encrypted" "$RUNNER_TEMP/orzell-signing-public"
