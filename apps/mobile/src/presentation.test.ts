@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { bookingDateError, formatMinorUnits, formatPrice } from "../presentation";
+import {
+  bookingDateError,
+  formatMinorUnits,
+  formatPrice,
+} from "../presentation";
 
 describe("customer and ledger prices", () => {
   it("keeps catalogue major units distinct from ledger minor units", () => {
