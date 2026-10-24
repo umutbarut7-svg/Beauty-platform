@@ -109,7 +109,7 @@ def main():
             frames = []
             # Android 35 exposes IME geometry in per-display InsetsState.
             # Parse only a visible IME source; never infer a keyboard height.
-            for line in windows.splitlines():
+            for line in re.findall(r'\{[^{}]*\}', windows):
                 if not re.search(r'\b(?:mType|type)=ime\b', line):
                     continue
                 if not re.search(r'\b(?:mVisible|visible)=true\b', line):
@@ -120,7 +120,7 @@ def main():
                     x1, y1, x2, y2 = map(int, match.groups())
                     if x2 > left and x1 < right and y2 > y1 > top:
                         frames.append(y1)
-            for block in re.split(r'(?m)^\s*Window #', windows):
+            for block in ([] if frames else re.split(r'(?m)^\s*Window #', windows)):
                 if not re.search(r'Window\{[^\n}]*\bInputMethod\}', block):
                     continue
                 match = re.search(
@@ -139,6 +139,7 @@ def main():
                 raise RuntimeError('Visible keyboard window frame unavailable')
             bottom = min(bottom, min(frames))
         if bottom - top < 100:
+            print('Viewport structural bounds: ' + json.dumps([left, top, right, bottom]), flush=True)
             raise RuntimeError('Native app viewport obscured')
         return left, top, right, bottom
 
