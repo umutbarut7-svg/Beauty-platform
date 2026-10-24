@@ -98,8 +98,15 @@ main(async (browser, origin, output) => {
       const body = request.postDataJSON();
       assert.deepEqual(
         Object.keys(body).sort(),
-        ["locationId", "serviceId", "staffMemberId", "startsAt"].sort(),
+        [
+          "bookForSelf",
+          "locationId",
+          "serviceId",
+          "staffMemberId",
+          "startsAt",
+        ].sort(),
       );
+      assert.equal(body.bookForSelf, true);
       assert.equal(body.staffMemberId, "staff-1");
       assert.equal(body.serviceId, service.id);
       value = {

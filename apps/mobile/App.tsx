@@ -896,6 +896,7 @@ export default function App() {
                               locationId,
                               serviceId,
                               staffMemberId: pendingSlot.staffId,
+                              bookForSelf: true,
                               startsAt: pendingSlot.startsAt,
                             },
                           );
