@@ -70,6 +70,13 @@ jobs:
       - name: Compile self-contained x86_64 emulator APK
         working-directory: application/apps/mobile/android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2
+      - name: Preserve isolated offline emulator APK for diagnostic replays
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-offline-x86_64-test-apk
+          path: application/apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
       - name: Install, launch and exercise offline native forms
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:

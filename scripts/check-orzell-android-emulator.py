@@ -145,6 +145,16 @@ def main():
         if expected not in labels(hierarchy()):
             raise RuntimeError(f'Native state missing: {expected}')
 
+    def focused_input(label, password=False):
+        nodes = [node for node in hierarchy().iter()
+                 if node.attrib.get('package') == PACKAGE
+                 and node.attrib.get('class') == 'android.widget.EditText'
+                 and node.attrib.get('content-desc') == label
+                 and node.attrib.get('focused') == 'true']
+        if len(nodes) != 1 or (password and nodes[0].attrib.get('password') != 'true'):
+            raise RuntimeError('Expected native input did not actually receive focus')
+        return nodes[0]
+
     def keyboard_shown():
         state = adb('shell', 'dumpsys', 'input_method')
         match = re.search(r'\bmInputShown=(true|false)\b', state)
@@ -199,15 +209,22 @@ def main():
         top_of_form()
         tap('E-posta', 'android.widget.EditText')
         time.sleep(1)
+        focused_input('E-posta')
         if not keyboard_shown():
             raise RuntimeError('Email focus did not show the software keyboard')
         adb('shell', 'input', 'text', 'native-ui@example.test')
+        if focused_input('E-posta').attrib.get('text') != 'native-ui@example.test':
+            raise RuntimeError('Synthetic email entry did not reach the actual field')
         screenshot('android-launch-email-keyboard.png')
         stage = 'password-keyboard'
         node = tap('Parola', 'android.widget.EditText')
         if node.attrib.get('password') != 'true':
             raise RuntimeError('Native password input is not masked')
+        focused_input('Parola', password=True)
         adb('shell', 'input', 'text', 'short')
+        entered = focused_input('Parola', password=True).attrib.get('text', '')
+        if len(entered) != 5:
+            raise RuntimeError('Synthetic short password did not reach the actual field')
         if not keyboard_shown():
             raise RuntimeError('Password input lost the software keyboard')
         screenshot('android-launch-password-keyboard.png')
@@ -242,6 +259,7 @@ def main():
             'registrationTabTested': True, 'emptyEmailRejected': True,
             'shortRegistrationPasswordRejected': True,
             'emailAndPasswordKeyboardVerified': True, 'nativePasswordMasked': True,
+            'emailAndPasswordEntryVerified': True,
             'submitReachableWhileKeyboardOpen': True, 'keyboardDismissalTested': True,
             'returnToLoginClearsError': True,
             'physicalDeviceAcceptance': False,
