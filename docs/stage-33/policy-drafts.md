@@ -17,7 +17,7 @@ ve politika incelemesi bu bilgilerle otomatik tamamlanmış sayılmaz.
 
 **20 Ekim 2026 kullanıcı onayı:** fotoğraf/danışmanlık içeriği için azami **24 saat**, izin/işlem kanıtı için **90 gün**, işletme başvuru kanıtı/notu için **90 gün** saklama; işletme doğrulamasında işletmeden bağımsız platform yöneticisinin resmî kayıt kontrolü yapması prensip olarak onaylandı. Diğer ürün tercihleri ve gerçek sistem kabulü otomatik olarak onaylanmış sayılmaz.
 
-Kayıtlı platform adı, başvuru iletişim kanalı, resmî kayıt kaynağı/pazar, yetkili incelemeci ataması, sağlayıcı şartları ve hukuki metin incelemesi tamamlanana kadar `.env.example` içindeki iki `*_POLICY_REVIEWED` değeri `false` kalır.
+Beyan edilen işletmeci ve iletişim bilgileri taslağa işlendi. Resmî kayıt kaynağı/pazar, yetkili incelemeci ataması, sağlayıcı şartları ve hukuki metin incelemesi tamamlanana kadar `.env.example` içindeki iki `*_POLICY_REVIEWED` değeri `false` kalır.
 
 ## Önerilen fotoğraf kapsamı
 
@@ -34,18 +34,18 @@ Kayıtlı platform adı, başvuru iletişim kanalı, resmî kayıt kaynağı/paz
 
 ### Kullanıcı metni için doldurulacak taslak
 
-“[Platformun kayıtlı adı] olarak seçtiğiniz fotoğrafı, isteğinizi ve hedefinizi
+“ORZELL App işletmecisi Umut Barut olarak seçtiğiniz fotoğrafı, isteğinizi ve hedefinizi
 saç danışmanlığı için işleriz. Fotoğrafınız özel depolamada tutulur; analizi
 başlattığınızda bu amaçla OpenAI'ye iletilir. Fotoğraf ve danışmanlık içeriği
 en fazla 24 saat saklanır. Onay/işlem kanıtı 90 gün tutulur.
 İzninizi uygulamadaki fotoğraf izinleri bölümünden geri çekebilirsiniz. Bu,
 fotoğraf ve sonuçlarına erişimi kapatır; fiziksel silme worker tarafından takip
 edilir. Analiz profesyonel değerlendirmesinin yerine geçmez ve sonuç garantisi
-vermez. Başvurular için [iletişim] ve sağlayıcı işleme koşulları için [bağlantı].”
+vermez. Başvurular için orzellapp@gmail.com ve sağlayıcı işleme koşulları için [inceleme sonrası eklenecek bağlantı].”
 
 `store:false`, uygulamanın Responses isteğinde kullandığı ayardır; sağlayıcının
 hesap/veri işleme koşullarının yerine geçen bir saklama garantisi olarak sunulmaz.
-Kayıtlı platform adı, iletişim, sağlayıcı koşulları ve hukuki inceleme tamamlanmadan
+İşletmeci/iletişim beyanı tek başına inceleme onayı değildir. Sağlayıcı koşulları ve hukuki inceleme tamamlanmadan
 bu metin etkinleştirilmemelidir. Bu eksiklikler test-fixture metinleriyle kapatılmaz.
 
 ## Önerilen işletme doğrulaması
