@@ -277,6 +277,65 @@ afterAll(async () => {
 });
 
 describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
+  it("keeps owner self-booking explicit and rejects customer impersonation", async () => {
+    const date = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
+    const path = `/businesses/${businessId}/appointments`;
+    const slots = await request(
+      `/businesses/${businessId}/availability?${new URLSearchParams({
+        locationId,
+        serviceId,
+        staffMemberId: staffId,
+        date,
+      })}`,
+      ownerToken,
+    );
+    expect(slots.status).toBe(200);
+    expect(slots.body.length).toBeGreaterThan(0);
+    const body = {
+      locationId,
+      serviceId,
+      staffMemberId: staffId,
+      startsAt: slots.body[0].startsAt,
+    };
+    expect((await request(path, ownerToken, "POST", body)).status).toBe(400);
+    const otherCustomer = await db.customer.findUniqueOrThrow({
+      where: { userId: customerId },
+    });
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...body,
+          bookForSelf: true,
+          customerId: otherCustomer.id,
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...body,
+          bookForSelf: "true",
+        })
+      ).status,
+    ).toBe(400);
+    const created = await create(path, ownerToken, {
+      ...body,
+      bookForSelf: true,
+      internalNote: "Must not persist in customer context",
+    });
+    const saved = await db.appointment.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { customer: true },
+    });
+    expect(saved.customer.userId).not.toBe(customerId);
+    expect(saved.customer.userId).toBe(
+      (await request("/auth/me", ownerToken)).body.id,
+    );
+    expect(saved.internalNote).toBeNull();
+    await create(`${path}/${created.id}/cancel`, ownerToken, {
+      reason: "Synthetic self-booking acceptance complete",
+    });
+  });
   it("requires an independent platform reviewer and atomically audits verification approval/revocation", async () => {
     const path = `/mvp/v1/businesses/${businessId}/verification`;
     const input = {

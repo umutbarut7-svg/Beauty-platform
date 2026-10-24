@@ -90,10 +90,14 @@ export class AppointmentsService {
     const actor = await this.actor(user, businessId);
     if (actor.membership?.role === "STAFF")
       throw new ForbiddenException("Staff cannot create customer appointments");
-    const customerId = actor.manages ? dto.customerId : actor.customer?.id;
+    const customerId = dto.bookForSelf
+      ? actor.customer?.id
+      : actor.manages
+        ? dto.customerId
+        : actor.customer?.id;
     if (!customerId) throw new BadRequestException("A customer is required");
     if (
-      !actor.manages &&
+      (!actor.manages || dto.bookForSelf) &&
       dto.customerId &&
       dto.customerId !== actor.customer?.id
     )
@@ -292,7 +296,10 @@ export class AppointmentsService {
               endsAt: new Date(slot.endsAt),
               status: "PENDING",
               customerNote: dto.customerNote,
-              internalNote: actor.manages ? dto.internalNote : undefined,
+              internalNote:
+                actor.manages && !dto.bookForSelf
+                  ? dto.internalNote
+                  : undefined,
               price: assignment.customPrice ?? assignment.service.price,
               currency: assignment.service.currency,
             },
