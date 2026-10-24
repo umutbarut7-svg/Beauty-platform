@@ -112,7 +112,7 @@ def main():
         for _ in range(3):
             swipe('down')
 
-    def seek(label, class_name=None):
+    def seek(label, class_name=None, clickable=False):
         # Coordinates are read afresh from the actual native hierarchy. Never
         # guess fixed control positions or tap underneath the navigation bar.
         for attempt in range(7):
@@ -120,6 +120,8 @@ def main():
             _, viewport_top, _, viewport_bottom = scroll_bounds(tree)
             for node in tree.iter():
                 if node.attrib.get('package') != PACKAGE:
+                    continue
+                if clickable and node.attrib.get('clickable') != 'true':
                     continue
                 if class_name and node.attrib.get('class') != class_name:
                     continue
@@ -140,7 +142,7 @@ def main():
         raise RuntimeError(f'Native control not reachable: {label}')
 
     def tap(label, class_name=None):
-        node, (x, y) = seek(label, class_name)
+        node, (x, y) = seek(label, class_name, clickable=True)
         adb('shell', 'input', 'tap', str(x), str(y))
         return node
 
