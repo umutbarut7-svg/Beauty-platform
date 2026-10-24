@@ -11,5 +11,6 @@ Build from the reviewed Stage 33 source with EXPO_PUBLIC_API_URL set to the exis
 After Apple processing, resolve any actual export-compliance questions based on the compiled application's encryption use; do not guess declarations. Assign the processed build to the internal test group, then verify physical iPhone installation and the device acceptance checklist. A successful upload is not physical-device acceptance or Stage 33 PASS.
 
 References:
+
 - https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api
 - https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases
