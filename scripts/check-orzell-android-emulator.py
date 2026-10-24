@@ -166,12 +166,26 @@ def main():
             raise RuntimeError(f'Native state missing: {expected}')
 
     def focused_input(label, password=False):
-        nodes = [node for node in hierarchy().iter()
+        tree = hierarchy()
+        nodes = [node for node in tree.iter()
                  if node.attrib.get('package') == PACKAGE
                  and node.attrib.get('class') == 'android.widget.EditText'
                  and node.attrib.get('content-desc') == label
                  and node.attrib.get('focused') == 'true']
         if len(nodes) != 1 or (password and nodes[0].attrib.get('password') != 'true'):
+            # Only fixed fixture labels and structural state; never input text,
+            # password contents, raw hierarchy or arbitrary accessibility labels.
+            states = [{
+                'field': n.attrib.get('content-desc')
+                    if n.attrib.get('content-desc') in ('E-posta', 'Parola') else 'other',
+                'bounds': n.attrib.get('bounds'),
+                'focused': n.attrib.get('focused'),
+                'password': n.attrib.get('password'),
+                'clickable': n.attrib.get('clickable'),
+            } for n in tree.iter()
+                if n.attrib.get('package') == PACKAGE
+                and n.attrib.get('class') == 'android.widget.EditText']
+            print('Native input structural diagnostics: ' + json.dumps(states), flush=True)
             raise RuntimeError('Expected native input did not actually receive focus')
         return nodes[0]
 
