@@ -113,6 +113,7 @@ export class MvpService {
           select: {
             id: true,
             displayName: true,
+            locations: { select: { locationId: true } },
             services: {
               where: { isActive: true },
               select: { serviceId: true },
