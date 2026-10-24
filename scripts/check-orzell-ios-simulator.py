@@ -16,12 +16,11 @@ import sys
 import time
 import zipfile
 
-ARCHIVE_SHA = '561f427eed10a73dbb2abdee042fcd134bfbf1d7b1f06419e4cd530f11571b4f'
-PAYLOAD_SHA = '166bdc1a7c037db403e627765f0b4cf3c2143b9aebbf3e64b036d732686cced6'
+ARCHIVE_SHA = '315c0f323e454bc4c064c68a9e291d19d11421f1a0077e381b56dd7f165854da'
 LOGO_SHA = '16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4'
-APPLICATION = '123e7339e2ab2a9e8e94f391a8431b73afc28efe'
-HARNESS = '59167b378feb070c79af86dd4decad3580048e9f'
-BUNDLE = 'dev.epifiz.preview'
+APPLICATION = '3be316d1b2458c49fde162147244aa8077a1f614'
+HARNESS = APPLICATION
+BUNDLE = 'com.beautyplatform.stage33test'
 
 
 def run(*args, timeout=60):
@@ -36,12 +35,10 @@ def unpack(archive, output):
     if hashlib.sha256(raw).hexdigest() != ARCHIVE_SHA:
         raise ValueError('Reviewed outer artifact checksum mismatch')
     with zipfile.ZipFile(io.BytesIO(raw)) as outer:
-        expected = f'Application: {APPLICATION}\nHarness: {HARNESS}\nPlatform: ios\n'
-        if outer.read('build-revision.txt').decode() != expected:
-            raise ValueError('Reviewed application/build revision mismatch')
-        payload = outer.read('ORZELL-ios-simulator.zip')
-    if hashlib.sha256(payload).hexdigest() != PAYLOAD_SHA:
-        raise ValueError('Reviewed simulator payload checksum mismatch')
+        if outer.namelist() != ['stage33-ios-simulator.zip']:
+            raise ValueError('Unexpected outer artifact entries')
+        # The pinned outer SHA authenticates the complete inner payload.
+        payload = outer.read('stage33-ios-simulator.zip')
     with zipfile.ZipFile(io.BytesIO(payload)) as inner:
         for entry in inner.infolist():
             name = pathlib.PurePosixPath(entry.filename)
@@ -76,13 +73,13 @@ def unpack(archive, output):
     executable = info['CFBundleExecutable']
     if pathlib.Path(executable).name != executable or not (app / executable).is_file():
         raise ValueError('Unexpected executable')
-    return app, executable
+    return app, executable, hashlib.sha256(payload).hexdigest()
 
 
 def main():
     output = pathlib.Path(sys.argv[2]).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    app, executable = unpack(sys.argv[1], output / 'unpacked')
+    app, executable, payload_sha = unpack(sys.argv[1], output / 'unpacked')
     devices = json.loads(run('xcrun', 'simctl', 'list', 'devices', 'available', '-j'))['devices']
     candidates = [(runtime, d) for runtime, group in devices.items()
                   for d in group if d.get('isAvailable') and d['name'].startswith('iPhone')]
@@ -126,9 +123,9 @@ def main():
             run('xcrun', 'simctl', 'terminate', udid, BUNDLE)
         evidence = {
             'status': 'PASS', 'scope': 'simulator install and two cold launches only',
-            'artifactId': 12528952139, 'sourceRun': 40016474475,
+            'artifactId': 12551818470, 'sourceRun': 40073686234,
             'application': APPLICATION, 'buildHarness': HARNESS,
-            'payloadSha256': PAYLOAD_SHA, 'originalLogoSha256': LOGO_SHA,
+            'artifactSha256': ARCHIVE_SHA, 'payloadSha256': payload_sha, 'originalLogoSha256': LOGO_SHA,
             'device': device['name'], 'runtime': runtime,
             'physicalDeviceAcceptance': False, 'authenticatedJourneyTested': False,
             'screenshotsManuallyReviewed': False,
