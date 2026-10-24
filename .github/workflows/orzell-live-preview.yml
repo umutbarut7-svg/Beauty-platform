@@ -1,6 +1,11 @@
 name: ORZELL live preview acceptance
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/orzell-live-preview.yml
+      - scripts/check-orzell-live-preview.cjs
   push:
     branches: [main]
     paths: [.github/workflows/orzell-live-preview.yml]
@@ -11,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   acceptance:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
