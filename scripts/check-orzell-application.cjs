@@ -182,6 +182,21 @@ main(async (browser, origin, output) => {
   await click("Deneme Salonu hizmetlerini gör");
   await click("Saç bakımı hizmetini seç");
   await click("Deneme Uzmanı");
+  const dateInput = page.getByLabel("Başka tarih (YYYY-MM-DD)", {
+    exact: true,
+  });
+  const availabilityCalls = () =>
+    calls.filter((c) => c.endpoint.endsWith("/availability")).length;
+  const beforeDates = availabilityCalls();
+  for (const [value, message] of [
+    ["2099-02-31", "Geçerli bir takvim tarihi girin."],
+    ["2000-01-01", "Bugün veya ileri bir tarih seçin."],
+  ]) {
+    await dateInput.fill(value);
+    await click("Müsait saatleri bul");
+    await expect(page.getByRole("alert")).toHaveText(message);
+    assert.equal(availabilityCalls(), beforeDates);
+  }
   await page
     .getByLabel("Başka tarih (YYYY-MM-DD)", { exact: true })
     .fill(startsAt.slice(0, 10));
