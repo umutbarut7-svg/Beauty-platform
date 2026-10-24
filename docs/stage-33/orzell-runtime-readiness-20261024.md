@@ -38,6 +38,12 @@ Sources checked on 24 October 2026:
 - https://developer.apple.com/testflight/
 - https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases
 
+The owner completed the Apple Developer subscription purchase on 24 October 2026. The subsequent Developer app screenshot still shows `Enrollment Pending`;
+the subscription receipt alone is not membership activation. No signed physical
+phone build or App Store Connect access has been verified. Continue after the
+membership becomes active; never purchase the subscription a second time merely
+because enrollment is pending.
+
 Before a signed phone build, the owner needs to complete Apple account enrollment
 and any required membership/payment/agreements, then provide the Apple team
 identifier and final app identity through a secure setup. Do not put passwords,
@@ -49,12 +55,12 @@ store identity. Simulator checks are not physical-device acceptance.
 
 Owner-confirmed details on 24 October 2026:
 
-| Field | Confirmed value |
-| --- | --- |
-| Product/business display name | ORZELL App |
-| Individual legal operator (owner declaration) | Umut Barut |
-| Public support/contact email | orzellapp@gmail.com |
-| Visual brand/wordmark | ORZELL; existing original emblem and styling preserved |
+| Field                                         | Confirmed value                                        |
+| --------------------------------------------- | ------------------------------------------------------ |
+| Product/business display name                 | ORZELL App                                             |
+| Individual legal operator (owner declaration) | Umut Barut                                             |
+| Public support/contact email                  | orzellapp@gmail.com                                    |
+| Visual brand/wordmark                         | ORZELL; existing original emblem and styling preserved |
 
 The owner selected Umut Barut as the individual operating ORZELL App. This records
 the owner's declaration; it does not verify identity or establish a registered
@@ -78,6 +84,18 @@ withdrawal. A snapshot predating a later withdrawal cannot carry that revocation
 Do not reopen photo access from such a restore without a reviewed durable
 revocation replay or conservative quarantine/invalidation procedure.
 
+The conservative fallback is now prepared in
+[offline-photo-restore.md](offline-photo-restore.md) and
+`infra/operations/quarantine-restored-photos.sql`. It invalidates all restored
+photo consents, scrubs old plans and records a distinct recovery event. The
+isolated PostgreSQL acceptance [run 40077479755](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40077479755)
+passed both before- and after-withdrawal snapshot scenarios on the current
+packaged application. The former verified denied execution without the correct
+offline/database acknowledgements, both owners, idempotency, preserved audit
+expiration and actual worker erasure of local synthetic objects. This is no
+claim of live recovery, encrypted production backup or real S3 erasure; the
+storage isolation and reopening gates in the runbook remain necessary.
+
 An encrypted production-backup destination, access controls, retention and
 revocation reconciliation must be decided and validated before automatic
 production backup/recovery is enabled. A worker restart or isolated pg_dump test
@@ -85,7 +103,6 @@ must not be represented as completion of that work.
 
 Stage 33 remains NOT PASS pending the genuine device, reviewed-policy,
 real-photo and production-operating acceptance boundaries.
-
 
 ## Current iOS simulator launch acceptance
 
