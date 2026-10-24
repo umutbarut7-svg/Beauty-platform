@@ -103,9 +103,11 @@ def main():
         run('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=360)
         print('Simulator boot completed', flush=True)
         run('xcrun', 'simctl', 'install', udid, str(app), timeout=120)
+        # Establish a responsive display before measuring this app's launch.
+        run('xcrun', 'simctl', 'io', udid, 'screenshot', str(output / 'ios-launch-before.png'), timeout=120)
         for attempt in (1, 2):
             print(f'Cold launch {attempt}', flush=True)
-            launched = run('xcrun', 'simctl', 'launch', '--terminate-running-process', udid, BUNDLE)
+            launched = run('xcrun', 'simctl', 'launch', '--terminate-running-process', udid, BUNDLE, timeout=180)
             match = re.search(r': (\d+)\s*$', launched)
             if not match:
                 raise RuntimeError('Launch did not return a process identity')
@@ -133,6 +135,14 @@ def main():
         (output / 'simulator-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
         print('PASS: exact ORZELL artifact installed; both cold launches survived 5 seconds')
         print('Screenshots require separate review; physical device and account/photo journeys remain open')
+    except Exception:
+        # This runner has no account/photo fixtures. Capture the failure screen,
+        # but never turn a timeout into successful application acceptance.
+        try:
+            run('xcrun', 'simctl', 'io', udid, 'screenshot', str(output / 'ios-launch-failure.png'), timeout=30)
+        except Exception:
+            print('Failure screenshot unavailable', flush=True)
+        raise
     finally:
         if owned_boot:
             run('xcrun', 'simctl', 'shutdown', udid)
