@@ -1,0 +1,96 @@
+name: ORZELL Android emulator launch
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/orzell-android-emulator.yml
+      - scripts/check-orzell-android-emulator.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orzell-android-emulator-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  launch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+    steps:
+      - name: Check out emulator harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Check out fixed reviewed application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 3be316d1b2458c49fde162147244aa8077a1f614
+          path: application
+          persist-credentials: false
+      - name: Enable hardware acceleration on disposable runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          test -c /dev/kvm || { echo 'KVM character device unavailable on this runner'; exit 1; }
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+          package_json_file: application/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: application/pnpm-lock.yaml
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install and prepare temporary Android project
+        working-directory: application
+        run: |
+          test "$(git rev-parse HEAD)" = 3be316d1b2458c49fde162147244aa8077a1f614
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/types build
+          node scripts/stage33-native-config.cjs
+          pnpm --filter @beauty-platform/mobile exec expo prebuild --platform android --no-install --skip-dependency-update expo,react,react-native
+          git diff --exit-code -- pnpm-lock.yaml
+      - name: Compile self-contained x86_64 emulator APK
+        working-directory: application/apps/mobile/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2
+      - name: Install, cold-launch twice and inspect sign-in controls
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          ram-size: 2048M
+          heap-size: 512M
+          disk-size: 2048M
+          emulator-boot-timeout: 360
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: python3 harness/scripts/check-orzell-android-emulator.py application/apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/orzell-android-review"
+      - name: Upload synthetic emulator evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-android-emulator-launch
+          path: |
+            ${{ runner.temp }}/orzell-android-review/android-launch-*.png
+            ${{ runner.temp }}/orzell-android-review/emulator-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
