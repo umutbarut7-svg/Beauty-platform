@@ -2,6 +2,12 @@
 
 Bu metin henüz etkinleştirilmiş bir politika değildir.
 
+**24 Ekim 2026 işletmeci beyanı:** kullanıcı, ORZELL App için bireysel hukuki
+işletmeci adını **Umut Barut** olarak belirtti. Destek/başvuru adresi
+**orzellapp@gmail.com**. Bu bilgi kullanıcı beyanı olarak hazırlık kaydına
+alındı; kimlik veya şirket tescili doğrulaması ve hukuki metin incelemesi
+anlamına gelmez. İnceleme taslağındaki hukuki işletmeci alanında bu ad kullanılır.
+
 **24 Ekim 2026 kullanıcı bilgisi:** ürün/işletme görünen adı **ORZELL App**,
 destek/başvuru e-posta adresi **orzellapp@gmail.com** olarak bildirildi.
 Görsel marka ve özgün logo **ORZELL** olarak korunur. Bu kayıt, tescilli şirket
