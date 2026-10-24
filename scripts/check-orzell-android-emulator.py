@@ -107,6 +107,19 @@ def main():
             # UIAutomator's active-app hierarchy omits the separate IME window.
             windows = adb('shell', 'dumpsys', 'window', 'windows')
             frames = []
+            # Android 35 exposes IME geometry in per-display InsetsState.
+            # Parse only a visible IME source; never infer a keyboard height.
+            for line in windows.splitlines():
+                if not re.search(r'\b(?:mType|type)=ime\b', line):
+                    continue
+                if not re.search(r'\b(?:mVisible|visible)=true\b', line):
+                    continue
+                match = re.search(
+                    r'(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', line)
+                if match:
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    if x2 > left and x1 < right and y2 > y1 > top:
+                        frames.append(y1)
             for block in re.split(r'(?m)^\s*Window #', windows):
                 if not re.search(r'Window\{[^\n}]*\bInputMethod\}', block):
                     continue
