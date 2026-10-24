@@ -16,6 +16,10 @@ A temporary keychain and provisioning profile are installed on the disposable ma
 
 The workflow uploads a binary for TestFlight processing. It does not request App Review or a public release. A successful upload alone does not prove Apple processing, tester availability, physical-device acceptance, or Stage 33 PASS.
 
+## First signed upload
+
+Run 40116077957 successfully recovered the original signing key, archived and exported ORZELL 1.0.0 (1011), passed Apple binary validation, and received upload acceptance on 24 October 2026 at 17:32 UTC. Temporary credentials were removed. Apple processing and internal tester availability require separate API confirmation.
+
 ## After upload
 
 Confirm Apple processing completed, resolve actual export-compliance questions based on the compiled application's encryption use, and assign the processed build to the internal group. Do not guess encryption declarations. Then verify installation on the owner's iPhone and complete the device acceptance checklist.
