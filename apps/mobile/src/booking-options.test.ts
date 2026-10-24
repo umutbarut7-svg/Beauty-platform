@@ -45,7 +45,11 @@ describe("booking branch and service eligibility", () => {
   it("keeps older catalogue responses usable without treating missing assignments as empty", () => {
     const legacy = {
       ...catalog,
-      staff: catalog.staff.map(({ locations: _locations, ...staff }) => staff),
+      staff: catalog.staff.map((staff) => ({
+        id: staff.id,
+        displayName: staff.displayName,
+        services: staff.services,
+      })),
     };
     expect(
       staffForBooking(legacy, "hair", "branch-first").map((staff) => staff.id),
