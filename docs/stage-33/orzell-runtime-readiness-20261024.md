@@ -47,12 +47,20 @@ store identity. Simulator checks are not physical-device acceptance.
 
 ## Policy and real-photo inputs still required
 
-The working product name is ORZELL. No registered company or legal operator
-identity is invented from the brand.
+Owner-confirmed details on 24 October 2026:
 
-The remaining factual inputs are the legal individual/company operating the
-platform, its public privacy/support email, launch market and official registry
-source for business checks, and the independent reviewer's assignment.
+| Field | Confirmed value |
+| --- | --- |
+| Product/business display name | ORZELL App |
+| Public support/contact email | orzellapp@gmail.com |
+| Visual brand/wordmark | ORZELL; existing original emblem and styling preserved |
+
+These confirm the display name and public contact channel. They do not establish
+a registered company title or the legal individual/company operating the platform.
+
+The remaining factual inputs are that legal operator identity, launch market and
+official registry source for business checks, and the independent reviewer's
+assignment. The supplied email has not been independently tested for delivery.
 Previously selected 24-hour consultation/photo and 90-day evidence retention
 remain unchanged.
 
