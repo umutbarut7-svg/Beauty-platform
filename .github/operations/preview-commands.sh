@@ -1,61 +1,38 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import subprocess,json,time,urllib.request
-EXPECTED='sha256:d6f15b40595f4abce6e4c5c185158a292d10dea9b1057288e67dff5049633dfe'
-NAME='beauty-preview-worker-1'
-def run(args,timeout=20):
- p=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
- if p.returncode:raise RuntimeError('Reviewed recovery command failed: '+args[0])
- return p.stdout.strip()
+import subprocess,json,urllib.request
+
 def inspect(service):
- return json.loads(run(['docker','inspect','beauty-preview-'+service+'-1']))[0]
-worker=inspect('worker')
-if worker['Image']!=EXPECTED or not worker['State']['Running']:raise SystemExit('Unexpected worker; recovery test blocked')
-if worker['HostConfig']['RestartPolicy']['Name']!='unless-stopped':raise SystemExit('Restart policy differs; no crash induced')
-values=dict(item.split('=',1) for item in worker['Config']['Env'] if '=' in item)
-for key in ['MVP_AI_ENABLED','MVP_SEMANTIC_ENABLED','MVP_PHOTO_POLICY_REVIEWED','MVP_VERIFICATION_POLICY_REVIEWED']:
- if values.get(key)!='false':raise SystemExit('Policy/provider state differs; no crash induced')
-others=['api','gateway','postgres','prepare-secrets','admin']
-before={s:(inspect(s)['Image'],inspect(s)['State']['StartedAt']) for s in others}
-old_started=worker['State']['StartedAt'];old_count=worker.get('RestartCount',0)
-def health():
- for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
-  origin='https://'+host
-  with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=10) as r:
-   if r.status!=200 or r.headers.get('Access-Control-Allow-Origin')!=origin:raise RuntimeError('Public API health/CORS failed')
-health()
-probe="""const fs=require('node:fs');const matches=fs.readdirSync('/proc').filter(x=>/^\\d+$/.test(x)).filter(x=>{try{return fs.readFileSync('/proc/'+x+'/cmdline','utf8').split('\\0')[1]==='dist/worker.js'}catch{return false}});if(matches.length!==1)process.exit(2);"""
-run(['docker','exec',NAME,'node','-e',probe])
-# Kill only the exact worker child, not Docker's init or any other container.
-run(['docker','exec',NAME,'node','-e',probe+"process.kill(Number(matches[0]),'SIGKILL');"])
-print('Exact worker child crash induced; no database/API/gateway action',flush=True)
-automatic=False
-for attempt in range(40):
- time.sleep(2)
- current=inspect('worker')
- if current['Image']!=EXPECTED:raise SystemExit('Unexpected worker image after crash')
- if current['State']['Running'] and current['State']['StartedAt']!=old_started and current.get('RestartCount',0)>old_count:
-  try:
-   run(['docker','exec',NAME,'node','-e',probe])
-   automatic=True;break
-  except RuntimeError:pass
-if not automatic:
- # Restore availability without recreating or changing configuration.
- run(['docker','start',NAME])
- raise SystemExit('Automatic recovery not proven; worker start requested for availability')
-recovered_started=current['State']['StartedAt']
-time.sleep(10)
-current=inspect('worker')
-if not current['State']['Running'] or current['State'].get('OOMKilled') or current['State']['StartedAt']!=recovered_started:raise SystemExit('Recovered worker unstable')
-run(['docker','exec',NAME,'node','-e',probe])
-health()
-for s in others:
- value=inspect(s)
- if (value['Image'],value['State']['StartedAt'])!=before[s]:raise SystemExit('Unrelated service changed')
-print('Docker automatic worker restart and live worker child restored: PASS')
-print('Recovered worker survived observation window; no OOM: PASS')
-print('Other five services unchanged and both public API health/CORS: PASS')
-print('No migration, database restart, data deletion, backup or policy change')
-print('This proves process restart only; not real-photo erasure, host reboot or disaster recovery')
+    p=subprocess.run(['docker','inspect','beauty-preview-'+service+'-1'],capture_output=True,text=True,timeout=15)
+    if p.returncode:raise SystemExit('Required preview service unavailable: '+service)
+    return json.loads(p.stdout)[0]
+services=['api','worker','postgres','admin','gateway']
+for service in services:
+    value=inspect(service)
+    state=value['State']
+    if not state.get('Running') or state.get('OOMKilled'):raise SystemExit('Service running/OOM check failed: '+service)
+    if value.get('HostConfig',{}).get('RestartPolicy',{}).get('Name')!='unless-stopped':raise SystemExit('Restart policy failed: '+service)
+    if service in ['api','postgres'] and state.get('Health',{}).get('Status')!='healthy':raise SystemExit('Healthcheck failed: '+service)
+    print(service+' running, no OOM, restart policy configured: PASS')
+    print(service+' restart count: '+str(value.get('RestartCount',0)))
+    if service=='postgres' and not any(m.get('Type')=='volume' and m.get('Destination')=='/var/lib/postgresql/data' for m in value.get('Mounts',[])):raise SystemExit('PostgreSQL named volume absent')
+print('PostgreSQL named volume configured: PASS')
+expected={'api':'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64','gateway':'sha256:be20529c1e0c9e1d8ab03109079d8e3c1d6b2acf85374a0e8155b3de2dfdf1a2'}
+for service,digest in expected.items():
+    if inspect(service)['Image']!=digest:raise SystemExit('Tested image mismatch: '+service)
+print('Tested booking API and ORZELL gateway active: PASS')
+for service in ['api','worker']:
+    values=dict(item.split('=',1) for item in inspect(service).get('Config',{}).get('Env',[]) if '=' in item)
+    if values.get('STAGE33_MVP_ENABLED')!='true':raise SystemExit('Core rollout unexpectedly closed: '+service)
+    for name in ['MVP_AI_ENABLED','MVP_SEMANTIC_ENABLED','MVP_PHOTO_POLICY_REVIEWED','MVP_VERIFICATION_POLICY_REVIEWED']:
+        if values.get(name)!='false':raise SystemExit('Policy/provider flag differs from reviewed state: '+service)
+print('Core enabled and unreviewed AI/photo/verification flags closed: PASS')
+for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
+    origin='https://'+host
+    with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=10) as r:
+        if r.status!=200 or r.headers.get('Access-Control-Allow-Origin')!=origin:raise SystemExit('Public health/CORS failed')
+print('Both public API health and CORS: PASS')
+print('READ-ONLY SNAPSHOT COMPLETE; no restart, reboot, deletion, migration or new resources')
+print('Live production recovery and continuous cleanup correctness remain unproven')
 PY
