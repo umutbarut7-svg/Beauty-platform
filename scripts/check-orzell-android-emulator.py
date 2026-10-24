@@ -121,7 +121,7 @@ def main():
                     if x2 > left and x1 < right and y2 > y1 > top:
                         frames.append(y1)
             for block in ([] if frames else re.split(r'(?m)^\s*Window #', windows)):
-                if not re.search(r'Window\{[^\n}]*\bInputMethod\}', block):
+                if not re.search(r'^\d+\s+Window\{[^\n}]*\bInputMethod\}:', block):
                     continue
                 match = re.search(
                     r'(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
