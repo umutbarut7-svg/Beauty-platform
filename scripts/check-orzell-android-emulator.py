@@ -124,12 +124,18 @@ def main():
                 if not re.search(r'Window\{[^\n}]*\bInputMethod\}', block):
                     continue
                 match = re.search(
-                    r'mFrame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+                    r'(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
                 if match:
                     x1, y1, x2, y2 = map(int, match.groups())
                     if x2 > left and x1 < right and y2 > y1 > top:
                         frames.append(y1)
             if not frames:
+                # Structural diagnostics only: omit window titles, input text
+                # and all arbitrary values; retain geometry key names/numbers.
+                geometries = re.findall(
+                    r'\b(?:mFrame|frame|parentFrame|displayFrame|containingFrame)='
+                    r'\[\d+,\d+\]\[\d+,\d+\]', windows)
+                print('Window geometry diagnostics: ' + json.dumps(geometries), flush=True)
                 raise RuntimeError('Visible keyboard window frame unavailable')
             bottom = min(bottom, min(frames))
         if bottom - top < 100:
