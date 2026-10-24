@@ -107,11 +107,11 @@ def main():
             # UIAutomator's active-app hierarchy omits the separate IME window.
             windows = adb('shell', 'dumpsys', 'window', 'windows')
             frames = []
-            for block in re.split(r'(?m)^\\s*Window #', windows):
-                if not re.search(r'Window\\{[^\\n}]*\\bInputMethod\\}', block):
+            for block in re.split(r'(?m)^\s*Window #', windows):
+                if not re.search(r'Window\{[^\n}]*\bInputMethod\}', block):
                     continue
                 match = re.search(
-                    r'mFrame=\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]', block)
+                    r'mFrame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
                 if match:
                     x1, y1, x2, y2 = map(int, match.groups())
                     if x2 > left and x1 < right and y2 > y1 > top:
