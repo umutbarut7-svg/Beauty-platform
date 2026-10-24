@@ -56,7 +56,7 @@ jobs:
               throw new Error("Expected exactly one App Store Connect record for com.orzell.app.");
             const appId = apps.data[0].id;
             const builds = await get("builds?filter[app]=" + encodeURIComponent(appId) + "&include=buildBetaDetail&sort=-uploadedDate&limit=5");
-            console.log("Build status: "+JSON.stringify(builds.data.map(b=>({id:b.id,version:b.attributes.version,state:b.attributes.processingState,usesNonExemptEncryption:b.attributes.usesNonExemptEncryption,detail:builds.included?.find(i=>i.type===\"buildBetaDetails\" && i.id===b.relationships.buildBetaDetail.data.id)?.attributes}))));
+            console.log("Build status: "+JSON.stringify(builds.data.map(b=>({id:b.id,version:b.attributes.version,state:b.attributes.processingState,usesNonExemptEncryption:b.attributes.usesNonExemptEncryption,detail:builds.included?.find(i=>i.type==="buildBetaDetails" && i.id===b.relationships.buildBetaDetail.data.id)?.attributes}))));
             const groups=await get("betaGroups?filter[app]="+encodeURIComponent(appId)+"&limit=20");
             console.log("Beta groups: "+JSON.stringify(groups.data.map(g=>({id:g.id,name:g.attributes.name,isInternalGroup:g.attributes.isInternalGroup}))));
             const bundle = await get("bundleIds?filter[identifier]=com.orzell.app&limit=2");
