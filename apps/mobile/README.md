@@ -1,31 +1,27 @@
-# Beauty Platform mobile
+# ORZELL mobile
 
-Expo/React Native müşteri ve işletme uygulaması. Repo kökünde
-`corepack pnpm install --frozen-lockfile` ve
-`corepack pnpm --filter @beauty-platform/types build` sonrasında
-`corepack pnpm --filter @beauty-platform/mobile dev` ile çalışır.
-API adresi `EXPO_PUBLIC_API_URL`; varsayılan `http://localhost:3001`.
-Telefon/emülatörde localhost adresi geliştirme bilgisayarı değildir; test API'si
-cihazın erişebildiği adreste olmalıdır. Secret değerleri EXPO_PUBLIC değişkenlerine yazılmaz.
+Expo/React Native müşteri ve işletme uygulaması. Node 24 ve pnpm 10.28.1 ile repo kökünde:
 
-## Native doğrulama
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm --filter @beauty-platform/types build
+EXPO_PUBLIC_API_URL=http://localhost:3001 corepack pnpm --filter @beauty-platform/mobile dev
+```
 
-`.github/workflows/stage-33-native.yml` Android debug APK ve imzasız iOS simulator
-uygulamasını ayrı job'larda derler. Önce sabit lockfile ile kurulum, sonra Expo'nun
-kurulu sürümünün prebuild template'i kullanılır. CI namespace'i
-`com.beautyplatform.stage33test` yalnız geçici test kimliğidir; mağaza kimliği
-seçilmiş veya uygulama yayımlanmış değildir. Oluşan native klasörler commit edilmez.
+API adresi `EXPO_PUBLIC_API_URL`; belirtilmezse mevcut ORZELL ön izleme API'si kullanılır. Telefonda localhost geliştirme bilgisayarı değildir; erişilebilir HTTPS test adresi verin. Secret değerleri EXPO_PUBLIC değişkenlerine yazmayın.
 
-Yerelde izole bir worktree'de Android/iOS prebuild, mevcut Expo ve fotoğraf
-seçici plugin'i ile başarıyla çalıştırıldı. Derleme sonucu her commit'in native
-workflow kaydından ayrıca kontrol edilir; prebuild tek başına APK/iOS build PASS değildir.
+## Ekranlar
 
-Debug artifact'leri mağaza dağıtımı, fiziksel cihaz kabulü veya canlı AWS/OpenAI
-kabulü değildir. Debug uygulamanın JavaScript için Metro geliştirme sunucusuna
-bağlanması gerekebilir. iOS simulator artifact'i iPhone'a kurulabilir IPA değildir.
+Müşteri: Keşfet, Randevular, Bakımım, Hesabım. Katalogdan hizmet, konum, uzman, gün ve saat seçilir. Saat seçimi rezervasyon oluşturmaz; fiyat ve tarih incelendikten sonra **Randevuyu onayla** gönderir. Bu adımda ödeme alınmaz. Gelecekteki uygun randevuların iptali ayrıca onaylanır.
 
-Native kullanım kabulünde sentetik test hesapları/fotoğraflarıyla kayıt/giriş,
-izin vermeme, fotoğraf seçme/iptal, izin geri çekme ve geciken yanıt, ağ kesilmesi,
-slot/randevu, job/result/satisfaction/passport ve işletme ekranları doğrulanmalıdır.
-Gerçek müşteri fotoğrafı, credential veya özel içerik CI log/artifact'ine konmaz.
-Politika taslakları ve canlı kabul sınırları `docs/stage-33/` altındadır.
+İşletme: Hesabım ekranından işletme alanına geçilir. İşletmem, Randevular, Özet, Hesabım sekmeleri bulunur. Konum, ekip, hizmet ve çalışma saatleri İşletme ayarları içindedir. İşlem durumu yalnız sunucunun desteklediği geçişlerle ilerler. Gelir özeti kayıtlı ledger tutarlarını gösterir; veri yoksa gelir uydurulmaz.
+
+Fotoğraflı danışmanlık Keşfet içindedir; mevcut açık izin ve sunucu politika kontrolleri korunur. Giriş bilgileri bellekte tutulur; çıkışta oturum ve hesaba bağlı ekran verileri temizlenir.
+
+## Doğrulama
+
+`.github/workflows/orzell-application.yml` güncel kaynak kodu export eder ve uzak isteklerin tamamını kesen veya sentetik cevaplayan tarayıcı yolculuğunu çalıştırır. 320/390/768 px görünümleri ve ekran görüntüleri artifact olarak saklanır. Gerçek HTTP, veritabanı, worker ve bakım geçmişi akışı Stage 32 validation içindeki Stage 33 integration testinde izole servislerle ayrıca doğrulanır. Bu testin export adresi localhost olarak sabitlenir; uzak ağ istekleri engellenir.
+
+`.github/workflows/stage-33-native.yml` JavaScript içeren Android release ön izleme APK'sı ve imzasız iOS simulator uygulaması derler. CI namespace'i `com.beautyplatform.stage33test` geçici test kimliğidir. Android çıktısı mağaza sürümü değildir; iOS simulator çıktısı iPhone'a kurulabilen IPA değildir. Native klasörler commit edilmez.
+
+Fiziksel Android/iPhone kabulü, gerçek fotoğraf/AI kalite kabulü, incelenmiş işletme/fotoğraf/iletişim politikaları ve sürekli üretim gizlilik/kurtarma kabulü henüz tamamlanmadı. Bu arayüz değişikliği Stage 33 PASS veya mağaza yayını anlamına gelmez. Google Play kurulumu ayrı, iPhone cihaz dağıtımı Apple imzalama hesabı gerektirir.

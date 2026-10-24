@@ -1,5 +1,6 @@
+import { AppText as Text, palette } from "./ui";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type {
   MvpApiClient,
   MvpVerificationPolicy,
@@ -78,6 +79,7 @@ export function BusinessIntelligenceSetup({
             <View key={field.key}>
               <Text>{field.label}</Text>
               <TextInput
+                placeholderTextColor={palette.muted}
                 accessibilityLabel={`Doğrulama: ${field.label}`}
                 value={answers[field.key] ?? ""}
                 onChangeText={(value) =>
@@ -142,6 +144,7 @@ export function BusinessIntelligenceSetup({
         }),
       )}
       <TextInput
+        placeholderTextColor={palette.muted}
         accessibilityLabel="İşletme AI eşleştirme hedefi"
         placeholder="Hizmet hedefi; kişisel müşteri bilgisi yazmayın"
         value={query}
@@ -180,14 +183,15 @@ export function BusinessIntelligenceSetup({
 }
 const styles = StyleSheet.create({
   panel: { gap: 12, marginVertical: 16 },
-  heading: { fontSize: 18, fontWeight: "600", color: "#23382f" },
-  button: { padding: 12, backgroundColor: "#264e3d", borderRadius: 8 },
+  heading: { fontSize: 18, fontWeight: "600", color: palette.text },
+  button: { padding: 12, backgroundColor: palette.primary, borderRadius: 8 },
   white: { color: "white" },
   input: {
     padding: 12,
     borderWidth: 1,
-    borderColor: "#d4dcd4",
+    borderColor: palette.border,
     borderRadius: 8,
-    backgroundColor: "white",
+    backgroundColor: palette.field,
+    color: palette.text,
   },
 });

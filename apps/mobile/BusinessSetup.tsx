@@ -1,5 +1,6 @@
+import { AppText as Text, palette } from "./ui";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { MvpApiClient } from "@beauty-platform/types";
 type Named = { id: string; name: string };
 type Professional = { id: string; displayName: string };
@@ -71,6 +72,7 @@ export function BusinessSetup({
   const path = `/businesses/${businessId}`;
   const field = (label: string, value: string, change: (x: string) => void) => (
     <TextInput
+      placeholderTextColor={palette.muted}
       accessibilityLabel={label}
       placeholder={label}
       value={value}
@@ -356,18 +358,24 @@ export function BusinessSetup({
 }
 const styles = StyleSheet.create({
   container: { gap: 12 },
-  heading: { fontSize: 18, fontWeight: "600", marginTop: 16, color: "#23382f" },
+  heading: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+    color: palette.text,
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#d4dcd4",
+    borderColor: palette.border,
     borderRadius: 10,
     padding: 14,
-    backgroundColor: "white",
+    backgroundColor: palette.field,
+    color: palette.text,
     minHeight: 48,
   },
   button: {
     padding: 12,
-    backgroundColor: "#264e3d",
+    backgroundColor: palette.primary,
     borderRadius: 8,
     marginVertical: 3,
   },
