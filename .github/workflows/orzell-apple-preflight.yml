@@ -55,7 +55,10 @@ jobs:
             if (apps.data?.length !== 1 || apps.data[0].attributes.bundleId !== "com.orzell.app")
               throw new Error("Expected exactly one App Store Connect record for com.orzell.app.");
             const appId = apps.data[0].id;
-            const builds = await get("builds?filter[app]=" + encodeURIComponent(appId) + "&limit=1");
+            const builds = await get("builds?filter[app]=" + encodeURIComponent(appId) + "&include=buildBetaDetail&sort=-uploadedDate&limit=5");
+            console.log("Build status: "+JSON.stringify(builds.data.map(b=>({id:b.id,version:b.attributes.version,state:b.attributes.processingState,usesNonExemptEncryption:b.attributes.usesNonExemptEncryption,detail:builds.included?.find(i=>i.type===\"buildBetaDetails\" && i.id===b.relationships.buildBetaDetail.data.id)?.attributes}))));
+            const groups=await get("betaGroups?filter[app]="+encodeURIComponent(appId)+"&limit=20");
+            console.log("Beta groups: "+JSON.stringify(groups.data.map(g=>({id:g.id,name:g.attributes.name,isInternalGroup:g.attributes.isInternalGroup}))));
             const bundle = await get("bundleIds?filter[identifier]=com.orzell.app&limit=2");
             if (bundle.data?.length !== 1) throw new Error("Confirmed bundle registration was not found.");
             const certificates = await get("certificates?filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION&limit=200");
