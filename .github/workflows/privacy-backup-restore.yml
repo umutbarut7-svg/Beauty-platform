@@ -6,6 +6,7 @@ on:
       - .github/workflows/privacy-backup-restore.yml
       - scripts/check-privacy-backup-restore.cjs
       - scripts/privacy-restore-preload.cjs
+      - infra/operations/quarantine-restored-photos.sql
   workflow_dispatch:
 
 permissions:
@@ -13,11 +14,16 @@ permissions:
 
 jobs:
   restore:
+    strategy:
+      fail-fast: false
+      matrix:
+        snapshot: [BEFORE_WITHDRAWAL_COMMIT, AFTER_WITHDRAWAL_COMMIT]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_backup_ci?schema=public
       PRIVACY_RESTORE_FIXTURE: confirmed
+      PRIVACY_SNAPSHOT_BOUNDARY: ${{ matrix.snapshot }}
       NODE_ENV: test
       MVP_AI_ENABLED: "false"
       MVP_S3_ENABLED: "false"
@@ -44,7 +50,7 @@ jobs:
       - name: Checkout reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          ref: 3be316d1b2458c49fde162147244aa8077a1f614
           path: application
           persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
@@ -66,6 +72,7 @@ jobs:
           pnpm --filter @beauty-platform/api prisma:migrate
           cp ../harness/scripts/check-privacy-backup-restore.cjs apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/
+          cp ../harness/infra/operations/quarantine-restored-photos.sql apps/api/
       - name: Backup, restore, check access and run cleanup twice
         working-directory: application/apps/api
         env:
@@ -74,7 +81,7 @@ jobs:
       - name: Upload non-content restore evidence only
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: privacy-backup-restore-evidence
+          name: privacy-backup-restore-evidence-${{ matrix.snapshot }}
           path: application/apps/api/privacy-restore-evidence.json
           if-no-files-found: error
           retention-days: 7
