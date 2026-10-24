@@ -130,3 +130,40 @@ passed.
 This closes the current artifact's simulator installation/cold-launch check.
 Physical iPhone installation, authenticated native journeys, permissions and
 real-photo behavior remain untested.
+
+## Android emulator installation and launch acceptance
+
+[Run 40079865297](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40079865297),
+job 120830980767, passed on a fresh Android API 35 x86_64 emulator. The application
+checkout is fixed at `3be316d1b2458c49fde162147244aa8077a1f614`; the harness branch
+head was `b3b81d4d8b8d16792fc96ab2eec37d3ec60aa131`, and the runner checked out PR
+merge revision `d9ea41908214d9302d4ea987a8378346fe4ce027`.
+
+This is a new x86_64 release build for an emulator, not the earlier ARM phone APK.
+Before installing, the harness verified test namespace
+`com.beautyplatform.stage33test`, display name ORZELL, bundled JavaScript,
+x86_64-only native libraries and the byte-identical original logo. APK SHA256:
+`59ca1377807edf9df23ab9bc1bec0766d9398f3d1a233d9839ebeef4c082e1a1`.
+Both cold launches retained their process identity for five seconds, remained
+foreground and exposed the Turkish sign-in controls through the native UI tree.
+
+Evidence artifact 12554926604 was downloaded and its archive SHA256 verified:
+`1340e2ea85a39c1acf371599ebf7ae149ce8c0cfd02f480303fe94c02882ab81`.
+Both screenshots were separately reviewed: they show the original ORZELL emblem
+and wordmark, Turkish sign-in form and no runtime error screen. The form extends
+below the initial viewport; keyboard, scrolling and authenticated interactions
+remain separate device acceptance items. The immutable runner evidence correctly
+records that it did not itself perform this subsequent manual screenshot review.
+
+The first attempt built the APK but failed its runner KVM access check before
+starting an emulator. The corrected harness waits for udev and explicitly sets
+KVM device access only on the disposable runner. This check now runs before
+compilation. The successful retry and full regression
+[run 40079865254](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40079865254)
+passed; the failed attempt is not counted as installation acceptance.
+
+No account, real photo, provider call or appointment was used. No existing API,
+worker, database, policy flag or cloud resource changed. Physical Android and
+iPhone acceptance, authenticated native journeys and photo permissions remain
+NOT RUN; use [device-acceptance.md](device-acceptance.md) for those observations.
+Stage 33 remains NOT PASS.
