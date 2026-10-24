@@ -236,7 +236,7 @@ async function main() {
     );
     const evidence = {
       status: "PASS",
-      application: "123e7339e2ab2a9e8e94f391a8431b73afc28efe",
+      application: "3be316d1b2458c49fde162147244aa8077a1f614",
       completedSweeps: await count("sweeps"),
       storage: "LOCAL_FILESYSTEM_FIXTURE",
       database: "DISPOSABLE_POSTGRESQL",
