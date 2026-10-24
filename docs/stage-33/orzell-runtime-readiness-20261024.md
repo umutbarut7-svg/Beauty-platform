@@ -76,3 +76,31 @@ must not be represented as completion of that work.
 
 Stage 33 remains NOT PASS pending the genuine device, reviewed-policy,
 real-photo and production-operating acceptance boundaries.
+
+
+## Current iOS simulator launch acceptance
+
+PR #30 updated the launch gate to the current application artifact 12551818470,
+application revision `3be316d1b2458c49fde162147244aa8077a1f614`.
+
+[Run 40074997894](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40074997894)
+passed on iPhone 16e / iOS 26.2. Native identity, self-contained JavaScript and the
+byte-identical original logo were checked before installation. Both cold launches
+stayed alive and produced screenshots. Evidence artifact 12552942487 was
+downloaded and its SHA256 verified:
+`52d362345dc2d4dcce001c3738e4dd316436dea6cf509f347bf6097f7df86b7b`.
+Both screenshots were separately reviewed and show the ORZELL original logo,
+wordmark and Turkish sign-in interface, without an error screen.
+The immutable runner evidence file correctly records that it did not itself
+perform this subsequent manual screenshot review.
+
+The previous attempt timed out at 60 seconds after successful installation.
+The updated harness establishes the display before launch, uses a bounded
+180-second launch deadline, and captures failure screenshots; a timeout never
+counts as acceptance. The final launch checks and the full regression
+[run 40074997881](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40074997881)
+passed.
+
+This closes the current artifact's simulator installation/cold-launch check.
+Physical iPhone installation, authenticated native journeys, permissions and
+real-photo behavior remain untested.
