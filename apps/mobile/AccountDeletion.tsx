@@ -94,6 +94,7 @@ export function AccountDeletion({
           {button(
             "Hesap silme talebini onayla",
             async () => {
+              setMessage("");
               try {
                 const result = await api.request<Receipt>(
                   "/auth/account-deletion",
@@ -103,6 +104,12 @@ export function AccountDeletion({
                 setReceipt(result);
                 setConfirming(false);
                 setConfirmation("");
+              } catch (error) {
+                if (error instanceof ApiError && error.status === 403)
+                  setMessage(
+                    "Parolan doğrulanamadı. Parolanı yeniden gir; hesabın silinmedi.",
+                  );
+                else throw error;
               } finally {
                 setPassword("");
               }
