@@ -1,3 +1,4 @@
+# Release candidate: booking and keyboard fixes tested at 589fe6a; Android form run 40178178431 passed.
 name: ORZELL signed iOS TestFlight upload
 
 on:
