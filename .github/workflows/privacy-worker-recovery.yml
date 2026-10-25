@@ -42,7 +42,7 @@ jobs:
       - name: Checkout reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 3be316d1b2458c49fde162147244aa8077a1f614
+          ref: 06242d064f387cc57aac81d4344e0d714c071ff4
           path: application
           persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
