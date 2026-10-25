@@ -29,17 +29,17 @@ Bu ilk sürümün temel kapsamı işletme keşfi ve randevu yönetimidir. Fotoğ
 
 ## Submission gates still requiring real values/evidence
 
-| Gate | Required evidence |
-| --- | --- |
-| Public support URL | An owner-controlled HTTPS support page; an email address alone is not a URL. |
-| Public privacy-policy URL | Reviewed disclosure covering actual data, processors, retention and deletion; no placeholder link. |
-| Account deletion | Verify an accessible account-deletion path and backend behavior before submission. Do not equate logout with deletion. |
-| App Privacy answers | Derive each answer from the actual app/backend and SDK behavior, including account details, photos if enabled and diagnostics. Do not guess tracking declarations. |
-| Age rating and encryption | Answer Apple's actual questionnaire against the final binary and content. No declaration is inferred from a successful upload. |
-| Reviewer access | A designated test account and instructions using synthetic data, supplied securely in App Store Connect. No password is committed here. |
-| Screenshots | Capture the final candidate on the required supported Apple display sizes. The synthetic web-screen PDF is a review aid, not a substitute for store screenshots. |
-| Device acceptance | Verify install, keyboard, login, booking, cancel, relaunch and logout on the exact release candidate. |
-| Scope | Keep photo/AI/verification features closed until their actual policy and provider review is complete. |
+| Gate                      | Required evidence                                                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public support URL        | An owner-controlled HTTPS support page; an email address alone is not a URL.                                                                                       |
+| Public privacy-policy URL | Reviewed disclosure covering actual data, processors, retention and deletion; no placeholder link.                                                                 |
+| Account deletion          | Verify an accessible account-deletion path and backend behavior before submission. Do not equate logout with deletion.                                             |
+| App Privacy answers       | Derive each answer from the actual app/backend and SDK behavior, including account details, photos if enabled and diagnostics. Do not guess tracking declarations. |
+| Age rating and encryption | Answer Apple's actual questionnaire against the final binary and content. No declaration is inferred from a successful upload.                                     |
+| Reviewer access           | A designated test account and instructions using synthetic data, supplied securely in App Store Connect. No password is committed here.                            |
+| Screenshots               | Capture the final candidate on the required supported Apple display sizes. The synthetic web-screen PDF is a review aid, not a substitute for store screenshots.   |
+| Device acceptance         | Verify install, keyboard, login, booking, cancel, relaunch and logout on the exact release candidate.                                                              |
+| Scope                     | Keep photo/AI/verification features closed until their actual policy and provider review is complete.                                                              |
 
 Do not advertise marketplace, product stock, live payments, health diagnosis or AI outcomes as shipped functionality. The UI examples contain synthetic data and are not business revenue evidence.
 
