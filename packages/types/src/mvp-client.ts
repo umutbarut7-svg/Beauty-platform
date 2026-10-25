@@ -125,6 +125,8 @@ export interface MvpCatalog {
   staff: Array<{
     id: string;
     displayName: string;
+    // Optional during rolling upgrades; absent means the server has not supplied assignments.
+    locations?: Array<{ locationId: string }>;
     services: Array<{ serviceId: string }>;
   }>;
 }

@@ -16,7 +16,8 @@ main(async (browser, origin, output) => {
     calls = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let bookings = [],
-    deny = false;
+    deny = false,
+    availabilityMode = "slots";
   const startsAt =
     new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) +
     "T10:00:00.000Z";
@@ -80,18 +81,32 @@ main(async (browser, origin, output) => {
       value = {
         ...business,
         services: [service],
-        locations: [{ id: "location-1", name: "Merkez" }],
+        locations: [
+          { id: "location-1", name: "Merkez" },
+          { id: "location-2", name: "Merkez" },
+        ],
         staff: [
           {
             id: "staff-1",
             displayName: "Deneme Uzmanı",
+            locations: [{ locationId: "location-2" }],
             services: [{ serviceId: service.id }],
           },
         ],
       };
-    else if (endpoint === "/businesses/business-1/availability")
-      value = [{ startsAt, staffId: "staff-1" }];
-    else if (
+    else if (endpoint === "/businesses/business-1/availability") {
+      assert.equal(url.searchParams.get("locationId"), "location-2");
+      if (availabilityMode === "error") {
+        status = 404;
+        value = {
+          message: "Active staff member is not assigned to this location",
+        };
+      } else
+        value =
+          availabilityMode === "empty"
+            ? []
+            : [{ startsAt, staffId: "staff-1" }];
+    } else if (
       endpoint === "/businesses/business-1/appointments" &&
       request.method() === "POST"
     ) {
@@ -107,6 +122,7 @@ main(async (browser, origin, output) => {
         ].sort(),
       );
       assert.equal(body.bookForSelf, true);
+      assert.equal(body.locationId, "location-2");
       assert.equal(body.staffMemberId, "staff-1");
       assert.equal(body.serviceId, service.id);
       value = {
@@ -188,6 +204,25 @@ main(async (browser, origin, output) => {
   await click("Ara");
   await click("Deneme Salonu hizmetlerini gör");
   await click("Saç bakımı hizmetini seç");
+  await click("Merkez · tion-1");
+  await expect(
+    page.getByText(
+      /Bu şubede seçtiğin hizmet için rezervasyona açık profesyonel yok/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Deneme Uzmanı", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Müsait saatleri bul", exact: true }),
+  ).toHaveCount(0);
+  await click("Merkez · tion-2");
+  await click("Deneme Uzmanı");
+  await click("Merkez · tion-1");
+  await click("Merkez · tion-2");
+  await expect(
+    page.getByRole("button", { name: "Deneme Uzmanı ✓", exact: true }),
+  ).toHaveCount(0);
   await click("Deneme Uzmanı");
   const dateInput = page.getByLabel("Başka tarih (YYYY-MM-DD)", {
     exact: true,
@@ -207,6 +242,24 @@ main(async (browser, origin, output) => {
   await page
     .getByLabel("Başka tarih (YYYY-MM-DD)", { exact: true })
     .fill(startsAt.slice(0, 10));
+  availabilityMode = "error";
+  await click("Müsait saatleri bul");
+  await expect(
+    page.getByText(
+      "Seçilen şube, hizmet ve profesyonel birlikte rezervasyona açık değil. Başka bir şube veya profesyonel seçebilirsin.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Saat seç:/ })).toHaveCount(0);
+  availabilityMode = "empty";
+  await click("Müsait saatleri bul");
+  await expect(
+    page.getByText(
+      "Bu tarih için müsait saat bulunamadı. Başka bir gün veya şube seçebilirsin.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  availabilityMode = "slots";
   await click("Müsait saatleri bul");
   await page.getByRole("button", { name: /^Saat seç:/ }).click();
   await expect(page.getByText("Randevun hazır", { exact: true })).toBeVisible();
