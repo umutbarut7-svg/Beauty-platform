@@ -55,3 +55,18 @@ Aşama 33 bu açıklar kapanmadan PASS değildir.
 ## Çalışma kopyası karışıklığı
 
 Eski yerel beauty-platform kopyasının HEAD'i 5e4b77a idi; App.tsx değişikliği ve KeyboardScreen.tsx dosyası PR #43'te zaten uzaktan kaydedilmişti. Bunları tekrar yeni düzeltme olarak üretme. Güncel geliştirme kaynağı feat/stage33-mvp-build-specification dalıdır; TestFlight yükleme dalı ayrı dağıtım dalıdır.
+
+## 25 Ekim devamı: hesap silme talep alımı
+
+PR #47, kaynak fc36961d73fd39da4ca591e2def7ac7a09e35abe, TASLAK.
+Talep oluşturma, parola/açık onay, kullanıcıya özel durum, yönetici kuyruğu ve parola hatasından sonra oturumu koruma eklendi.
+
+- Dört yeni servis testi, Prisma kontrolleri, API/mobile/integration typecheck ve lint geçti.
+- Run 40181355988: migration/regresyon ve gerçek HTTP/PostgreSQL kabulü PASS; 17 entegrasyon testi PASS.
+- Run 40181355949: yeni talep ekranı, vazgeçme, yanlış parola, alan temizleme ve doğru talep makbuzu PASS.
+- Run 40181355977: Android/iOS derlemeleri PASS.
+- İlk eşzamanlılık testi gerçek bir 500 hatası yakaladı. Boş-update upsert yerine createMany(skipDuplicates) ile düzeltildi; iki 202 ve tek talep ID'si koşulu korunarak geçti.
+
+Bu, hesap silmenin talep başlatma/takip parçasıdır. Kalıcı silme, işletme sahipliği/retention, oturum iptali, özel nesne temizliği ve tamamlanma bildirimi halen AÇIK. PR taslakta; canlı veritabanı, canlı API ve TestFlight 1031 değişmedi. Tam hesap silme veya Aşama 33 PASS olarak işaretlenmez.
+
+Sonraki işe başlanırken bu taslak mevcut kabul edilir; talep ekranı/API yeniden sıfırdan üretilmez. Kullanıcıya önceki telefon/randevu testleri tekrar yaptırılmaz.
