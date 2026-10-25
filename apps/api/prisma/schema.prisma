@@ -349,6 +349,7 @@ model User {
   mvpPhotos                    MvpPhoto[]
   mvpAnalyses                  MvpPhotoAnalysis[]
   mvpPrivacyEvents             MvpPrivacyEvent[]
+  accountDeletionRequest       AccountDeletionRequest?
 }
 
 model Business {
@@ -4288,4 +4289,13 @@ model MvpVerificationRequest {
   @@index([businessId, createdAt])
   @@index([status, createdAt])
   @@index([evidenceExpiresAt])
+}
+
+model AccountDeletionRequest {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  requestedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([requestedAt, id])
 }

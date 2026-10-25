@@ -17,6 +17,7 @@ import {
   type MvpResult,
 } from "@beauty-platform/types";
 import { locationLabel, staffForBooking } from "./booking-options";
+import { AccountDeletion } from "./AccountDeletion";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
@@ -1531,6 +1532,7 @@ export default function App() {
                     true,
                   )}
                 </View>
+                <AccountDeletion api={api} busy={busy} run={run} />
               </>
             )}
           </>

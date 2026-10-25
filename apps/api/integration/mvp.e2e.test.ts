@@ -277,6 +277,58 @@ afterAll(async () => {
 });
 
 describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
+  it("takes one owner-scoped account deletion request without claiming or performing deletion", async () => {
+    const path = "/auth/account-deletion";
+    expect((await request(path, "")).status).toBe(401);
+    expect((await request(path, customerToken)).body.status).toBe("NONE");
+    const before = await db.businessMember.count({ where: { businessId } });
+    expect(
+      (
+        await request(path, customerToken, "POST", {
+          password: "wrong",
+          confirmation: "HESABIMI SIL",
+        })
+      ).status,
+    ).toBe(403);
+    expect((await request(path, customerToken)).body.status).toBe("NONE");
+    expect(
+      (
+        await request(path, customerToken, "POST", {
+          password: "Isolated-strong-password-33",
+          confirmation: "HESABIMI SIL",
+          userId: "someone-else",
+        })
+      ).status,
+    ).toBe(400);
+    const results = await Promise.all(
+      [1, 2].map(() =>
+        request(path, customerToken, "POST", {
+          password: "Isolated-strong-password-33",
+          confirmation: "HESABIMI SIL",
+        }),
+      ),
+    );
+    expect(results.map((r) => r.status)).toEqual([202, 202]);
+    expect(results[0]!.body.request.id).toBe(results[1]!.body.request.id);
+    expect(results[0]!.body).toMatchObject({
+      status: "REQUESTED",
+      deletionCompleted: false,
+    });
+    expect(results[0]!.body).not.toHaveProperty("password");
+    expect((await request(path, strangerToken)).body).toEqual({
+      status: "NONE",
+      request: null,
+      deletionCompleted: false,
+    });
+    expect(
+      await db.accountDeletionRequest.count({ where: { userId: customerId } }),
+    ).toBe(1);
+    expect(await db.businessMember.count({ where: { businessId } })).toBe(
+      before,
+    );
+    expect((await request("/auth/me", customerToken)).status).toBe(200);
+  });
+
   it("keeps owner self-booking explicit and rejects customer impersonation", async () => {
     const date = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
     const path = `/businesses/${businessId}/appointments`;
@@ -381,6 +433,23 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         password: "Isolated-strong-password-33",
       })
     ).accessToken;
+    expect(
+      (await request("/auth/account-deletion/pending", customerToken)).status,
+    ).toBe(403);
+    expect(
+      (await request("/auth/account-deletion/pending", ownerToken)).status,
+    ).toBe(403);
+    const pending = await request(
+      "/auth/account-deletion/pending",
+      reviewerToken,
+    );
+    expect(pending.status).toBe(200);
+    expect(
+      pending.body.items.some(
+        (item: { user: { id: string } }) => item.user.id === customerId,
+      ),
+    ).toBe(true);
+
     const decision = {
       decision: "APPROVED",
       note: "Synthetic evidence reviewed under the CI fixture policy",
