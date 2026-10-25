@@ -31,7 +31,7 @@ jobs:
       - name: Check out fixed reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 06242d064f387cc57aac81d4344e0d714c071ff4
+          ref: 589fe6ae579cf10beac4f045c9b6e26e2e13e2c0
           path: application
           persist-credentials: false
       - name: Enable hardware acceleration on disposable runner
@@ -61,7 +61,7 @@ jobs:
       - name: Install and prepare temporary Android project
         working-directory: application
         run: |
-          test "$(git rev-parse HEAD)" = 06242d064f387cc57aac81d4344e0d714c071ff4
+          test "$(git rev-parse HEAD)" = 589fe6ae579cf10beac4f045c9b6e26e2e13e2c0
           pnpm install --frozen-lockfile
           pnpm --filter @beauty-platform/types build
           node scripts/stage33-native-config.cjs
