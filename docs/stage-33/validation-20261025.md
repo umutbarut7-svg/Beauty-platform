@@ -20,7 +20,7 @@ The booking branch/professional fix was merged in PR #41. PR #43 adds a keyboard
 | Live service health and CORS                       | Run 40178245687                      | PASS                                                         |
 | Read-only backup scheduling inspection             | Run 40178762105                      | Completed; not backup acceptance                             |
 | Live S3 and OpenAI adapters                        | Run 40179062434 / job 121125980340   | PASS                                                         |
-| Signed iOS upload                                  | Run 40178879560, ORZELL 1.0.0 (1031) | Upload accepted; Apple processing/group confirmation pending |
+| Signed iOS upload                                  | Run 40178879560, ORZELL 1.0.0 (1031) | PASS: processed VALID and available to existing internal group (run 40179728482) |
 
 The keyboard-aware candidate changes UI only relative to the API source used by the recovery tests.
 
@@ -49,3 +49,5 @@ Isolated restore tests and a named PostgreSQL volume do not establish production
 A three-page UI review PDF contains six actual web-screen captures from run 40176888493, using synthetic fixture data: sign-in, discovery, booking confirmation, customer bookings, business home and business summary. It records its original source revision 06242d0 and is not represented as store screenshots or a final design.
 
 No App Review, external beta distribution or public release was requested.
+
+Apple rejected a redundant explicit internal-group association attempt in run 40179174250 (HTTP 422). The corrected confirmation run 40179728482 verified the existing group's automatic access without retrying unsupported association writes. The failed attempt is not counted as acceptance.
