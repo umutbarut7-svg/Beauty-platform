@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +17,7 @@ import {
   type MvpResult,
 } from "@beauty-platform/types";
 import { locationLabel, staffForBooking } from "./booking-options";
+import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
 import { BusinessDemand } from "./BusinessDemand";
@@ -443,7 +443,7 @@ export default function App() {
         ? "workspace"
         : screen;
   return (
-    <SafeAreaView style={styles.screen}>
+    <KeyboardScreen>
       <StatusBar
         barStyle="light-content"
         backgroundColor={palette.background}
@@ -1571,12 +1571,11 @@ export default function App() {
           ))}
         </View>
       )}
-    </SafeAreaView>
+    </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.background },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 12,
