@@ -13,7 +13,8 @@ async function fixture() {
     },
     accountDeletionRequest: {
       findUnique: vi.fn().mockResolvedValue(null),
-      upsert: vi.fn().mockResolvedValue({
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
         id: "request-1",
         requestedAt: new Date("2026-10-25T00:00:00Z"),
       }),
@@ -28,7 +29,7 @@ describe("account deletion request intake", () => {
     await expect(service.request("owner", "wrong")).rejects.toBeInstanceOf(
       ForbiddenException,
     );
-    expect(db.accountDeletionRequest.upsert).not.toHaveBeenCalled();
+    expect(db.accountDeletionRequest.createMany).not.toHaveBeenCalled();
   });
   it("rejects a missing account without storing a request", async () => {
     const { db, service } = await fixture();
@@ -36,16 +37,14 @@ describe("account deletion request intake", () => {
     await expect(
       service.request("missing", "correct-password"),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(db.accountDeletionRequest.upsert).not.toHaveBeenCalled();
+    expect(db.accountDeletionRequest.createMany).not.toHaveBeenCalled();
   });
   it("stores only the authenticated owner and never reports completed deletion", async () => {
     const { db, service } = await fixture();
     const result = await service.request("owner", "correct-password");
-    expect(db.accountDeletionRequest.upsert).toHaveBeenCalledWith({
-      where: { userId: "owner" },
-      create: { userId: "owner" },
-      update: {},
-      select: { id: true, requestedAt: true },
+    expect(db.accountDeletionRequest.createMany).toHaveBeenCalledWith({
+      data: [{ userId: "owner" }],
+      skipDuplicates: true,
     });
     expect(result).toMatchObject({
       status: "REQUESTED",
@@ -66,6 +65,6 @@ describe("account deletion request intake", () => {
       where: { userId: "other-owner" },
       select: { id: true, requestedAt: true },
     });
-    expect(db.accountDeletionRequest.upsert).not.toHaveBeenCalled();
+    expect(db.accountDeletionRequest.createMany).not.toHaveBeenCalled();
   });
 });

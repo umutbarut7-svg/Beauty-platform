@@ -7,7 +7,7 @@ This change implements request creation and tracking, not completed account eras
 - The account screen opens a confirmation form only after an authenticated status read succeeds.
 - The user supplies their current password and the exact confirmation HESABIMI SIL. Cancelling the form creates no request and clears both fields.
 - POST /auth/account-deletion takes identity exclusively from the authenticated user. Incorrect passwords return 403 so the existing client does not confuse password verification with an expired session and log the user out.
-- A unique owner key and database upsert make concurrent retries one request. No plaintext password, email, user-provided subject ID or tenant ID is stored in the request table.
+- A unique owner key and conflict-safe createMany(skipDuplicates) insert make concurrent retries one request. An empty-update upsert was rejected after the real concurrent HTTP test exposed a read/create race. No plaintext password, email, user-provided subject ID or tenant ID is stored in the request table.
 - GET /auth/account-deletion returns only that owner's receipt. GET /auth/account-deletion/pending is restricted to SUPER_ADMIN and paginates pending receipts with the minimum operator identity fields.
 - Receipt and UI explicitly state that deletion is not completed. The account remains usable. This avoids turning a request, logout or account deactivation into a false deletion result.
 - The additive migration creates one table, one unique owner constraint and one owner foreign key. It deletes no existing record.

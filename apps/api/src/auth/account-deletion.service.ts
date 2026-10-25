@@ -25,12 +25,15 @@ export class AccountDeletionService {
     if (!user) throw new UnauthorizedException("Hesap bulunamadı.");
     if (!(await compare(password, user.passwordHash)))
       throw new ForbiddenException("Parolanız doğrulanamadı.");
-    // The unique owner key makes concurrent retries one request. No password,
-    // user-supplied identity, tenant identifier or business data is stored.
-    const request = await this.db.accountDeletionRequest.upsert({
+    // createMany(skipDuplicates) uses a database conflict-safe insert. Prisma's
+    // empty-update upsert can be emulated as read/create and race under load.
+    // Never persist the password or a user-supplied subject/tenant identifier.
+    await this.db.accountDeletionRequest.createMany({
+      data: [{ userId }],
+      skipDuplicates: true,
+    });
+    const request = await this.db.accountDeletionRequest.findUniqueOrThrow({
       where: { userId },
-      create: { userId },
-      update: {},
       select: { id: true, requestedAt: true },
     });
     return this.receipt(request);
