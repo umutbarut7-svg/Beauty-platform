@@ -2,6 +2,9 @@ name: Stage 33 live adapter acceptance
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/stage33-live-adapters.yml]
 
 permissions: {}
 
@@ -32,7 +35,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           # Explicit reviewed Stage 33 head; never accept an arbitrary ref input.
-          ref: 123e7339e2ab2a9e8e94f391a8431b73afc28efe
+          ref: 589fe6ae579cf10beac4f045c9b6e26e2e13e2c0
           path: application
           persist-credentials: false
 
