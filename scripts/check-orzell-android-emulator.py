@@ -14,7 +14,7 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 
-APPLICATION = '06242d064f387cc57aac81d4344e0d714c071ff4'
+APPLICATION = '589fe6ae579cf10beac4f045c9b6e26e2e13e2c0'
 PACKAGE = 'com.beautyplatform.stage33test'
 LOGO_SHA = '16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4'
 
