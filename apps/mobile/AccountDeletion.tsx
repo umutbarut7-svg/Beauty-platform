@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import type { MvpApiClient } from "@beauty-platform/types";
+import { ApiError, type MvpApiClient } from "@beauty-platform/types";
 import { AppText as Text, palette } from "./ui";
 
 type Receipt = {
@@ -22,6 +22,7 @@ export function AccountDeletion({
   const [confirming, setConfirming] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [message, setMessage] = useState("");
   function button(
     label: string,
     action: () => Promise<void>,
@@ -46,6 +47,11 @@ export function AccountDeletion({
         Hesabın ve ilişkili kişisel verilerin için silme talebi
         oluşturabilirsin. Talep oluşturmak hesabını hemen silmez.
       </Text>
+      {message ? (
+        <Text accessibilityRole="alert" style={styles.body}>
+          {message}
+        </Text>
+      ) : null}
       {receipt?.status === "REQUESTED" ? (
         <>
           <Text accessibilityLiveRegion="polite" style={styles.body}>
@@ -106,6 +112,7 @@ export function AccountDeletion({
           {button("Silme talebinden vazgeç", async () => {
             setPassword("");
             setConfirmation("");
+            setMessage("");
             setConfirming(false);
           })}
         </>

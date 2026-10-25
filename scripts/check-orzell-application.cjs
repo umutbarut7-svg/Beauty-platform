@@ -65,6 +65,13 @@ main(async (browser, origin, output) => {
       };
     else if (endpoint === "/auth/account-deletion") {
       if (request.method() === "POST") {
+        if (request.postDataJSON().password === "wrong-deletion-password")
+          return route.fulfill({
+            status: 403,
+            headers,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "Invalid password" }),
+          });
         assert.deepEqual(request.postDataJSON(), {
           password: "deletion-password",
           confirmation: "HESABIMI SIL",
@@ -373,6 +380,23 @@ main(async (browser, origin, output) => {
   await page
     .getByLabel("Hesap silme onayı", { exact: true })
     .fill("HESABIMI SIL");
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("wrong-deletion-password");
+  await click("Hesap silme talebini onayla");
+  await expect(
+    page.getByText(
+      "Parolan doğrulanamadı. Parolanı yeniden gir; hesabın silinmedi.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Hesap silme parolası", { exact: true }),
+  ).toHaveValue("");
+  assert.equal(deletionRequested, false);
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("deletion-password");
   await click("Hesap silme talebini onayla");
   await expect(
     page.getByText(

@@ -13,7 +13,7 @@ import type { AuthenticatedUser } from "./auth.types.js";
 import { AccountDeletionService } from "./account-deletion.service.js";
 
 export class AccountDeletionDto {
-  @IsString() @MinLength(1) @MaxLength(256) password!: string;
+  @IsString() @MinLength(1) password!: string;
   @Equals("HESABIMI SIL") confirmation!: string;
 }
 
