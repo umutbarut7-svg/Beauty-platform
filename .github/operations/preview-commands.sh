@@ -36,3 +36,24 @@ print('Both public API health and CORS: PASS')
 print('READ-ONLY SNAPSHOT COMPLETE; no restart, reboot, deletion, migration or new resources')
 print('Live production recovery and continuous cleanup correctness remain unproven')
 PY
+python3 - <<'PY'
+import pathlib,re,subprocess
+def probe(args):
+    try:
+        r=subprocess.run(args,capture_output=True,text=True,timeout=15)
+        return r.stdout if r.returncode==0 else None
+    except (OSError,subprocess.TimeoutExpired):
+        return None
+timers=probe(['systemctl','list-timers','--all','--no-pager','--no-legend'])
+units=probe(['systemctl','list-unit-files','--no-pager','--no-legend'])
+pattern=re.compile(r'backup|pg.dump|snapshot',re.I)
+print('Backup-related systemd timer entries: '+('UNVERIFIED' if timers is None else str(sum(bool(pattern.search(line)) for line in timers.splitlines()))))
+print('Backup-related systemd unit entries: '+('UNVERIFIED' if units is None else str(sum(bool(pattern.search(line)) for line in units.splitlines()))))
+cron=probe(['crontab','-l'])
+print('Root cron database-backup commands observed: '+('UNVERIFIED' if cron is None else str(sum(bool(re.search(r'pg_dump|pg_basebackup',line)) for line in cron.splitlines() if line.strip() and not line.lstrip().startswith('#')))))
+for location in ['/opt/epifiz/backups','/var/backups/epifiz','/var/backups/beauty-platform']:
+    folder=pathlib.Path(location)
+    print('Conventional application-backup directory present: '+str(folder.is_dir()))
+print('Backup audit is metadata only. Timer names or files do not prove encryption, durability, retention or successful recovery.')
+print('No database dump, S3 operation, scheduler change, secret output or service restart.')
+PY
