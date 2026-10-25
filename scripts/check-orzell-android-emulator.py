@@ -63,7 +63,7 @@ def ime_content_top(windows, viewport):
     for block in re.split(r'(?m)^\s*Window #', windows):
         if not re.search(r'^\d+\s+Window\{[^\n}]*\bInputMethod\}:', block):
             continue
-        frame = re.search(r'\bmFrame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+        frame = re.search(r'\b(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
         inset = re.search(r'\bmGivenContentInsets=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
         if not inset:
             inset = re.search(r'\bmGivenContentInsets=Rect\((\d+), (\d+) - (\d+), (\d+)\)', block)
@@ -85,6 +85,7 @@ def self_test():
     assert ime_content_top(window.replace('InputMethod', 'Other') + 'mGivenContentInsets=[0,1057][0,0]', viewport) is None
     assert ime_content_top(window + 'mGivenContentInsets=[0,1920][0,0]', viewport) is None
     assert ime_content_top(window, viewport) is None
+    assert ime_content_top(window.replace('mFrame=', 'frame=') + 'mGivenContentInsets=[0,1057][0,0]', viewport) == 1120
     print('PASS: IME content edge geometry regression checks')
 
 
