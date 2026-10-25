@@ -55,8 +55,8 @@ fixture. Do not turn a pending or failed physical erasure into PASS.
 
 ## Current status
 
-All physical-device rows remain NOT RUN. Existing iOS simulator and synthetic
-live web evidence remain valid only within their recorded scopes. Android
-emulator acceptance is tracked separately in its workflow and readiness report.
+Prior user-confirmed functional checks are preserved in [progress-ledger.md](progress-ledger.md). Do not label every historical check NOT RUN or request a complete repeat by default. Exact-build physical acceptance for 1031 remains separate where evidence is missing; unknown build/platform metadata does not erase earlier confirmations.
+
+The new keyboard layout and branch/professional filtering already passed automated regression and Android emulator acceptance. Ask for a focused manual check only after documenting the concrete change or failure, the affected previous evidence and why automation is insufficient. Existing simulator and synthetic web evidence remain valid within their recorded scopes.
 Stage 33 remains NOT PASS until the device, reviewed policy, real-photo quality
 and production operation requirements are satisfied.
