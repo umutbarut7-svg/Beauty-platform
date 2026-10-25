@@ -1,7 +1,8 @@
 # ORZELL physical-device acceptance
 
-Application reference: `3be316d1b2458c49fde162147244aa8077a1f614`.
-The final store identity and signed phone build are not yet established.
+Application candidate: `589fe6ae579cf10beac4f045c9b6e26e2e13e2c0`.
+Store identity is `com.orzell.app`. Signed ORZELL 1.0.0 (1031) upload run 40178879560 passed; Apple processing and existing internal-group access were verified by run 40179728482 as VALID / IN_BETA_TESTING on 25 October 2026.
+Earlier installation/login reports for build 1011 do not certify the new candidate.
 An emulator/simulator run must never be recorded as physical-device acceptance.
 
 ## Installation prerequisites
