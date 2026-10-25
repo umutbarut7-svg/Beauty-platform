@@ -14,7 +14,7 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 
-APPLICATION = '3be316d1b2458c49fde162147244aa8077a1f614'
+APPLICATION = '06242d064f387cc57aac81d4344e0d714c071ff4'
 PACKAGE = 'com.beautyplatform.stage33test'
 LOGO_SHA = '16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4'
 
@@ -57,12 +57,44 @@ def verify(apk):
     return f'{PACKAGE}/{activity[1]}'
 
 
+def ime_content_top(windows, viewport):
+    """Read the actual InputMethod content edge, not its fullscreen window edge."""
+    left, top, right, _ = viewport
+    for block in re.split(r'(?m)^\s*Window #', windows):
+        if not re.search(r'^\d+\s+Window\{[^\n}]*\bInputMethod\}:', block):
+            continue
+        frame = re.search(r'\bmFrame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+        inset = re.search(r'\bmGivenContentInsets=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+        if not inset:
+            inset = re.search(r'\bmGivenContentInsets=Rect\((\d+), (\d+) - (\d+), (\d+)\)', block)
+        if frame and inset:
+            x1, y1, x2, y2 = map(int, frame.groups())
+            content_top = y1 + int(inset[2])
+            if x2 > left and x1 < right and top < content_top < y2:
+                return content_top
+    return None
+
+
+def self_test():
+    # IME windows can cover nearly the entire display while their content
+    # insets leave the upper area available to the application.
+    window = "Window #2 Window{abc u0 InputMethod}:\n mFrame=[0,63][1080,1920]\n "
+    viewport = (0, 0, 1080, 1920)
+    assert ime_content_top(window + 'mGivenContentInsets=[0,1057][0,0]', viewport) == 1120
+    assert ime_content_top(window + 'mGivenContentInsets=Rect(0, 1057 - 0, 0)', viewport) == 1120
+    assert ime_content_top(window.replace('InputMethod', 'Other') + 'mGivenContentInsets=[0,1057][0,0]', viewport) is None
+    assert ime_content_top(window + 'mGivenContentInsets=[0,1920][0,0]', viewport) is None
+    assert ime_content_top(window, viewport) is None
+    print('PASS: IME content edge geometry regression checks')
+
+
 def main():
     if os.environ.get('CI') != 'true':
         raise RuntimeError('CI emulator fixture required')
     apk = pathlib.Path(sys.argv[1]).resolve()
     output = pathlib.Path(sys.argv[2]).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    self_test()
     component = verify(apk)
     devices = run('adb', 'devices').splitlines()[1:]
     ready = [line.split()[0] for line in devices if line.endswith('\tdevice')]
@@ -106,10 +138,11 @@ def main():
         if keyboard_shown():
             # UIAutomator's active-app hierarchy omits the separate IME window.
             windows = adb('shell', 'dumpsys', 'window', 'windows')
-            frames = []
+            content_top = ime_content_top(windows, (left, top, right, bottom))
+            frames = [content_top] if content_top is not None else []
             # Android 35 exposes IME geometry in per-display InsetsState.
             # Parse only a visible IME source; never infer a keyboard height.
-            for line in re.findall(r'\{[^{}]*\}', windows):
+            for line in ([] if frames else re.findall(r'\{[^{}]*\}', windows)):
                 if not re.search(r'\b(?:mType|type)=ime\b', line):
                     continue
                 if not re.search(r'\b(?:mVisible|visible)=true\b', line):
@@ -343,4 +376,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--self-test']:
+        self_test()
+    else:
+        main()
