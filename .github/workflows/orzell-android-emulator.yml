@@ -21,7 +21,7 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
-      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+      EXPO_PUBLIC_API_URL: https://127.0.0.1:9/api
     steps:
       - name: Check out emulator harness
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -31,7 +31,7 @@ jobs:
       - name: Check out fixed reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 3be316d1b2458c49fde162147244aa8077a1f614
+          ref: 589fe6ae579cf10beac4f045c9b6e26e2e13e2c0
           path: application
           persist-credentials: false
       - name: Enable hardware acceleration on disposable runner
@@ -61,7 +61,7 @@ jobs:
       - name: Install and prepare temporary Android project
         working-directory: application
         run: |
-          test "$(git rev-parse HEAD)" = 3be316d1b2458c49fde162147244aa8077a1f614
+          test "$(git rev-parse HEAD)" = 589fe6ae579cf10beac4f045c9b6e26e2e13e2c0
           pnpm install --frozen-lockfile
           pnpm --filter @beauty-platform/types build
           node scripts/stage33-native-config.cjs
@@ -70,7 +70,14 @@ jobs:
       - name: Compile self-contained x86_64 emulator APK
         working-directory: application/apps/mobile/android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2
-      - name: Install, cold-launch twice and inspect sign-in controls
+      - name: Preserve isolated offline emulator APK for diagnostic replays
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORZELL-offline-x86_64-test-apk
+          path: application/apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install, launch and exercise offline native forms
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35

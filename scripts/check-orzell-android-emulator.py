@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate an isolated x86_64 build and two emulator cold launches.
+"""Validate emulator cold launches and offline native form interactions.
 
 No login, provider, photo, booking or physical-device acceptance is performed.
 """
@@ -14,7 +14,7 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 
-APPLICATION = '3be316d1b2458c49fde162147244aa8077a1f614'
+APPLICATION = '589fe6ae579cf10beac4f045c9b6e26e2e13e2c0'
 PACKAGE = 'com.beautyplatform.stage33test'
 LOGO_SHA = '16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4'
 
@@ -57,12 +57,45 @@ def verify(apk):
     return f'{PACKAGE}/{activity[1]}'
 
 
+def ime_content_top(windows, viewport):
+    """Read the actual InputMethod content edge, not its fullscreen window edge."""
+    left, top, right, _ = viewport
+    for block in re.split(r'(?m)^\s*Window #', windows):
+        if not re.search(r'^\d+\s+Window\{[^\n}]*\bInputMethod\}:', block):
+            continue
+        frame = re.search(r'\b(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+        inset = re.search(r'\bmGivenContentInsets=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+        if not inset:
+            inset = re.search(r'\bmGivenContentInsets=Rect\((\d+), (\d+) - (\d+), (\d+)\)', block)
+        if frame and inset:
+            x1, y1, x2, y2 = map(int, frame.groups())
+            content_top = y1 + int(inset[2])
+            if x2 > left and x1 < right and top < content_top < y2:
+                return content_top
+    return None
+
+
+def self_test():
+    # IME windows can cover nearly the entire display while their content
+    # insets leave the upper area available to the application.
+    window = "Window #2 Window{abc u0 InputMethod}:\n mFrame=[0,63][1080,1920]\n "
+    viewport = (0, 0, 1080, 1920)
+    assert ime_content_top(window + 'mGivenContentInsets=[0,1057][0,0]', viewport) == 1120
+    assert ime_content_top(window + 'mGivenContentInsets=Rect(0, 1057 - 0, 0)', viewport) == 1120
+    assert ime_content_top(window.replace('InputMethod', 'Other') + 'mGivenContentInsets=[0,1057][0,0]', viewport) is None
+    assert ime_content_top(window + 'mGivenContentInsets=[0,1920][0,0]', viewport) is None
+    assert ime_content_top(window, viewport) is None
+    assert ime_content_top(window.replace('mFrame=', 'frame=') + 'mGivenContentInsets=[0,1057][0,0]', viewport) == 1120
+    print('PASS: IME content edge geometry regression checks')
+
+
 def main():
     if os.environ.get('CI') != 'true':
         raise RuntimeError('CI emulator fixture required')
     apk = pathlib.Path(sys.argv[1]).resolve()
     output = pathlib.Path(sys.argv[2]).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    self_test()
     component = verify(apk)
     devices = run('adb', 'devices').splitlines()[1:]
     ready = [line.split()[0] for line in devices if line.endswith('\tdevice')]
@@ -79,7 +112,155 @@ def main():
             raise RuntimeError('Invalid emulator screenshot')
         (output / name).write_bytes(raw)
 
+    def hierarchy():
+        adb('shell', 'uiautomator', 'dump', '--compressed', '/sdcard/orzell-launch.xml', timeout=45)
+        return ET.fromstring(adb('exec-out', 'cat', '/sdcard/orzell-launch.xml'))
+
+    def labels(tree):
+        return ' '.join(node.attrib.get(key, '') for node in tree.iter()
+                        for key in ('text', 'content-desc'))
+
+    def rectangle(node):
+        match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib.get('bounds', ''))
+        if not match:
+            return None
+        return tuple(map(int, match.groups()))
+
+    def scroll_bounds(tree):
+        candidates = [rectangle(n) for n in tree.iter() if n.attrib.get('scrollable') == 'true'
+                      and n.attrib.get('package') == PACKAGE]
+        candidates = [r for r in candidates if r and r[3] > r[1] + 100]
+        if not candidates:
+            raise RuntimeError('Native app scroll container unavailable')
+        left, top, right, bottom = max(
+            candidates, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+        # Android may report the full ScrollView bounds behind the IME.
+        # Keep both swipes and taps above the observed keyboard window.
+        if keyboard_shown():
+            # UIAutomator's active-app hierarchy omits the separate IME window.
+            windows = adb('shell', 'dumpsys', 'window', 'windows')
+            content_top = ime_content_top(windows, (left, top, right, bottom))
+            frames = [content_top] if content_top is not None else []
+            # Android 35 exposes IME geometry in per-display InsetsState.
+            # Parse only a visible IME source; never infer a keyboard height.
+            for line in ([] if frames else re.findall(r'\{[^{}]*\}', windows)):
+                if not re.search(r'\b(?:mType|type)=ime\b', line):
+                    continue
+                if not re.search(r'\b(?:mVisible|visible)=true\b', line):
+                    continue
+                match = re.search(
+                    r'(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', line)
+                if match:
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    if x2 > left and x1 < right and y2 > y1 > top:
+                        frames.append(y1)
+            for block in ([] if frames else re.split(r'(?m)^\s*Window #', windows)):
+                if not re.search(r'^\d+\s+Window\{[^\n}]*\bInputMethod\}:', block):
+                    continue
+                match = re.search(
+                    r'(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]', block)
+                if match:
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    if x2 > left and x1 < right and y2 > y1 > top:
+                        frames.append(y1)
+            if not frames:
+                # Structural diagnostics only: omit window titles, input text
+                # and all arbitrary values; retain geometry key names/numbers.
+                geometries = re.findall(
+                    r'\b(?:mFrame|frame|parentFrame|displayFrame|containingFrame)='
+                    r'\[\d+,\d+\]\[\d+,\d+\]', windows)
+                print('Window geometry diagnostics: ' + json.dumps(geometries), flush=True)
+                raise RuntimeError('Visible keyboard window frame unavailable')
+            bottom = min(bottom, min(frames))
+        if bottom - top < 100:
+            print('Viewport structural bounds: ' + json.dumps([left, top, right, bottom]), flush=True)
+            raise RuntimeError('Native app viewport obscured')
+        return left, top, right, bottom
+
+    def swipe(direction):
+        left, top, right, bottom = scroll_bounds(hierarchy())
+        x = (left + right) // 2
+        upper, lower = top + (bottom - top) // 4, top + (bottom - top) * 3 // 4
+        start, end = (lower, upper) if direction == 'up' else (upper, lower)
+        adb('shell', 'input', 'swipe', str(x), str(start), str(x), str(end), '350')
+        time.sleep(0.5)
+
+    def top_of_form():
+        for _ in range(3):
+            swipe('down')
+
+    def seek(label, class_name=None, clickable=False):
+        # Coordinates are read afresh from the actual native hierarchy. Never
+        # guess fixed control positions or tap underneath the navigation bar.
+        for attempt in range(7):
+            tree = hierarchy()
+            _, viewport_top, _, viewport_bottom = scroll_bounds(tree)
+            for node in tree.iter():
+                if node.attrib.get('package') != PACKAGE:
+                    continue
+                if clickable and node.attrib.get('clickable') != 'true':
+                    continue
+                if class_name and node.attrib.get('class') != class_name:
+                    continue
+                # Explicit accessibility names distinguish tabs from submit buttons
+                # even when their visible child text is identical.
+                name = node.attrib.get('content-desc') or node.attrib.get('text')
+                if name != label:
+                    continue
+                r = rectangle(node)
+                if not r or node.attrib.get('enabled') != 'true':
+                    continue
+                x1, y1, x2, y2 = r
+                if (x2 > x1 and y2 - y1 >= 30 and y1 >= viewport_top + 20
+                        and y2 <= viewport_bottom - 80):
+                    return node, ((x1 + x2) // 2, (y1 + y2) // 2)
+            if attempt != 6:
+                swipe('up')
+        raise RuntimeError(f'Native control not reachable: {label}')
+
+    def tap(label, class_name=None):
+        node, (x, y) = seek(label, class_name, clickable=True)
+        adb('shell', 'input', 'tap', str(x), str(y))
+        time.sleep(0.7)
+        return node
+
+    def require_label(expected):
+        if expected not in labels(hierarchy()):
+            raise RuntimeError(f'Native state missing: {expected}')
+
+    def focused_input(label, password=False):
+        tree = hierarchy()
+        nodes = [node for node in tree.iter()
+                 if node.attrib.get('package') == PACKAGE
+                 and node.attrib.get('class') == 'android.widget.EditText'
+                 and node.attrib.get('content-desc') == label
+                 and node.attrib.get('focused') == 'true']
+        if len(nodes) != 1 or (password and nodes[0].attrib.get('password') != 'true'):
+            # Only fixed fixture labels and structural state; never input text,
+            # password contents, raw hierarchy or arbitrary accessibility labels.
+            states = [{
+                'field': n.attrib.get('content-desc')
+                    if n.attrib.get('content-desc') in ('E-posta', 'Parola') else 'other',
+                'bounds': n.attrib.get('bounds'),
+                'focused': n.attrib.get('focused'),
+                'password': n.attrib.get('password'),
+                'clickable': n.attrib.get('clickable'),
+            } for n in tree.iter()
+                if n.attrib.get('package') == PACKAGE
+                and n.attrib.get('class') == 'android.widget.EditText']
+            print('Native input structural diagnostics: ' + json.dumps(states), flush=True)
+            raise RuntimeError('Expected native input did not actually receive focus')
+        return nodes[0]
+
+    def keyboard_shown():
+        state = adb('shell', 'dumpsys', 'input_method')
+        match = re.search(r'\bmInputShown=(true|false)\b', state)
+        if not match:
+            raise RuntimeError('Keyboard visibility state unavailable')
+        return match[1] == 'true'
+
     observations = []
+    stage = 'installation'
     try:
         if adb('shell', 'getprop', 'sys.boot_completed').strip() != '1':
             raise RuntimeError('Emulator has not booted')
@@ -102,33 +283,90 @@ def main():
             resumed = adb('shell', 'dumpsys', 'activity', 'activities')
             if not any(PACKAGE in line and 'ResumedActivity' in line for line in resumed.splitlines()):
                 raise RuntimeError('App is not the resumed activity')
-            adb('shell', 'uiautomator', 'dump', '--compressed', '/sdcard/orzell-launch.xml', timeout=45)
-            xml = adb('exec-out', 'cat', '/sdcard/orzell-launch.xml')
-            tree = ET.fromstring(xml)
-            labels = ' '.join(node.attrib.get(key, '') for node in tree.iter()
-                              for key in ('text', 'content-desc'))
+            screen_labels = labels(hierarchy())
             for expected in ('Giriş yap', 'E-posta', 'Parola'):
-                if expected not in labels:
+                if expected not in screen_labels:
                     raise RuntimeError('Expected Turkish sign-in controls missing')
             screenshot(f'android-launch-{attempt}.png')
             observations.append({'launch': attempt, 'survivedSeconds': 5,
                                  'foregroundVerified': True, 'signInControlsPresent': True})
             adb('shell', 'am', 'force-stop', PACKAGE)
+        stage = 'registration-tab'
+        if os.environ.get('EXPO_PUBLIC_API_URL') != 'https://127.0.0.1:9/api':
+            raise RuntimeError('Offline-only form fixture endpoint required')
+        adb('shell', 'settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1')
+        adb('shell', 'am', 'start', '-W', '-n', component, timeout=90)
+        tap('Hesap oluştur ekranı')
+        require_label("ORZELL'e hoş geldin")
+        stage = 'empty-registration-validation'
+        tap('Hesap oluştur')
+        seek('Geçerli bir e-posta adresi girin.')
+        screenshot('android-launch-empty-validation.png')
+        stage = 'email-keyboard'
+        top_of_form()
+        tap('E-posta', 'android.widget.EditText')
+        time.sleep(1)
+        focused_input('E-posta')
+        if not keyboard_shown():
+            raise RuntimeError('Email focus did not show the software keyboard')
+        adb('shell', 'input', 'text', 'native-ui@example.test')
+        if focused_input('E-posta').attrib.get('text') != 'native-ui@example.test':
+            raise RuntimeError('Synthetic email entry did not reach the actual field')
+        screenshot('android-launch-email-keyboard.png')
+        stage = 'password-keyboard'
+        node = tap('Parola', 'android.widget.EditText')
+        if node.attrib.get('password') != 'true':
+            raise RuntimeError('Native password input is not masked')
+        focused_input('Parola', password=True)
+        adb('shell', 'input', 'text', 'short')
+        entered = focused_input('Parola', password=True).attrib.get('text', '')
+        if len(entered) != 5:
+            raise RuntimeError('Synthetic short password did not reach the actual field')
+        if not keyboard_shown():
+            raise RuntimeError('Password input lost the software keyboard')
+        screenshot('android-launch-password-keyboard.png')
+        stage = 'short-password-validation'
+        tap('Hesap oluştur')
+        seek('Hesap oluşturmak için şifreniz en az 12 karakter olmalı.')
+        if keyboard_shown():
+            adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+            time.sleep(1)
+        if keyboard_shown():
+            raise RuntimeError('Back did not dismiss the software keyboard')
+        screenshot('android-launch-short-password.png')
+        stage = 'return-to-login'
+        top_of_form()
+        tap('Giriş yap ekranı')
+        require_label('Yeniden merhaba')
+        seek('Giriş yap')
+        if 'Hesap oluşturmak için şifreniz en az 12 karakter olmalı.' in labels(hierarchy()):
+            raise RuntimeError('Registration error leaked into the login tab')
+        screenshot('android-launch-return-login.png')
         evidence = {
-            'status': 'PASS', 'scope': 'x86_64 emulator installation and two cold launches only',
+            'status': 'PASS', 'scope': 'emulator cold launches and offline form interactions',
             'application': APPLICATION, 'harness': os.environ.get('GITHUB_SHA'),
             'apkSha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
             'originalLogoSha256': LOGO_SHA, 'package': PACKAGE,
             'androidApi': adb('shell', 'getprop', 'ro.build.version.sdk').strip(),
             'buildType': 'release with test identity; not a store distribution build',
             'architecture': 'x86_64', 'sameAsArmPhoneArtifact': False,
-            'observations': observations, 'physicalDeviceAcceptance': False,
+            'observations': observations,
+            'offlineApiBaseUrl': 'https://127.0.0.1:9/api',
+            'nativeFormInteractionTested': True,
+            'registrationTabTested': True, 'emptyEmailRejected': True,
+            'shortRegistrationPasswordRejected': True,
+            'emailAndPasswordKeyboardVerified': True, 'nativePasswordMasked': True,
+            'emailAndPasswordEntryVerified': True,
+            'submitReachableWhileKeyboardOpen': True, 'keyboardDismissalTested': True,
+            'returnToLoginClearsError': True,
+            'physicalDeviceAcceptance': False,
             'authenticatedJourneyTested': False, 'photoPermissionsTested': False,
             'screenshotsManuallyReviewed': False,
         }
         (output / 'emulator-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
-        print('PASS: ORZELL x86_64 APK installed; both cold launches survived and exposed Turkish sign-in controls')
+        print('PASS: ORZELL installed; cold launches, native tabs, scrolling, masked password, software keyboard and local validation passed')
     except Exception:
+        print(f'FAIL stage: {stage}', flush=True)
         try:
             screenshot('android-launch-failure.png')
         except Exception:
@@ -139,4 +377,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--self-test']:
+        self_test()
+    else:
+        main()
