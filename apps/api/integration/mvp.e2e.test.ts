@@ -41,6 +41,7 @@ const environment = {
   DATABASE_URL: url,
   STAGE33_MVP_ENABLED: "true",
   MVP_REDIS_ENABLED: "true",
+  ACCOUNT_DELETION_PROCESSING_ENABLED: "true",
   MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
@@ -327,6 +328,152 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       before,
     );
     expect((await request("/auth/me", customerToken)).status).toBe(200);
+  });
+
+  it("freezes deletion sessions atomically and never abandons a business during concurrent processing", async () => {
+    const password = "Isolated-strong-password-33";
+    const makeUser = async (
+      label: string,
+      role: "CUSTOMER" | "SUPER_ADMIN" = "CUSTOMER",
+    ) => {
+      const user = await db.user.create({
+        data: {
+          email: `deletion-${label}-${key}@example.test`,
+          passwordHash: await hash(password, 4),
+          role,
+        },
+      });
+      const login = await create("/auth/login", "", {
+        email: user.email,
+        password,
+      });
+      return { user, ...login };
+    };
+    const admin = await makeUser("admin", "SUPER_ADMIN");
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const secondA = await create("/auth/login", "", {
+      email: a.user.email,
+      password,
+    });
+    const tenant = await db.business.create({
+      data: {
+        name: "Deletion ownership fixture",
+        slug: `deletion-${key}`,
+        memberships: {
+          create: [
+            { userId: a.user.id, role: "BUSINESS_OWNER" },
+            { userId: b.user.id, role: "BUSINESS_OWNER" },
+          ],
+        },
+      },
+    });
+    const ar = await db.accountDeletionRequest.create({
+      data: { userId: a.user.id },
+    });
+    const br = await db.accountDeletionRequest.create({
+      data: { userId: b.user.id },
+    });
+    const begin = (
+      id: string,
+      token = admin.accessToken,
+      body: unknown = { confirmation: "ISLEME AL" },
+    ) => request(`/auth/account-deletion/${id}/begin`, token, "POST", body);
+    expect((await begin(ar.id, "")).status).toBe(401);
+    expect((await begin(ar.id, a.accessToken)).status).toBe(403);
+    expect(
+      (await begin(ar.id, admin.accessToken, { confirmation: "wrong" })).status,
+    ).toBe(400);
+    expect(
+      (
+        await begin(ar.id, admin.accessToken, {
+          confirmation: "ISLEME AL",
+          userId: b.user.id,
+        })
+      ).status,
+    ).toBe(400);
+    const existingOwner = await db.businessMember.findFirstOrThrow({
+      where: { businessId, role: "BUSINESS_OWNER" },
+    });
+    const sole = await db.accountDeletionRequest.create({
+      data: { userId: existingOwner.userId },
+    });
+    expect((await begin(sole.id)).status).toBe(409);
+    expect((await request("/auth/me", ownerToken)).status).toBe(200);
+    expect(
+      (
+        await db.accountDeletionRequest.findUniqueOrThrow({
+          where: { id: sole.id },
+        })
+      ).processingAt,
+    ).toBeNull();
+
+    const results = await Promise.all([begin(ar.id), begin(br.id)]);
+    expect(results.map((r) => r.status).sort()).toEqual([202, 409]);
+    const index = results.findIndex((r) => r.status === 202);
+    const winner = index === 0 ? a : b;
+    const loser = index === 0 ? b : a;
+    const receipt = results[index]!.body;
+    expect(receipt).toMatchObject({
+      status: "PROCESSING",
+      deletionCompleted: false,
+    });
+    expect((await begin(receipt.request.id)).body).toEqual(receipt);
+    expect((await request("/auth/me", winner.accessToken)).status).toBe(401);
+    expect((await request("/auth/me", loser.accessToken)).status).toBe(200);
+    expect(
+      (
+        await request("/auth/login", "", "POST", {
+          email: winner.user.email,
+          password,
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await request("/auth/refresh", "", "POST", {
+          refreshToken: winner.refreshToken,
+        })
+      ).status,
+    ).toBe(401);
+    if (index === 0) {
+      expect((await request("/auth/me", secondA.accessToken)).status).toBe(401);
+      expect(
+        (
+          await request("/auth/refresh", "", "POST", {
+            refreshToken: secondA.refreshToken,
+          })
+        ).status,
+      ).toBe(401);
+    }
+    expect(
+      await db.refreshSession.count({
+        where: { userId: winner.user.id, revokedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await db.businessMember.count({ where: { businessId: tenant.id } }),
+    ).toBe(2);
+    expect(
+      await db.business.findUnique({ where: { id: tenant.id } }),
+    ).not.toBeNull();
+    expect(
+      await db.user.findUnique({ where: { id: winner.user.id } }),
+    ).not.toBeNull();
+    expect(
+      await db.securityEvent.count({
+        where: {
+          type: "ACCOUNT_DELETION_PROCESSING_STARTED",
+          actorId: admin.user.id,
+        },
+      }),
+    ).toBe(1);
+    // Existing signed admin tokens must lose their role as soon as the DB role changes.
+    await db.user.update({
+      where: { id: admin.user.id },
+      data: { role: "CUSTOMER" },
+    });
+    expect((await begin(receipt.request.id)).status).toBe(403);
   });
 
   it("keeps owner self-booking explicit and rejects customer impersonation", async () => {

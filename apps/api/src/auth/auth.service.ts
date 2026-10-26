@@ -59,8 +59,13 @@ export class AuthService {
   async login(email: string, password: string): Promise<AuthResult> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
+      include: { accountDeletionRequest: true },
     });
-    if (!user || !(await compare(password, user.passwordHash)))
+    if (
+      !user ||
+      user.accountDeletionRequest?.processingAt ||
+      !(await compare(password, user.passwordHash))
+    )
       throw new UnauthorizedException("Invalid email or password");
     return this.issue(user);
   }
@@ -69,11 +74,12 @@ export class AuthService {
     const payload = await this.verifyRefresh(rawToken);
     const session = await this.prisma.refreshSession.findUnique({
       where: { id: payload.sid },
-      include: { user: true },
+      include: { user: { include: { accountDeletionRequest: true } } },
     });
     if (
       !session ||
       session.revokedAt ||
+      session.user.accountDeletionRequest?.processingAt ||
       session.expiresAt <= new Date() ||
       !safeEqual(session.tokenHash, digest(rawToken))
     )

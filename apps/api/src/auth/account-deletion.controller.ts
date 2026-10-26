@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
   Equals,
@@ -21,6 +29,10 @@ export class DeletionQueueQuery {
   @IsOptional() @IsString() @MaxLength(100) after?: string;
 }
 
+export class BeginDeletionDto {
+  @Equals("ISLEME AL") confirmation!: string;
+}
+
 @Controller("auth/account-deletion")
 export class AccountDeletionController {
   constructor(private readonly deletion: AccountDeletionService) {}
@@ -34,6 +46,18 @@ export class AccountDeletionController {
   @Roles("SUPER_ADMIN")
   pending(@Query() query: DeletionQueueQuery) {
     return this.deletion.pending(query.after);
+  }
+
+  @Post(":requestId/begin")
+  @Roles("SUPER_ADMIN")
+  @HttpCode(202)
+  begin(
+    @Param("requestId") requestId: string,
+    @Body() dto: BeginDeletionDto,
+    @CurrentUser() operator: AuthenticatedUser,
+  ) {
+    void dto; // The global validation pipe enforces the operator confirmation.
+    return this.deletion.beginProcessing(requestId, operator.id);
   }
 
   @Post()

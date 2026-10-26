@@ -4292,10 +4292,11 @@ model MvpVerificationRequest {
 }
 
 model AccountDeletionRequest {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  requestedAt DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  requestedAt  DateTime  @default(now())
+  processingAt DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([requestedAt, id])
 }

@@ -1,6 +1,12 @@
 import { hash } from "bcryptjs";
-import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
-import { describe, expect, it, vi } from "vitest";
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountDeletionService } from "./account-deletion.service.js";
 
 async function fixture() {
@@ -63,8 +69,117 @@ describe("account deletion request intake", () => {
     });
     expect(db.accountDeletionRequest.findUnique).toHaveBeenCalledWith({
       where: { userId: "other-owner" },
-      select: { id: true, requestedAt: true },
+      select: { id: true, requestedAt: true, processingAt: true },
     });
     expect(db.accountDeletionRequest.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("account deletion processing boundary", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  function processingFixture() {
+    const request = {
+      id: "r1",
+      userId: "u1",
+      requestedAt: new Date(),
+      processingAt: null,
+      user: { role: "CUSTOMER" },
+    };
+    const tx = {
+      accountDeletionRequest: {
+        findUnique: vi.fn().mockResolvedValue(request),
+        update: vi
+          .fn()
+          .mockImplementation(async ({ data }) => ({ ...request, ...data })),
+      },
+      businessMember: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      securityEvent: { create: vi.fn().mockResolvedValue({}) },
+      refreshSession: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    };
+    const db = {
+      $transaction: vi.fn().mockImplementation(async (action) => action(tx)),
+    };
+    vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "true");
+    return {
+      tx,
+      db,
+      request,
+      service: new AccountDeletionService(db as never),
+    };
+  }
+  it("is disabled by default and does not touch the database", async () => {
+    const { db, service } = processingFixture();
+    vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "false");
+    await expect(service.beginProcessing("r1", "admin")).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+  it("rejects missing requests and protects administrator accounts", async () => {
+    const { tx, request, service } = processingFixture();
+    tx.accountDeletionRequest.findUnique.mockResolvedValueOnce(null);
+    await expect(
+      service.beginProcessing("missing", "admin"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    tx.accountDeletionRequest.findUnique.mockResolvedValueOnce({
+      ...request,
+      user: { role: "SUPER_ADMIN" },
+    });
+    await expect(service.beginProcessing("r1", "admin")).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(tx.accountDeletionRequest.update).not.toHaveBeenCalled();
+    expect(tx.refreshSession.updateMany).not.toHaveBeenCalled();
+  });
+  it("requires an available replacement owner before freezing an account", async () => {
+    const { tx, service } = processingFixture();
+    tx.businessMember.findMany.mockResolvedValue([
+      { businessId: "business-a" },
+    ]);
+    await expect(service.beginProcessing("r1", "admin")).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(tx.accountDeletionRequest.update).not.toHaveBeenCalled();
+    expect(tx.refreshSession.updateMany).not.toHaveBeenCalled();
+    tx.businessMember.count.mockResolvedValue(1);
+    expect(await service.beginProcessing("r1", "admin")).toMatchObject({
+      status: "PROCESSING",
+      deletionCompleted: false,
+    });
+  });
+  it("atomically freezes access and revokes every refresh session without reporting erasure", async () => {
+    const { tx, db, service } = processingFixture();
+    const receipt = await service.beginProcessing("r1", "admin");
+    expect(receipt).toMatchObject({
+      status: "PROCESSING",
+      deletionCompleted: false,
+    });
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: "Serializable",
+    });
+    expect(tx.refreshSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: "u1", revokedAt: null },
+      data: { revokedAt: receipt.request!.processingAt },
+    });
+  });
+  it("retries serialization conflicts and is idempotent once processing started", async () => {
+    const { db, tx, request, service } = processingFixture();
+    db.$transaction.mockRejectedValueOnce({ code: "P2034" });
+    await service.beginProcessing("r1", "admin");
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    tx.accountDeletionRequest.update.mockClear();
+    tx.refreshSession.updateMany.mockClear();
+    tx.accountDeletionRequest.findUnique.mockResolvedValue({
+      ...request,
+      processingAt: new Date(),
+    });
+    expect(await service.beginProcessing("r1", "admin")).toMatchObject({
+      status: "PROCESSING",
+    });
+    expect(tx.accountDeletionRequest.update).not.toHaveBeenCalled();
+    expect(tx.refreshSession.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ import { ApiError, type MvpApiClient } from "@beauty-platform/types";
 import { AppText as Text, palette } from "./ui";
 
 type Receipt = {
-  status: "NONE" | "REQUESTED";
+  status: "NONE" | "REQUESTED" | "PROCESSING";
   request: { id: string; requestedAt: string } | null;
   deletionCompleted: false;
 };
@@ -52,10 +52,12 @@ export function AccountDeletion({
           {message}
         </Text>
       ) : null}
-      {receipt?.status === "REQUESTED" ? (
+      {receipt && receipt.status !== "NONE" ? (
         <>
           <Text accessibilityLiveRegion="polite" style={styles.body}>
-            Silme talebin alındı. Hesabın ve verilerin henüz silinmedi.
+            {receipt.status === "PROCESSING"
+              ? "Silme talebin işleme alındı. Hesabına erişim durduruldu; veri silme işlemi henüz tamamlanmadı."
+              : "Silme talebin alındı. Hesabın ve verilerin henüz silinmedi."}
           </Text>
           <Text style={styles.body}>Talep numarası: {receipt.request?.id}</Text>
           {button("Silme talebinin durumunu yenile", async () => {
