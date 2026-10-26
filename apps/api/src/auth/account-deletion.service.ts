@@ -7,7 +7,8 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { compare } from "bcryptjs";
 import type { PrismaService } from "../database/prisma.service.js";
 import { PRISMA_SERVICE } from "../database/database.tokens.js";
@@ -70,6 +71,18 @@ export class AccountDeletionService {
       try {
         return await this.db.$transaction(
           async (tx: Prisma.TransactionClient) => {
+            // Serialize with consent/upload/analysis authorization. Keep photo keys
+            // until the existing maintenance worker confirms physical erasure.
+            const subject = await tx.accountDeletionRequest.findUnique({
+              where: { id: requestId },
+              select: { userId: true },
+            });
+            if (!subject)
+              throw new NotFoundException("Silme talebi bulunamadı.");
+            await tx.$queryRawUnsafe(
+              "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+              `mvp-photo:${subject.userId}`,
+            );
             const request = await tx.accountDeletionRequest.findUnique({
               where: { id: requestId },
               include: { user: { select: { role: true } } },
@@ -116,6 +129,38 @@ export class AccountDeletionService {
               where: { userId: request.userId, revokedAt: null },
               data: { revokedAt: processingAt },
             });
+            const consents = await tx.mvpPhotoConsent.findMany({
+              where: { ownerId: request.userId, revokedAt: null },
+              select: { id: true, auditExpiresAt: true },
+            });
+            await tx.mvpPhotoConsent.updateMany({
+              where: { ownerId: request.userId, revokedAt: null },
+              data: { revokedAt: processingAt },
+            });
+            await tx.mvpPhoto.updateMany({
+              where: { ownerId: request.userId, revokedAt: null },
+              data: { revokedAt: processingAt },
+            });
+            await tx.mvpPhotoAnalysis.updateMany({
+              where: { ownerId: request.userId },
+              data: {
+                status: "REVOKED",
+                intent: "",
+                target: "",
+                answers: [],
+                output: Prisma.JsonNull,
+              },
+            });
+            if (consents.length)
+              await tx.mvpPrivacyEvent.createMany({
+                data: consents.map((consent) => ({
+                  ownerId: request.userId,
+                  resourceId: consent.id,
+                  action: "photo.consent.withdrawn",
+                  expiresAt: consent.auditExpiresAt,
+                  correlationId: randomUUID(),
+                })),
+              });
             await tx.securityEvent.create({
               data: {
                 actorId: operatorId,

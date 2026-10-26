@@ -86,6 +86,14 @@ describe("account deletion processing boundary", () => {
       user: { role: "CUSTOMER" },
     };
     const tx = {
+      $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+      mvpPhotoConsent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      mvpPhoto: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      mvpPhotoAnalysis: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      mvpPrivacyEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
       accountDeletionRequest: {
         findUnique: vi.fn().mockResolvedValue(request),
         update: vi
@@ -124,7 +132,7 @@ describe("account deletion processing boundary", () => {
     await expect(
       service.beginProcessing("missing", "admin"),
     ).rejects.toBeInstanceOf(NotFoundException);
-    tx.accountDeletionRequest.findUnique.mockResolvedValueOnce({
+    tx.accountDeletionRequest.findUnique.mockResolvedValue({
       ...request,
       user: { role: "SUPER_ADMIN" },
     });
@@ -163,6 +171,54 @@ describe("account deletion processing boundary", () => {
     expect(tx.refreshSession.updateMany).toHaveBeenCalledWith({
       where: { userId: "u1", revokedAt: null },
       data: { revokedAt: receipt.request!.processingAt },
+    });
+  });
+  it("withdraws every owner photo and scrubs consultation content without losing storage keys", async () => {
+    const { tx, service } = processingFixture();
+    const expiresAt = new Date("2027-01-01T00:00:00Z");
+    tx.mvpPhotoConsent.findMany.mockResolvedValue([
+      { id: "c1", auditExpiresAt: expiresAt },
+      { id: "c2", auditExpiresAt: expiresAt },
+    ]);
+    await service.beginProcessing("r1", "admin");
+    expect(tx.$queryRawUnsafe).toHaveBeenCalledWith(
+      expect.any(String),
+      "mvp-photo:u1",
+    );
+    expect(tx.mvpPhotoConsent.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: "u1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(tx.mvpPhoto.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: "u1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(tx.mvpPhotoAnalysis.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: "u1" },
+      data: expect.objectContaining({
+        status: "REVOKED",
+        intent: "",
+        target: "",
+        answers: [],
+      }),
+    });
+    expect(tx.mvpPrivacyEvent.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          ownerId: "u1",
+          resourceId: "c1",
+          action: "photo.consent.withdrawn",
+          expiresAt,
+          correlationId: expect.any(String),
+        },
+        {
+          ownerId: "u1",
+          resourceId: "c2",
+          action: "photo.consent.withdrawn",
+          expiresAt,
+          correlationId: expect.any(String),
+        },
+      ],
     });
   });
   it("retries serialization conflicts and is idempotent once processing started", async () => {

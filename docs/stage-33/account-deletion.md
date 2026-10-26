@@ -1,6 +1,6 @@
 # Account deletion intake and processing boundary
 
-This change implements request creation and tracking, not completed account erasure or App Store acceptance. It does not change the live API, apply a production migration, or replace TestFlight build 1031.
+This change implements request intake, processing authorization and photo withdrawal/cleanup handoff, not completed account erasure or App Store acceptance. It does not change the live API, apply a production migration, or replace TestFlight build 1031.
 
 ## Implemented
 
@@ -31,7 +31,7 @@ A serializable transaction checks ownership, sets `processingAt`, and revokes al
 
 Every protected HTTP request now loads the account's current database identity and role. Deleted accounts and accounts with a processing deletion request are rejected, including previously signed access tokens. Login and refresh also reject processing accounts. This prevents an old administrator token from retaining a downgraded role. Public endpoints retain their existing behavior. A request-only receipt has no effect on authorization. Authorization is checked at request entry; quiescing already-running work remains part of the future erasure processor. No cancellation/unfreeze endpoint exists.
 
-`PROCESSING` explicitly keeps `deletionCompleted=false`. The account, business memberships, personal records and private-photo cleanup keys remain stored; freezing is neither erasure nor anonymization. This additive migration only adds one nullable timestamp. No live migration, queue enablement, account freeze, TestFlight upload or store submission is part of this implementation.
+`PROCESSING` explicitly keeps `deletionCompleted=false`. The account, business memberships, remaining personal records and private-photo cleanup keys remain stored; consultation text is scrubbed and photo access withdrawn, but freezing is neither erasure nor anonymization. This additive migration only adds one nullable timestamp. No live migration, queue enablement, account freeze, TestFlight upload or store submission is part of this implementation.
 
 The outstanding gate still includes notification/deadline, retention review, per-record erasure/anonymization, membership removal, private-object retries and backup restoration handling. The authorization boundary must be validated on the exact release revision before rollout.
 
@@ -45,4 +45,10 @@ These are automated checks for the newly changed code. Previously user-confirmed
 
 ### Processing validation
 
-Local validation: all 452 API unit tests passed, including 18 auth/intake/processing tests; Prisma format/validate/generate, API and HTTP-integration typechecks, changed-file lint and whitespace checks passed. The added real HTTP/PostgreSQL test checks endpoint authorization/confirmation, sole-owner protection, concurrent two-owner freezes, idempotent receipts, existing access/refresh token rejection, login blocking, current-role enforcement and preservation of tenant records. Its CI execution is pending; local unit tests alone do not close the processing release gate.
+Local validation: all 452 API unit tests passed, including 18 auth/intake/processing tests; Prisma format/validate/generate, API and HTTP-integration typechecks, changed-file lint and whitespace checks passed. The added real HTTP/PostgreSQL test checks endpoint authorization/confirmation, sole-owner protection, concurrent two-owner freezes, idempotent receipts, existing access/refresh token rejection, login blocking, current-role enforcement and preservation of tenant records. CI 40401760043, UI 40401759991 and Android/iOS 40401760018 passed on 50cf2f4. The newer photo-cleanup continuation requires its own CI results in PR #47; these earlier results do not certify subsequent changes.
+
+## Photo cleanup continuation
+
+The deletion transaction now takes the same per-owner advisory lock as photo authorization, revokes all account photo consents/photos, clears consultation intent/target/answers/output, and records consent-withdrawal events with each original audit expiry. It does not delete rows or lose object keys. Delayed consent/upload/analysis writes recheck processing under the lock; delayed provider output cannot publish. If the final transactional audit fails, the account freeze, session revocation and photo withdrawal all roll back.
+
+The existing maintenance worker keeps retryable tombstones. Physical erasure now requires an exact-object HeadObject 404 after DeleteObject. A present object, denied verification or storage timeout never produces deletedAt or a false erasure event. Cleanup continues with customer photo policy flags closed. The account receipt stays PROCESSING/deletionCompleted=false even after photos are physically erased. Full account anonymization/retention, deadline/notification and restore boundaries remain open; see current-status.md.
