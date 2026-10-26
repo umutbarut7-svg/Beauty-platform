@@ -95,6 +95,19 @@ describe("AuthService", () => {
     );
     expect(db.sessions.size).toBe(1);
   });
+  it("does not reactivate quarantined backup accounts with old passwords or refresh tokens", async () => {
+    const tokens = await service.register(
+      "restored@example.com",
+      "strong-password-123",
+    );
+    db.users[0].restoreQuarantinedAt = new Date();
+    await expect(
+      service.login("restored@example.com", "strong-password-123"),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refresh(tokens.refreshToken)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
   it("rotates refresh tokens and rejects reuse", async () => {
     const first = await service.register(
       "person@example.com",

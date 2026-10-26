@@ -28,6 +28,7 @@ let strangerToken = "";
 let professionalToken = "";
 let unassignedToken = "";
 let customerId = "";
+let completionTrackingToken = "";
 let businessId = "";
 let otherBusinessId = "";
 let staffId = "";
@@ -42,6 +43,7 @@ const environment = {
   STAGE33_MVP_ENABLED: "true",
   MVP_REDIS_ENABLED: "true",
   ACCOUNT_DELETION_PROCESSING_ENABLED: "true",
+  ACCOUNT_DELETION_ERASURE_ENABLED: "true",
   MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
@@ -517,6 +519,150 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           where: {
             type: "ACCOUNT_DELETION_PROCESSING_STARTED",
             actorId: admin.user.id,
+          },
+        }),
+      ).toBe(1);
+      const finalize = (id: string, token = admin.accessToken) =>
+        processingRequest(
+          `/auth/account-deletion/${id}/finalize`,
+          token,
+          "POST",
+          { confirmation: "KALICI SIL" },
+        );
+      // The business-owning subject cannot be silently erased or retained by an unchecked override.
+      const domain = await processingRequest(
+        `/auth/account-deletion/${receipt.request.id}/inspection`,
+        admin.accessToken,
+      );
+      expect(domain.status).toBe(200);
+      expect(domain.body.blockers).toContain("BusinessMember");
+      const fresh = await makeUser("fresh");
+      await db.customer.create({ data: { userId: fresh.user.id } });
+      const intake = await processingRequest(
+        "/auth/account-deletion",
+        fresh.accessToken,
+        "POST",
+        { password, confirmation: "HESABIMI SIL" },
+      );
+      expect(intake.status).toBe(202);
+      const freshId = intake.body.request.id;
+      expect(
+        (
+          await processingRequest(
+            "/auth/account-deletion/tracking",
+            fresh.accessToken,
+            "POST",
+            { password: "wrong" },
+          )
+        ).status,
+      ).toBe(403);
+      const tracking = await processingRequest(
+        "/auth/account-deletion/tracking",
+        fresh.accessToken,
+        "POST",
+        { password },
+      );
+      expect(tracking.status).toBe(201);
+      const trackingToken = tracking.body.token;
+      completionTrackingToken = trackingToken;
+      const publicReceipt = () =>
+        processingRequest("/auth/account-deletion/receipt", "", "POST", {
+          token: trackingToken,
+        });
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "REQUESTED",
+        deletionCompleted: false,
+      });
+      expect((await processingRequest("/auth/me", trackingToken)).status).toBe(
+        401,
+      );
+      expect(
+        (
+          await processingRequest(
+            "/auth/account-deletion/receipt",
+            "",
+            "POST",
+            { token: `${freshId}.${"A".repeat(43)}` },
+          )
+        ).status,
+      ).toBe(404);
+      expect((await finalize(freshId, fresh.accessToken)).status).toBe(403);
+      expect((await begin(freshId)).status).toBe(202);
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "PROCESSING",
+        deletionCompleted: false,
+      });
+      // A loose JSON reference with no FK must block, not disappear under cascade.
+      const loose = await db.securityEvent.create({
+        data: {
+          type: "SYNTHETIC_UNREVIEWED_REFERENCE",
+          severity: "INFO",
+          metadata: { subject: fresh.user.id },
+        },
+      });
+      const inspection = await processingRequest(
+        `/auth/account-deletion/${freshId}/inspection`,
+        admin.accessToken,
+      );
+      expect(inspection.status).toBe(200);
+      expect(inspection.body.blockers).toContain("SecurityEvent");
+      expect((await finalize(freshId)).status).toBe(409);
+      expect(
+        await db.user.findUnique({ where: { id: fresh.user.id } }),
+      ).not.toBeNull();
+      // Fixture-only removal models an independently resolved review; the erasure API cannot bypass it.
+      await db.securityEvent.delete({ where: { id: loose.id } });
+      const finished = await Promise.all([
+        finalize(freshId),
+        finalize(freshId),
+      ]);
+      expect(finished.map((result) => result.status)).toEqual([200, 200]);
+      expect(finished[0]!.body).toEqual({
+        status: "COMPLETED",
+        deletionCompleted: true,
+      });
+      expect(
+        await db.user.findUnique({ where: { id: fresh.user.id } }),
+      ).toBeNull();
+      expect(
+        await db.customer.count({ where: { userId: fresh.user.id } }),
+      ).toBe(0);
+      expect(
+        await db.refreshSession.count({ where: { userId: fresh.user.id } }),
+      ).toBe(0);
+      expect(
+        (
+          await db.accountDeletionRequest.findUniqueOrThrow({
+            where: { id: freshId },
+          })
+        ).userId,
+      ).toBeNull();
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "COMPLETED",
+        deletionCompleted: true,
+        completedAt: expect.any(String),
+      });
+      expect(Object.keys((await publicReceipt()).body).sort()).toEqual([
+        "completedAt",
+        "deletionCompleted",
+        "requestedAt",
+        "status",
+      ]);
+      expect(
+        (await processingRequest("/auth/me", fresh.accessToken)).status,
+      ).toBe(401);
+      expect(
+        (
+          await processingRequest("/auth/refresh", "", "POST", {
+            refreshToken: fresh.refreshToken,
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        await db.securityEvent.count({
+          where: {
+            type: "ACCOUNT_DELETION_COMPLETED",
+            metadata: { path: ["requestId"], equals: freshId },
           },
         }),
       ).toBe(1);
@@ -1532,6 +1678,20 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         "access-control-allow-methods": "GET, POST, OPTIONS",
         "access-control-allow-headers": "authorization, content-type",
       };
+      await page
+        .getByRole("button", { name: "Silme taleplerini yükle", exact: true })
+        .click();
+      await page
+        .getByRole("button", {
+          name: `customer-${key}@example.test · Talep alındı`,
+          exact: true,
+        })
+        .click();
+      await page
+        .getByText("Saklama/üyelik incelemesi gereken kayıt sınıfları:", {
+          exact: true,
+        })
+        .waitFor();
       await page.route("**/mvp/v1/**", async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
@@ -1744,6 +1904,22 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           .getByText("Sentetik danışmanlık adımı", { exact: false })
           .count(),
       ).toBe(0);
+      await logout();
+      await page
+        .getByRole("button", {
+          name: "Hesap silme durumunu takip et",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByLabel("Silme takip kodu", { exact: true })
+        .fill(completionTrackingToken);
+      await page
+        .getByRole("button", { name: "Silme sonucunu sorgula", exact: true })
+        .click();
+      await page
+        .getByText("Hesabın kalıcı olarak silindi.", { exact: true })
+        .waitFor();
     } catch (error) {
       await page.screenshot({
         path: "/tmp/stage33-failure.png",

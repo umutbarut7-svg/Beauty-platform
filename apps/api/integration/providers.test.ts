@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { PrivatePhotoStore } from "../src/mvp/providers/private-photo-store.js";
 import { OpenAiBeautyProvider } from "../src/mvp/providers/openai-beauty.provider.js";
 import { VisualService, MvpExternalGuard } from "../src/mvp/visual.service.js";
+import { AccountErasureService } from "../src/auth/account-erasure.service.js";
 import { AccountDeletionService } from "../src/auth/account-deletion.service.js";
 import { PhotoMaintenanceService } from "../src/mvp/photo-maintenance.service.js";
 import { SemanticService } from "../src/mvp/semantic.service.js";
@@ -419,6 +420,58 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
         where: { ownerId: user.id, action: "photo.consent.withdrawn" },
       }),
     ).toBe(0);
+  });
+  it("rolls back final account erasure when completion auditing fails", async () => {
+    vi.stubEnv("ACCOUNT_DELETION_ERASURE_ENABLED", "true");
+    const user = await owner();
+    await db.customer.create({ data: { userId: user.id } });
+    const request = await db.accountDeletionRequest.create({
+      data: { userId: user.id, processingAt: new Date() },
+    });
+    const failing = new AccountErasureService({
+      $transaction: (
+        operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+        options: { isolationLevel: Prisma.TransactionIsolationLevel },
+      ) =>
+        db.$transaction(
+          (tx) =>
+            operation(
+              new Proxy(tx, {
+                get(target, property, receiver) {
+                  if (property === "securityEvent")
+                    return new Proxy(target.securityEvent, {
+                      get(events, key) {
+                        if (key === "create")
+                          return async () => {
+                            throw new Error(
+                              "Synthetic completion audit failure",
+                            );
+                          };
+                        return Reflect.get(events, key);
+                      },
+                    });
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+            ),
+          options,
+        ),
+    } as never);
+    await expect(
+      failing.finalize(request.id, "synthetic-operator"),
+    ).rejects.toThrow("Synthetic completion audit failure");
+    expect(await db.user.findUnique({ where: { id: user.id } })).not.toBeNull();
+    const unchanged = await db.accountDeletionRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    expect(unchanged.userId).toBe(user.id);
+    expect(unchanged.completedAt).toBeNull();
+    const erasure = new AccountErasureService(db as never);
+    expect(await erasure.finalize(request.id, "synthetic-operator")).toEqual({
+      status: "COMPLETED",
+      deletionCompleted: true,
+    });
+    expect(await db.user.findUnique({ where: { id: user.id } })).toBeNull();
   });
   it("withdraws all account photos during deletion, rejects late writes and retries real object cleanup", async () => {
     vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "true");

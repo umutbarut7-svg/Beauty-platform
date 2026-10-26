@@ -46,7 +46,7 @@ export class AccountDeletionService {
 
   async pending(after?: string) {
     const requests = await this.db.accountDeletionRequest.findMany({
-      where: after ? { id: { gt: after } } : {},
+      where: { completedAt: null, ...(after ? { id: { gt: after } } : {}) },
       orderBy: { id: "asc" },
       take: 51,
       select: {
@@ -75,21 +75,38 @@ export class AccountDeletionService {
             // until the existing maintenance worker confirms physical erasure.
             const subject = await tx.accountDeletionRequest.findUnique({
               where: { id: requestId },
-              select: { userId: true },
+              select: { userId: true, completedAt: true },
             });
             if (!subject)
               throw new NotFoundException("Silme talebi bulunamadı.");
+            if (subject.completedAt && !subject.userId)
+              return { status: "COMPLETED", deletionCompleted: true };
+            if (!subject.userId)
+              throw new ConflictException(
+                "Eksik hesap durumu inceleme gerektiriyor.",
+              );
             await tx.$queryRawUnsafe(
               "SELECT pg_advisory_xact_lock(hashtext($1))::text",
               `mvp-photo:${subject.userId}`,
             );
             const request = await tx.accountDeletionRequest.findUnique({
               where: { id: requestId },
-              include: { user: { select: { role: true } } },
+              include: {
+                user: { select: { role: true, restoreQuarantinedAt: true } },
+              },
             });
             if (!request)
               throw new NotFoundException("Silme talebi bulunamadı.");
             if (request.processingAt) return this.receipt(request);
+            if (!request.user || !request.userId)
+              throw new ConflictException(
+                "Eksik hesap durumu inceleme gerektiriyor.",
+              );
+            if (request.user.restoreQuarantinedAt)
+              throw new ConflictException(
+                "Yedekten dönen hesap önce inceleme gerektiriyor.",
+              );
+            const userId = request.userId;
             if (request.user.role === "SUPER_ADMIN")
               throw new ConflictException(
                 "Yönetici hesabı için ayrı inceleme gerekli.",
@@ -130,19 +147,19 @@ export class AccountDeletionService {
               data: { revokedAt: processingAt },
             });
             const consents = await tx.mvpPhotoConsent.findMany({
-              where: { ownerId: request.userId, revokedAt: null },
+              where: { ownerId: userId, revokedAt: null },
               select: { id: true, auditExpiresAt: true },
             });
             await tx.mvpPhotoConsent.updateMany({
-              where: { ownerId: request.userId, revokedAt: null },
+              where: { ownerId: userId, revokedAt: null },
               data: { revokedAt: processingAt },
             });
             await tx.mvpPhoto.updateMany({
-              where: { ownerId: request.userId, revokedAt: null },
+              where: { ownerId: userId, revokedAt: null },
               data: { revokedAt: processingAt },
             });
             await tx.mvpPhotoAnalysis.updateMany({
-              where: { ownerId: request.userId },
+              where: { ownerId: userId },
               data: {
                 status: "REVOKED",
                 intent: "",
@@ -154,7 +171,7 @@ export class AccountDeletionService {
             if (consents.length)
               await tx.mvpPrivacyEvent.createMany({
                 data: consents.map((consent) => ({
-                  ownerId: request.userId,
+                  ownerId: userId,
                   resourceId: consent.id,
                   action: "photo.consent.withdrawn",
                   expiresAt: consent.auditExpiresAt,

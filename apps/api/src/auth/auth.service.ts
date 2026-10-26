@@ -64,6 +64,7 @@ export class AuthService {
     if (
       !user ||
       user.accountDeletionRequest?.processingAt ||
+      user.restoreQuarantinedAt ||
       !(await compare(password, user.passwordHash))
     )
       throw new UnauthorizedException("Invalid email or password");
@@ -80,6 +81,7 @@ export class AuthService {
       !session ||
       session.revokedAt ||
       session.user.accountDeletionRequest?.processingAt ||
+      session.user.restoreQuarantinedAt ||
       session.expiresAt <= new Date() ||
       !safeEqual(session.tokenHash, digest(rawToken))
     )

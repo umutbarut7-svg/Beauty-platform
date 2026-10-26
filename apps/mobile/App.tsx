@@ -17,6 +17,7 @@ import {
   type MvpResult,
 } from "@beauty-platform/types";
 import { locationLabel, staffForBooking } from "./booking-options";
+import { DeletionReceipt } from "./DeletionReceipt";
 import { AccountDeletion } from "./AccountDeletion";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
@@ -553,6 +554,7 @@ export default function App() {
                 />
               )}
             </View>
+            <DeletionReceipt api={api} busy={busy} run={run} />
             <Text style={styles.footerNote}>
               Güzelliğin, bakımın ve sana iyi gelen deneyimlerin buluştuğu yer.
             </Text>

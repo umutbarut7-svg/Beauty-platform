@@ -319,6 +319,7 @@ model User {
   id                           String                     @id @default(cuid())
   email                        String                     @unique
   passwordHash                 String
+  restoreQuarantinedAt         DateTime?
   role                         UserRole                   @default(CUSTOMER)
   createdAt                    DateTime                   @default(now())
   updatedAt                    DateTime                   @updatedAt
@@ -4292,11 +4293,13 @@ model MvpVerificationRequest {
 }
 
 model AccountDeletionRequest {
-  id           String    @id @default(cuid())
-  userId       String    @unique
-  requestedAt  DateTime  @default(now())
-  processingAt DateTime?
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  userId           String?   @unique
+  requestedAt      DateTime  @default(now())
+  processingAt     DateTime?
+  completedAt      DateTime?
+  receiptTokenHash String?
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([requestedAt, id])
 }

@@ -1,3 +1,4 @@
+import { AccountErasureService } from "./account-erasure.service.js";
 import { AccountDeletionController } from "./account-deletion.controller.js";
 import { AccountDeletionService } from "./account-deletion.service.js";
 import { Module } from "@nestjs/common";
@@ -9,7 +10,12 @@ import { PermissionsService } from "./permissions.service.js";
 @Module({
   imports: [JwtModule.register({})],
   controllers: [AuthController, AccountDeletionController],
-  providers: [AuthService, PermissionsService, AccountDeletionService],
+  providers: [
+    AuthService,
+    PermissionsService,
+    AccountDeletionService,
+    AccountErasureService,
+  ],
   exports: [PermissionsService, JwtModule],
 })
 export class AuthModule {}

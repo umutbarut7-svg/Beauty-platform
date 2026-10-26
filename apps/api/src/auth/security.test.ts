@@ -70,6 +70,14 @@ describe("authorization security", () => {
     );
     lookup.mockResolvedValue({
       id: "u1",
+      restoreQuarantinedAt: new Date(),
+      accountDeletionRequest: null,
+    });
+    await expect(guard.canActivate(context(req()))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    lookup.mockResolvedValue({
+      id: "u1",
       email: "current@example.com",
       role: "CUSTOMER",
       accountDeletionRequest: { processingAt: null },

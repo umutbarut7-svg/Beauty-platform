@@ -43,10 +43,15 @@ export class AuthGuard implements CanActivate {
           id: true,
           email: true,
           role: true,
+          restoreQuarantinedAt: true,
           accountDeletionRequest: { select: { processingAt: true } },
         },
       });
-      if (!user || user.accountDeletionRequest?.processingAt)
+      if (
+        !user ||
+        user.restoreQuarantinedAt ||
+        user.accountDeletionRequest?.processingAt
+      )
         throw new Error("account unavailable");
       request.user = { id: user.id, email: user.email, role: user.role };
       requestContext.setIdentity(user.id, user.role);

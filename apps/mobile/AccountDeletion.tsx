@@ -22,6 +22,7 @@ export function AccountDeletion({
   const [confirming, setConfirming] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [tracking, setTracking] = useState("");
   const [message, setMessage] = useState("");
   function button(
     label: string,
@@ -63,6 +64,59 @@ export function AccountDeletion({
           {button("Silme talebinin durumunu yenile", async () => {
             setReceipt(await api.request<Receipt>("/auth/account-deletion"));
           })}
+          {receipt.status === "REQUESTED" && (
+            <>
+              <Text style={styles.body}>
+                Hesabın kapandıktan sonra sonucu görebilmek için takip kodu
+                oluştur. Yeni kod, önceki kodu geçersiz kılar.
+              </Text>
+              <TextInput
+                accessibilityLabel="Takip kodu için mevcut parola"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+                style={styles.input}
+              />
+              {button(
+                "Silme takip kodu oluştur",
+                async () => {
+                  setTracking("");
+                  try {
+                    setTracking(
+                      (
+                        await api.request<{ token: string }>(
+                          "/auth/account-deletion/tracking",
+                          "POST",
+                          { password },
+                        )
+                      ).token,
+                    );
+                  } finally {
+                    setPassword("");
+                  }
+                },
+                !password,
+              )}
+              {tracking && (
+                <>
+                  <Text style={styles.body}>
+                    Bu kodu güvenli bir yerde sakla. Giriş ekranındaki hesap
+                    silme takibinde kullanabilirsin.
+                  </Text>
+                  <Text
+                    selectable
+                    accessibilityLabel="Oluşturulan silme takip kodu"
+                    style={styles.body}
+                  >
+                    {tracking}
+                  </Text>
+                </>
+              )}
+            </>
+          )}
         </>
       ) : confirming ? (
         <>
