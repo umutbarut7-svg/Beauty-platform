@@ -612,6 +612,31 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       ).not.toBeNull();
       // Fixture-only removal models an independently resolved review; the erasure API cannot bypass it.
       await db.securityEvent.delete({ where: { id: loose.id } });
+      const unrelated = await db.user.create({
+        data: {
+          email: `${fresh.user.email}.another`,
+          passwordHash: "synthetic-never-used-for-login",
+        },
+      });
+      const cleanInspection = await processingRequest(
+        `/auth/account-deletion/${freshId}/inspection`,
+        admin.accessToken,
+      );
+      expect(cleanInspection.body.blockers).toEqual([]);
+      const securityFacts = await db.securityEvent.findMany({
+        where: {
+          actorId: fresh.user.id,
+          businessId: null,
+          type: {
+            in: [
+              "AUTHENTICATION_FAILED",
+              "AUTHORIZATION_DENIED",
+              "RATE_LIMIT_EXCEEDED",
+            ],
+          },
+        },
+      });
+      expect(securityFacts.length).toBeGreaterThan(0);
       const finished = await Promise.all([
         finalize(freshId),
         finalize(freshId),
@@ -624,6 +649,22 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       expect(
         await db.user.findUnique({ where: { id: fresh.user.id } }),
       ).toBeNull();
+      expect(
+        await db.user.findUnique({ where: { id: unrelated.id } }),
+      ).not.toBeNull();
+      const minimizedSecurity = await db.securityEvent.findMany({
+        where: { id: { in: securityFacts.map((event) => event.id) } },
+      });
+      expect(minimizedSecurity).toHaveLength(securityFacts.length);
+      expect(
+        minimizedSecurity.every(
+          (event) =>
+            event.actorId === null &&
+            event.requestId === null &&
+            event.route === null,
+        ),
+      ).toBe(true);
+
       expect(
         await db.customer.count({ where: { userId: fresh.user.id } }),
       ).toBe(0);

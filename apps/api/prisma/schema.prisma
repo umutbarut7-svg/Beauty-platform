@@ -4293,13 +4293,30 @@ model MvpVerificationRequest {
 }
 
 model AccountDeletionRequest {
-  id               String    @id @default(cuid())
-  userId           String?   @unique
-  requestedAt      DateTime  @default(now())
+  id               String                    @id @default(cuid())
+  userId           String?                   @unique
+  requestedAt      DateTime                  @default(now())
   processingAt     DateTime?
   completedAt      DateTime?
   receiptTokenHash String?
-  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user             User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  evidence         AccountDeletionEvidence[]
 
   @@index([requestedAt, id])
+}
+
+model AccountDeletionEvidence {
+  id            String                 @id @default(uuid())
+  requestId     String
+  kind          String
+  sourceHash    String
+  policyVersion String?
+  noticeHash    String?
+  action        String?
+  recordedAt    DateTime
+  expiresAt     DateTime
+  request       AccountDeletionRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, kind, sourceHash])
+  @@index([expiresAt])
 }

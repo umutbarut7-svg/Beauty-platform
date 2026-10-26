@@ -10,6 +10,7 @@ const { PrismaClient } = PrismaPackage as unknown as {
     user: any;
     refreshSession: any;
     accountDeletionRequest: any;
+    accountDeletionEvidence: any;
     businessMember: any;
     business: any;
     location: any;

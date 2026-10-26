@@ -27,6 +27,11 @@ const ownedRows: Record<string, string> = {
   MvpPhotoAnalysis: 'record."ownerId" = $3',
   MvpPrivacyEvent: 'record."ownerId" = $3',
 };
+const authTelemetryTypes = [
+  "AUTHENTICATION_FAILED",
+  "AUTHORIZATION_DENIED",
+  "RATE_LIMIT_EXCEEDED",
+];
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 const missing = () => new NotFoundException("Silme kaydı bulunamadı.");
@@ -190,6 +195,56 @@ export class AccountErasureService {
                   "İlişkili işletme/veri kayıtları saklama incelemesi gerektiriyor.",
                 blockers,
               });
+            const now = new Date();
+            const consents = await tx.mvpPhotoConsent.findMany({
+              where: { ownerId: user.id, auditExpiresAt: { gt: now } },
+            });
+            const events = await tx.mvpPrivacyEvent.findMany({
+              where: { ownerId: user.id, expiresAt: { gt: now } },
+            });
+            const evidence: Prisma.AccountDeletionEvidenceCreateManyInput[] = [
+              ...consents.map((consent) => ({
+                requestId,
+                kind: "PHOTO_CONSENT",
+                sourceHash: digest(consent.id),
+                policyVersion: consent.policyVersion,
+                noticeHash: consent.noticeHash,
+                recordedAt: consent.createdAt,
+                expiresAt: consent.auditExpiresAt,
+              })),
+              ...events.map((event) => ({
+                requestId,
+                kind: "PHOTO_EVENT",
+                sourceHash: digest(event.id),
+                action: event.action,
+                recordedAt: event.createdAt,
+                expiresAt: event.expiresAt,
+              })),
+            ];
+            if (evidence.length)
+              await tx.accountDeletionEvidence.createMany({
+                data: evidence,
+                skipDuplicates: true,
+              });
+            // Keep coarse platform security facts, without an account/request/path link.
+            // Tenant events or events with metadata remain unreviewed blockers.
+            await tx.securityEvent.updateMany({
+              where: {
+                actorId: user.id,
+                businessId: null,
+                type: { in: authTelemetryTypes },
+                OR: [
+                  { metadata: { equals: Prisma.DbNull } },
+                  { metadata: { equals: Prisma.JsonNull } },
+                ],
+              },
+              data: {
+                actorId: null,
+                actorType: null,
+                requestId: null,
+                route: null,
+              },
+            });
             await tx.mvpPhotoAnalysis.deleteMany({
               where: { ownerId: user.id },
             });
@@ -267,7 +322,7 @@ export class AccountErasureService {
     // FK-only cascade would miss. Results expose model names, never record bodies.
     // This is an explicit operator inspection, not a periodic background table scan.
     const patterns = [userId, email, ...(customerId ? [customerId] : [])].map(
-      (value) => `%${value.replace(/[%_\\]/g, "\\$&")}%`,
+      (value) => `%${JSON.stringify(value).replace(/[%_\\]/g, "\\$&")}%`,
     );
     const queries = Prisma.dmmf.datamodel.models.map((model) => {
       const table =
@@ -278,7 +333,7 @@ export class AccountErasureService {
         : "";
       const excludeProcessing =
         model.name === "SecurityEvent"
-          ? ` AND NOT COALESCE((record."type" = 'ACCOUNT_DELETION_PROCESSING_STARTED' AND record."metadata"->>'requestId' = $2 AND record."metadata"->>'subjectId' = $3), FALSE)`
+          ? ` AND NOT COALESCE(((record."type" = 'ACCOUNT_DELETION_PROCESSING_STARTED' AND record."metadata"->>'requestId' = $2 AND record."metadata"->>'subjectId' = $3) OR (record."actorId" = $3 AND record."businessId" IS NULL AND record."type" IN ('AUTHENTICATION_FAILED','AUTHORIZATION_DENIED','RATE_LIMIT_EXCEEDED') AND (record."metadata" IS NULL OR record."metadata" = 'null'::jsonb))), FALSE)`
           : "";
       return `SELECT '${name}'::text AS model WHERE EXISTS (SELECT 1 FROM ${table} AS record WHERE to_jsonb(record)::text ILIKE ANY($1::text[])${excludeProcessing}${excludeOwned})`;
     });

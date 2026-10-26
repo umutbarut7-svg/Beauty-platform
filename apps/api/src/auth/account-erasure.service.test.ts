@@ -48,8 +48,17 @@ describe("account erasure and scoped completion receipts", () => {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
       mvpPhotoAnalysis: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-      mvpPhotoConsent: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-      mvpPrivacyEvent: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      mvpPhotoConsent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      mvpPrivacyEvent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      accountDeletionEvidence: {
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
       securityEvent: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         create: vi.fn().mockResolvedValue({}),
@@ -123,9 +132,9 @@ describe("account erasure and scoped completion receipts", () => {
     expect(requestId).toBe("request-1");
     expect(subjectId).toBe(user.id);
     expect(patterns).toEqual([
-      "%owner\\_1\\%%",
-      "%owner\\%\\_@example.test%",
-      "%customer-1%",
+      '%"owner\\_1\\%"%',
+      '%"owner\\%\\_@example.test"%',
+      '%"customer-1"%',
     ]);
   });
   it("performs owned-data deletion and completion in one serializable transaction", async () => {
@@ -150,6 +159,60 @@ describe("account erasure and scoped completion receipts", () => {
         metadata: { requestId: "request-1" },
       }),
     });
+  });
+  it("retains minimized photo proof until its original expiry without an account identity", async () => {
+    const { service, tx, user } = await fixture();
+    const recordedAt = new Date(Date.now() - 86400000),
+      expiresAt = new Date(Date.now() + 89 * 86400000);
+    tx.mvpPhotoConsent.findMany.mockResolvedValue([
+      {
+        id: "consent-1",
+        policyVersion: "approved-policy",
+        noticeHash: "a".repeat(64),
+        createdAt: recordedAt,
+        auditExpiresAt: expiresAt,
+      },
+    ]);
+    tx.mvpPrivacyEvent.findMany.mockResolvedValue([
+      {
+        id: "event-1",
+        action: "photo.consent.withdrawn",
+        createdAt: recordedAt,
+        expiresAt,
+      },
+    ]);
+    await service.finalize("request-1", "operator");
+    const saved = tx.accountDeletionEvidence.createMany.mock.calls[0]![0];
+    expect(saved).toMatchObject({
+      skipDuplicates: true,
+      data: [
+        {
+          requestId: "request-1",
+          kind: "PHOTO_CONSENT",
+          policyVersion: "approved-policy",
+          noticeHash: "a".repeat(64),
+          recordedAt,
+          expiresAt,
+          sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+        {
+          requestId: "request-1",
+          kind: "PHOTO_EVENT",
+          action: "photo.consent.withdrawn",
+          recordedAt,
+          expiresAt,
+          sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      ],
+    });
+    expect(JSON.stringify(saved)).not.toContain(user.id);
+    expect(JSON.stringify(saved)).not.toContain(user.email);
+    expect(tx.securityEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ actorId: user.id, businessId: null }),
+        data: { actorId: null, actorType: null, requestId: null, route: null },
+      }),
+    );
   });
   it("retries serialization failure and never repeats completed erasure", async () => {
     const { service, request, db, tx } = await fixture();

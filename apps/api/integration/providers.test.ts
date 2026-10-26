@@ -475,6 +475,7 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
   });
   it("withdraws all account photos during deletion, rejects late writes and retries real object cleanup", async () => {
     vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "true");
+    vi.stubEnv("ACCOUNT_DELETION_ERASURE_ENABLED", "true");
     const user = await owner();
     const other = await owner();
     let release!: (value: Response) => void;
@@ -634,6 +635,39 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
         status: "PROCESSING",
         deletionCompleted: false,
       });
+      const erasure = new AccountErasureService(db as never);
+      expect(await erasure.finalize(request.id, other.id)).toEqual({
+        status: "COMPLETED",
+        deletionCompleted: true,
+      });
+      expect(await db.user.findUnique({ where: { id: user.id } })).toBeNull();
+      const proofs = await db.accountDeletionEvidence.findMany({
+        where: { requestId: request.id },
+      });
+      expect(proofs.length).toBeGreaterThan(0);
+      expect(
+        proofs.some(
+          (proof) =>
+            proof.kind === "PHOTO_CONSENT" &&
+            proof.expiresAt.getTime() > Date.now(),
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(proofs)).not.toContain(user.id);
+      expect(JSON.stringify(proofs)).not.toContain(user.email);
+      expect(JSON.stringify(proofs)).not.toContain(erased.objectKey);
+      await db.accountDeletionEvidence.updateMany({
+        where: { requestId: request.id },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      await cleanup.sweep();
+      expect(
+        await db.accountDeletionEvidence.count({
+          where: { requestId: request.id },
+        }),
+      ).toBe(0);
+      expect(
+        await db.user.findUnique({ where: { id: other.id } }),
+      ).not.toBeNull();
     } finally {
       release(response());
       await pending;
