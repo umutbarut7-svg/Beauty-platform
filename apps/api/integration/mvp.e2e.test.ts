@@ -28,6 +28,7 @@ let strangerToken = "";
 let professionalToken = "";
 let unassignedToken = "";
 let customerId = "";
+let completionTrackingToken = "";
 let businessId = "";
 let otherBusinessId = "";
 let staffId = "";
@@ -41,6 +42,8 @@ const environment = {
   DATABASE_URL: url,
   STAGE33_MVP_ENABLED: "true",
   MVP_REDIS_ENABLED: "true",
+  ACCOUNT_DELETION_PROCESSING_ENABLED: "true",
+  ACCOUNT_DELETION_ERASURE_ENABLED: "true",
   MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
@@ -61,8 +64,9 @@ async function request(
   token: string,
   method = "GET",
   body?: unknown,
+  origin = base,
 ) {
-  const r = await fetch(`${base}${path}`, {
+  const r = await fetch(`${origin}${path}`, {
     method,
     headers: {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -277,6 +281,446 @@ afterAll(async () => {
 });
 
 describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
+  it("takes one owner-scoped account deletion request without claiming or performing deletion", async () => {
+    const path = "/auth/account-deletion";
+    expect((await request(path, "")).status).toBe(401);
+    expect((await request(path, customerToken)).body.status).toBe("NONE");
+    const before = await db.businessMember.count({ where: { businessId } });
+    expect(
+      (
+        await request(path, customerToken, "POST", {
+          password: "wrong",
+          confirmation: "HESABIMI SIL",
+        })
+      ).status,
+    ).toBe(403);
+    expect((await request(path, customerToken)).body.status).toBe("NONE");
+    expect(
+      (
+        await request(path, customerToken, "POST", {
+          password: "Isolated-strong-password-33",
+          confirmation: "HESABIMI SIL",
+          userId: "someone-else",
+        })
+      ).status,
+    ).toBe(400);
+    const results = await Promise.all(
+      [1, 2].map(() =>
+        request(path, customerToken, "POST", {
+          password: "Isolated-strong-password-33",
+          confirmation: "HESABIMI SIL",
+        }),
+      ),
+    );
+    expect(results.map((r) => r.status)).toEqual([202, 202]);
+    expect(results[0]!.body.request.id).toBe(results[1]!.body.request.id);
+    expect(results[0]!.body).toMatchObject({
+      status: "REQUESTED",
+      deletionCompleted: false,
+    });
+    expect(results[0]!.body).not.toHaveProperty("password");
+    expect((await request(path, strangerToken)).body).toEqual({
+      status: "NONE",
+      request: null,
+      deletionCompleted: false,
+    });
+    expect(
+      await db.accountDeletionRequest.count({ where: { userId: customerId } }),
+    ).toBe(1);
+    expect(await db.businessMember.count({ where: { businessId } })).toBe(
+      before,
+    );
+    expect((await request("/auth/me", customerToken)).status).toBe(200);
+  });
+
+  it("freezes deletion sessions atomically and never abandons a business during concurrent processing", async () => {
+    // Keep the real per-IP login limit intact. This scenario has its own API
+    // instance/limiter so its extra logins cannot consume the browser journey's budget.
+    const origin = "http://127.0.0.1:3002";
+    const isolatedApp = spawn("node", ["dist/main.js"], {
+      env: { ...environment, PORT: "3002" },
+      stdio: "ignore",
+    });
+    const processingRequest = (
+      path: string,
+      token: string,
+      method = "GET",
+      body?: unknown,
+    ) => request(path, token, method, body, origin);
+    const processingCreate = async (
+      path: string,
+      token: string,
+      body: unknown,
+    ) => {
+      const result = await processingRequest(path, token, "POST", body);
+      expect(result.status).toBe(200); // This helper is used only for login.
+      return result.body;
+    };
+    try {
+      let ready = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        try {
+          if ((await fetch(`${origin}/health/ready`)).ok) {
+            ready = true;
+            break;
+          }
+        } catch {
+          /* bounded isolated API startup */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(ready).toBe(true);
+      const password = "Isolated-strong-password-33";
+      const makeUser = async (
+        label: string,
+        role: "CUSTOMER" | "SUPER_ADMIN" = "CUSTOMER",
+      ) => {
+        const user = await db.user.create({
+          data: {
+            email: `deletion-${label}-${key}@example.test`,
+            passwordHash: await hash(password, 4),
+            role,
+          },
+        });
+        const login = await processingCreate("/auth/login", "", {
+          email: user.email,
+          password,
+        });
+        return { user, ...login };
+      };
+      const admin = await makeUser("admin", "SUPER_ADMIN");
+      const a = await makeUser("a");
+      const b = await makeUser("b");
+      const secondA = await processingCreate("/auth/login", "", {
+        email: a.user.email,
+        password,
+      });
+      const tenant = await db.business.create({
+        data: {
+          name: "Deletion ownership fixture",
+          slug: `deletion-${key}`,
+          memberships: {
+            create: [
+              { userId: a.user.id, role: "BUSINESS_OWNER" },
+              { userId: b.user.id, role: "BUSINESS_OWNER" },
+            ],
+          },
+        },
+      });
+      const ar = await db.accountDeletionRequest.create({
+        data: { userId: a.user.id },
+      });
+      const br = await db.accountDeletionRequest.create({
+        data: { userId: b.user.id },
+      });
+      const begin = (
+        id: string,
+        token = admin.accessToken,
+        body: unknown = { confirmation: "ISLEME AL" },
+      ) =>
+        processingRequest(
+          `/auth/account-deletion/${id}/begin`,
+          token,
+          "POST",
+          body,
+        );
+      expect((await begin(ar.id, "")).status).toBe(401);
+      expect((await begin(ar.id, a.accessToken)).status).toBe(403);
+      expect(
+        (await begin(ar.id, admin.accessToken, { confirmation: "wrong" }))
+          .status,
+      ).toBe(400);
+      expect(
+        (
+          await begin(ar.id, admin.accessToken, {
+            confirmation: "ISLEME AL",
+            userId: b.user.id,
+          })
+        ).status,
+      ).toBe(400);
+      const existingOwner = await db.businessMember.findFirstOrThrow({
+        where: { businessId, role: "BUSINESS_OWNER" },
+      });
+      const sole = await db.accountDeletionRequest.create({
+        data: { userId: existingOwner.userId },
+      });
+      expect((await begin(sole.id)).status).toBe(409);
+      expect((await processingRequest("/auth/me", ownerToken)).status).toBe(
+        200,
+      );
+      expect(
+        (
+          await db.accountDeletionRequest.findUniqueOrThrow({
+            where: { id: sole.id },
+          })
+        ).processingAt,
+      ).toBeNull();
+
+      const results = await Promise.all([begin(ar.id), begin(br.id)]);
+      expect(results.map((r) => r.status).sort()).toEqual([202, 409]);
+      const index = results.findIndex((r) => r.status === 202);
+      const winner = index === 0 ? a : b;
+      const loser = index === 0 ? b : a;
+      const receipt = results[index]!.body;
+      expect(receipt).toMatchObject({
+        status: "PROCESSING",
+        deletionCompleted: false,
+      });
+      expect((await begin(receipt.request.id)).body).toEqual(receipt);
+      expect(
+        (await processingRequest("/auth/me", winner.accessToken)).status,
+      ).toBe(401);
+      expect(
+        (await processingRequest("/auth/me", loser.accessToken)).status,
+      ).toBe(200);
+      expect(
+        (
+          await processingRequest("/auth/login", "", "POST", {
+            email: winner.user.email,
+            password,
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await processingRequest("/auth/refresh", "", "POST", {
+            refreshToken: winner.refreshToken,
+          })
+        ).status,
+      ).toBe(401);
+      if (index === 0) {
+        expect(
+          (await processingRequest("/auth/me", secondA.accessToken)).status,
+        ).toBe(401);
+        expect(
+          (
+            await processingRequest("/auth/refresh", "", "POST", {
+              refreshToken: secondA.refreshToken,
+            })
+          ).status,
+        ).toBe(401);
+      }
+      expect(
+        await db.refreshSession.count({
+          where: { userId: winner.user.id, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect(
+        await db.businessMember.count({ where: { businessId: tenant.id } }),
+      ).toBe(2);
+      expect(
+        await db.business.findUnique({ where: { id: tenant.id } }),
+      ).not.toBeNull();
+      expect(
+        await db.user.findUnique({ where: { id: winner.user.id } }),
+      ).not.toBeNull();
+      expect(
+        await db.securityEvent.count({
+          where: {
+            type: "ACCOUNT_DELETION_PROCESSING_STARTED",
+            actorId: admin.user.id,
+          },
+        }),
+      ).toBe(1);
+      const finalize = (id: string, token = admin.accessToken) =>
+        processingRequest(
+          `/auth/account-deletion/${id}/finalize`,
+          token,
+          "POST",
+          { confirmation: "KALICI SIL" },
+        );
+      // The business-owning subject cannot be silently erased or retained by an unchecked override.
+      const domain = await processingRequest(
+        `/auth/account-deletion/${receipt.request.id}/inspection`,
+        admin.accessToken,
+      );
+      expect(domain.status).toBe(200);
+      expect(domain.body.blockers).toContain("BusinessMember");
+      const fresh = await makeUser("fresh");
+      await db.customer.create({ data: { userId: fresh.user.id } });
+      const intake = await processingRequest(
+        "/auth/account-deletion",
+        fresh.accessToken,
+        "POST",
+        { password, confirmation: "HESABIMI SIL" },
+      );
+      expect(intake.status).toBe(202);
+      const freshId = intake.body.request.id;
+      expect(
+        (
+          await processingRequest(
+            "/auth/account-deletion/tracking",
+            fresh.accessToken,
+            "POST",
+            { password: "wrong" },
+          )
+        ).status,
+      ).toBe(403);
+      const tracking = await processingRequest(
+        "/auth/account-deletion/tracking",
+        fresh.accessToken,
+        "POST",
+        { password },
+      );
+      expect(tracking.status).toBe(201);
+      const trackingToken = tracking.body.token;
+      completionTrackingToken = trackingToken;
+      const publicReceipt = () =>
+        processingRequest("/auth/account-deletion/receipt", "", "POST", {
+          token: trackingToken,
+        });
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "REQUESTED",
+        deletionCompleted: false,
+      });
+      expect((await processingRequest("/auth/me", trackingToken)).status).toBe(
+        401,
+      );
+      expect(
+        (
+          await processingRequest(
+            "/auth/account-deletion/receipt",
+            "",
+            "POST",
+            { token: `${freshId}.${"A".repeat(43)}` },
+          )
+        ).status,
+      ).toBe(404);
+      expect((await finalize(freshId, fresh.accessToken)).status).toBe(403);
+      expect((await begin(freshId)).status).toBe(202);
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "PROCESSING",
+        deletionCompleted: false,
+      });
+      // A loose JSON reference with no FK must block, not disappear under cascade.
+      const loose = await db.securityEvent.create({
+        data: {
+          type: "SYNTHETIC_UNREVIEWED_REFERENCE",
+          severity: "INFO",
+          metadata: { subject: fresh.user.id },
+        },
+      });
+      const inspection = await processingRequest(
+        `/auth/account-deletion/${freshId}/inspection`,
+        admin.accessToken,
+      );
+      expect(inspection.status).toBe(200);
+      expect(inspection.body.blockers).toContain("SecurityEvent");
+      expect((await finalize(freshId)).status).toBe(409);
+      expect(
+        await db.user.findUnique({ where: { id: fresh.user.id } }),
+      ).not.toBeNull();
+      // Fixture-only removal models an independently resolved review; the erasure API cannot bypass it.
+      await db.securityEvent.delete({ where: { id: loose.id } });
+      const unrelated = await db.user.create({
+        data: {
+          email: `${fresh.user.email}.another`,
+          passwordHash: "synthetic-never-used-for-login",
+        },
+      });
+      const cleanInspection = await processingRequest(
+        `/auth/account-deletion/${freshId}/inspection`,
+        admin.accessToken,
+      );
+      expect(cleanInspection.body.blockers).toEqual([]);
+      const securityFacts = await db.securityEvent.findMany({
+        where: {
+          actorId: fresh.user.id,
+          businessId: null,
+          type: {
+            in: [
+              "AUTHENTICATION_FAILED",
+              "AUTHORIZATION_DENIED",
+              "RATE_LIMIT_EXCEEDED",
+            ],
+          },
+        },
+      });
+      expect(securityFacts.length).toBeGreaterThan(0);
+      const finished = await Promise.all([
+        finalize(freshId),
+        finalize(freshId),
+      ]);
+      expect(finished.map((result) => result.status)).toEqual([200, 200]);
+      expect(finished[0]!.body).toEqual({
+        status: "COMPLETED",
+        deletionCompleted: true,
+      });
+      expect(
+        await db.user.findUnique({ where: { id: fresh.user.id } }),
+      ).toBeNull();
+      expect(
+        await db.user.findUnique({ where: { id: unrelated.id } }),
+      ).not.toBeNull();
+      const minimizedSecurity = await db.securityEvent.findMany({
+        where: { id: { in: securityFacts.map((event) => event.id) } },
+      });
+      expect(minimizedSecurity).toHaveLength(securityFacts.length);
+      expect(
+        minimizedSecurity.every(
+          (event) =>
+            event.actorId === null &&
+            event.requestId === null &&
+            event.route === null,
+        ),
+      ).toBe(true);
+
+      expect(
+        await db.customer.count({ where: { userId: fresh.user.id } }),
+      ).toBe(0);
+      expect(
+        await db.refreshSession.count({ where: { userId: fresh.user.id } }),
+      ).toBe(0);
+      expect(
+        (
+          await db.accountDeletionRequest.findUniqueOrThrow({
+            where: { id: freshId },
+          })
+        ).userId,
+      ).toBeNull();
+      expect((await publicReceipt()).body).toMatchObject({
+        status: "COMPLETED",
+        deletionCompleted: true,
+        completedAt: expect.any(String),
+      });
+      expect(Object.keys((await publicReceipt()).body).sort()).toEqual([
+        "completedAt",
+        "deletionCompleted",
+        "requestedAt",
+        "status",
+      ]);
+      expect(
+        (await processingRequest("/auth/me", fresh.accessToken)).status,
+      ).toBe(401);
+      expect(
+        (
+          await processingRequest("/auth/refresh", "", "POST", {
+            refreshToken: fresh.refreshToken,
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        await db.securityEvent.count({
+          where: {
+            type: "ACCOUNT_DELETION_COMPLETED",
+            metadata: { path: ["requestId"], equals: freshId },
+          },
+        }),
+      ).toBe(1);
+      // Existing signed admin tokens must lose their role as soon as the DB role changes.
+      await db.user.update({
+        where: { id: admin.user.id },
+        data: { role: "CUSTOMER" },
+      });
+      expect((await begin(receipt.request.id)).status).toBe(403);
+    } finally {
+      if (isolatedApp.exitCode === null) {
+        isolatedApp.kill("SIGTERM");
+        await once(isolatedApp, "exit");
+      }
+    }
+  });
+
   it("keeps owner self-booking explicit and rejects customer impersonation", async () => {
     const date = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
     const path = `/businesses/${businessId}/appointments`;
@@ -381,6 +825,23 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         password: "Isolated-strong-password-33",
       })
     ).accessToken;
+    expect(
+      (await request("/auth/account-deletion/pending", customerToken)).status,
+    ).toBe(403);
+    expect(
+      (await request("/auth/account-deletion/pending", ownerToken)).status,
+    ).toBe(403);
+    const pending = await request(
+      "/auth/account-deletion/pending",
+      reviewerToken,
+    );
+    expect(pending.status).toBe(200);
+    expect(
+      pending.body.items.some(
+        (item: { user: { id: string } }) => item.user.id === customerId,
+      ),
+    ).toBe(true);
+
     const decision = {
       decision: "APPROVED",
       note: "Synthetic evidence reviewed under the CI fixture policy",
@@ -1258,6 +1719,20 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         "access-control-allow-methods": "GET, POST, OPTIONS",
         "access-control-allow-headers": "authorization, content-type",
       };
+      await page
+        .getByRole("button", { name: "Silme taleplerini yükle", exact: true })
+        .click();
+      await page
+        .getByRole("button", {
+          name: `customer-${key}@example.test · Talep alındı`,
+          exact: true,
+        })
+        .click();
+      await page
+        .getByText("Saklama/üyelik incelemesi gereken kayıt sınıfları:", {
+          exact: true,
+        })
+        .waitFor();
       await page.route("**/mvp/v1/**", async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
@@ -1470,6 +1945,22 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           .getByText("Sentetik danışmanlık adımı", { exact: false })
           .count(),
       ).toBe(0);
+      await logout();
+      await page
+        .getByRole("button", {
+          name: "Hesap silme durumunu takip et",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByLabel("Silme takip kodu", { exact: true })
+        .fill(completionTrackingToken);
+      await page
+        .getByRole("button", { name: "Silme sonucunu sorgula", exact: true })
+        .click();
+      await page
+        .getByText("Hesabın kalıcı olarak silindi.", { exact: true })
+        .waitFor();
     } catch (error) {
       await page.screenshot({
         path: "/tmp/stage33-failure.png",

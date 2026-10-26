@@ -41,7 +41,7 @@ en fazla 24 saat saklanır. Onay/işlem kanıtı 90 gün tutulur.
 İzninizi uygulamadaki fotoğraf izinleri bölümünden geri çekebilirsiniz. Bu,
 fotoğraf ve sonuçlarına erişimi kapatır; fiziksel silme worker tarafından takip
 edilir. Analiz profesyonel değerlendirmesinin yerine geçmez ve sonuç garantisi
-vermez. Başvurular için orzellapp@gmail.com ve sağlayıcı işleme koşulları için [inceleme sonrası eklenecek bağlantı].”
+vermez. Başvurular için orzellapp@gmail.com ve sağlayıcı işleme koşulları için https://developers.openai.com/api/docs/guides/your-data.”
 
 `store:false`, uygulamanın Responses isteğinde kullandığı ayardır; sağlayıcının
 hesap/veri işleme koşullarının yerine geçen bir saklama garantisi olarak sunulmaz.
@@ -77,3 +77,11 @@ version/notice/field-list/retention bağlamını zorunlu kılar; önerilen alan 
 
 Politika tercihleri, canlı runtime bağlantıları ve cihaz kabulü tamamlanmadan
 Aşama 33 bütünü PASS değildir.
+
+## 27 Ekim sağlayıcı belgesi kontrolü
+
+Resmî kaynak: [OpenAI platform veri kontrolleri](https://developers.openai.com/api/docs/guides/your-data), 27 Ekim 2026 tarihinde okundu. store:false tek başına Zero Data Retention sağlamaz. Standart kötüye kullanım izleme kayıtları, belgede belirtilen hukuki/güvenlik istisnaları saklı kalmak üzere, 30 güne kadar tutulabilir. ZDR/MAM özel onay gerektirir; bu hesabın onaylı olduğu varsayılmadı. Görüntü girdileri için ek güvenlik istisnaları vardır.
+
+Fotoğraf açıklaması ORZELL'in 24 saatlik içerik süresini sağlayıcının saklama garantisi gibi sunmamalıdır. Taslağa eklenecek açık cümle: “ORZELL'deki saklama süresi, analiz için kullandığımız sağlayıcının kendi veri işleme sürelerini ortadan kaldırmaz. Sağlayıcının geçerli koşullarını bağlantıdan inceleyebilirsiniz.”
+
+Bu belge kontrolü OpenAI hesabının özel veri kontrol ayarlarının, aktarım koşullarının veya kullanıcı metninin hukuki incelemesinin tamamlandığı anlamına gelmez. Gerçek sağlayıcı hesap bağlamı ve metin incelemesi doğrulanmadan reviewed flag açılmaz.

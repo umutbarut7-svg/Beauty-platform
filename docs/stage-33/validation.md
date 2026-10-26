@@ -1,5 +1,7 @@
 # Aşama 33 doğrulama kaydı
 
+> Güncel kabul ve kalan işler: [27 Ekim durum kaydı](current-status.md). Aşağıdaki eski run/NOT RUN kayıtları tarihsel kanıttır; bugünün genel durumu olarak kullanılmaz.
+
 ## Kaynak ve sınır
 
 Kilitli kaynak `00-user-source.md`; tüm 27 adım `acceptance-matrix.md` içindedir.

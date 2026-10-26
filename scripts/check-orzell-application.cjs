@@ -17,7 +17,8 @@ main(async (browser, origin, output) => {
   page.on("pageerror", (e) => errors.push(e.message));
   let bookings = [],
     deny = false,
-    availabilityMode = "slots";
+    availabilityMode = "slots",
+    deletionRequested = false;
   const startsAt =
     new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) +
     "T10:00:00.000Z";
@@ -62,7 +63,30 @@ main(async (browser, origin, output) => {
         refreshToken: "synthetic-refresh",
         user: { id: "user-1", role: "CUSTOMER" },
       };
-    else if (endpoint === "/auth/logout") value = { ok: true };
+    else if (endpoint === "/auth/account-deletion") {
+      if (request.method() === "POST") {
+        if (request.postDataJSON().password === "wrong-deletion-password")
+          return route.fulfill({
+            status: 403,
+            headers,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "Invalid password" }),
+          });
+        assert.deepEqual(request.postDataJSON(), {
+          password: "deletion-password",
+          confirmation: "HESABIMI SIL",
+        });
+        deletionRequested = true;
+        status = 202;
+      }
+      value = {
+        status: deletionRequested ? "REQUESTED" : "NONE",
+        request: deletionRequested
+          ? { id: "request-1", requestedAt: "2026-10-25T00:00:00Z" }
+          : null,
+        deletionCompleted: false,
+      };
+    } else if (endpoint === "/auth/logout") value = { ok: true };
     else if (endpoint === "/discovery/search")
       value = {
         items:
@@ -332,6 +356,59 @@ main(async (browser, origin, output) => {
     ).toBeInViewport();
     await shot(`business-${width}`);
   }
+  await tab("Hesabım");
+  await click("Hesap silme talebi oluştur");
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("deletion-password");
+  await page.getByLabel("Hesap silme onayı", { exact: true }).fill("WRONG");
+  await expect(
+    page.getByRole("button", {
+      name: "Hesap silme talebini onayla",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await click("Silme talebinden vazgeç");
+  assert.equal(deletionRequested, false);
+  await click("Hesap silme talebi oluştur");
+  await expect(
+    page.getByLabel("Hesap silme parolası", { exact: true }),
+  ).toHaveValue("");
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("deletion-password");
+  await page
+    .getByLabel("Hesap silme onayı", { exact: true })
+    .fill("HESABIMI SIL");
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("wrong-deletion-password");
+  await click("Hesap silme talebini onayla");
+  await expect(
+    page.getByText(
+      "Parolan doğrulanamadı. Parolanı yeniden gir; hesabın silinmedi.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Hesap silme parolası", { exact: true }),
+  ).toHaveValue("");
+  assert.equal(deletionRequested, false);
+  await page
+    .getByLabel("Hesap silme parolası", { exact: true })
+    .fill("deletion-password");
+  await click("Hesap silme talebini onayla");
+  await expect(
+    page.getByText(
+      "Silme talebin alındı. Hesabın ve verilerin henüz silinmedi.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Hesap silme parolası", { exact: true }),
+  ).toHaveCount(0);
+  await click("Silme talebinin durumunu yenile");
+  await page.getByRole("tab", { name: "İşletmem", exact: true }).click();
   deny = true;
   await click("İşletmelerimi yenile");
   await expect(page.getByRole("alert")).toHaveText(

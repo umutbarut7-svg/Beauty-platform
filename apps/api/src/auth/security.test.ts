@@ -2,7 +2,7 @@
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AuthGuard } from "./auth.guard.js";
 import { PermissionsService } from "./permissions.service.js";
 import { RolesGuard } from "./roles.guard.js";
@@ -20,7 +20,16 @@ function context(request: any): any {
 describe("authorization security", () => {
   it("rejects a protected endpoint without a token and accepts a valid token", async () => {
     const jwt = new JwtService();
-    const guard = new AuthGuard(new Reflector(), jwt);
+    const guard = new AuthGuard(new Reflector(), jwt, {
+      user: {
+        findUnique: async () => ({
+          id: "u1",
+          email: "a@example.com",
+          role: "CUSTOMER",
+          accountDeletionRequest: null,
+        }),
+      },
+    } as never);
     await expect(
       guard.canActivate(context({ headers: {} })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
@@ -31,6 +40,59 @@ describe("authorization security", () => {
     const request = { headers: { authorization: `Bearer ${token}` } };
     await expect(guard.canActivate(context(request))).resolves.toBe(true);
     expect((request as any).user.id).toBe("u1");
+  });
+  it("rejects deleted or processing accounts and ignores stale token roles", async () => {
+    const jwt = new JwtService();
+    const lookup = vi.fn();
+    const guard = new AuthGuard(new Reflector(), jwt, {
+      user: { findUnique: lookup },
+    } as never);
+    const token = await jwt.signAsync(
+      {
+        sub: "u1",
+        email: "old@example.com",
+        role: "SUPER_ADMIN",
+        type: "access",
+      },
+      { secret: process.env.JWT_ACCESS_SECRET },
+    );
+    const req = () => ({ headers: { authorization: `Bearer ${token}` } });
+    lookup.mockResolvedValue(null);
+    await expect(guard.canActivate(context(req()))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    lookup.mockResolvedValue({
+      id: "u1",
+      accountDeletionRequest: { processingAt: new Date() },
+    });
+    await expect(guard.canActivate(context(req()))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    lookup.mockResolvedValue({
+      id: "u1",
+      restoreQuarantinedAt: new Date(),
+      accountDeletionRequest: null,
+    });
+    await expect(guard.canActivate(context(req()))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    lookup.mockResolvedValue({
+      id: "u1",
+      email: "current@example.com",
+      role: "CUSTOMER",
+      accountDeletionRequest: { processingAt: null },
+    });
+    const request = req();
+    await expect(guard.canActivate(context(request))).resolves.toBe(true);
+    expect((request as any).user).toEqual({
+      id: "u1",
+      email: "current@example.com",
+      role: "CUSTOMER",
+    });
+    lookup.mockRejectedValue(new Error("database unavailable"));
+    await expect(guard.canActivate(context(req()))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
   it("prevents a customer from business administration", () => {
     const reflector = {

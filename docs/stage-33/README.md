@@ -1,5 +1,7 @@
 # AŞAMA 33 — PRE-LAUNCH / MVP BUILD SPECIFICATION
 
+> Güncel kabul ve kalan işler: [27 Ekim durum kaydı](current-status.md). Aşağıdaki eski run/NOT RUN kayıtları tarihsel kanıttır; bugünün genel durumu olarak kullanılmaz.
+
 ## Kaynak ve temel
 
 [Kilitli kullanıcı kaynağı](00-user-source.md) normatiftir. Bu belgelerdeki API,

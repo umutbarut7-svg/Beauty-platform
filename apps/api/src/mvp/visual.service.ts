@@ -140,11 +140,21 @@ export class VisualService {
       throw new ServiceUnavailableException("VISUAL_WORKFLOW_UNAVAILABLE");
     return policy;
   }
-  private lock(tx: PrismaService, ownerId: string) {
-    return tx.$queryRawUnsafe(
+  private async lock(
+    tx: PrismaService,
+    ownerId: string,
+    allowWithdrawal = false,
+  ) {
+    await tx.$queryRawUnsafe(
       "SELECT pg_advisory_xact_lock(hashtext($1))::text",
       `mvp-photo:${ownerId}`,
     );
+    const deletion = await tx.accountDeletionRequest.findUnique({
+      where: { userId: ownerId },
+      select: { processingAt: true },
+    });
+    if (deletion?.processingAt && !allowWithdrawal)
+      throw new NotFoundException("PHOTO_CONSENT_UNAVAILABLE");
   }
   private event(
     tx: PrismaService,
@@ -439,7 +449,7 @@ export class VisualService {
   async withdraw(user: AuthenticatedUser, consentId: string) {
     // Withdrawal remains possible when rollout/provider/policy is disabled.
     return this.db.$transaction(async (tx: PrismaService) => {
-      await this.lock(tx, user.id);
+      await this.lock(tx, user.id, true);
       const consent = await tx.mvpPhotoConsent.findFirst({
         where: { id: consentId, ownerId: user.id },
       });

@@ -9,6 +9,8 @@ const { PrismaClient } = PrismaPackage as unknown as {
     $disconnect(): Promise<void>;
     user: any;
     refreshSession: any;
+    accountDeletionRequest: any;
+    accountDeletionEvidence: any;
     businessMember: any;
     business: any;
     location: any;
