@@ -33,23 +33,34 @@ function png(width, height) {
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
-function jpegSize(data) {
-  assert.equal(data[0], 0xff); assert.equal(data[1], 0xd8);
-  for (let offset = 2; offset < data.length - 8;) {
-    assert.equal(data[offset], 0xff);
-    const marker = data[offset + 1], length = data.readUInt16BE(offset + 2);
-    if ([0xc0, 0xc1, 0xc2].includes(marker))
-      return [data.readUInt16BE(offset + 7), data.readUInt16BE(offset + 5)];
-    offset += 2 + length;
-  }
-  throw new Error("JPEG dimensions absent");
-}
 const largePhoto = png(2560, 1920);
 assert.ok(largePhoto.length > 5 * 1024 * 1024);
 const smallPhoto = png(32, 32);
 
 async function journey(browser, origin, label) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.addInitScript(`
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input, options) => {
+      if (options?.body instanceof FormData && options.body.has("photo")) {
+        const file = options.body.get("photo");
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const url = URL.createObjectURL(file), image = new Image();
+        try {
+          await new Promise((resolve, reject) => {
+            image.onload = resolve; image.onerror = reject; image.src = url;
+          });
+          window.__syntheticPhoto = {
+            name: file.name, type: file.type, size: file.size,
+            signature: Array.from(bytes.slice(0, 3)),
+            dimensions: [image.naturalWidth, image.naturalHeight],
+            metadataRemoved: !new TextDecoder().decode(bytes).includes("SYNTHETIC_PRIVATE_GPS_MARKER"),
+          };
+        } finally { URL.revokeObjectURL(url); }
+      }
+      return originalFetch(input, options);
+    };
+  `);
   const errors = [], unexpected = [], writes = [];
   let count = 0, uploadRejected = false;
   page.on("pageerror", (e) => errors.push(e.message));
@@ -80,16 +91,15 @@ async function journey(browser, origin, label) {
       assert.deepEqual(request.postDataJSON(), { policyVersion: "synthetic-v1", accepted: true });
       value = { id: "consent-" + ++count };
     } else if (endpoint.startsWith("/mvp/v1/photos/upload/")) {
-      const data = request.postDataBuffer();
-      const boundary = request.headers()["content-type"].split("boundary=")[1];
-      const start = data.indexOf("\r\n\r\n") + 4;
-      const end = data.lastIndexOf(Buffer.from("\r\n--" + boundary));
-      const photo = data.subarray(start, end);
-      assert.ok(data.subarray(0, start).includes(Buffer.from('filename="photo.jpg"')));
-      assert.ok(data.subarray(0, start).includes(Buffer.from("image/jpeg")));
-      assert.ok(photo.length <= 5 * 1024 * 1024);
-      assert.ok(!photo.includes(Buffer.from("SYNTHETIC_PRIVATE_GPS_MARKER")));
-      assert.deepEqual(jpegSize(photo), count === 1 ? [1600, 1200] : [32, 32]);
+      // WebKit's request inspector omits multipart file bytes. Inspect the real
+      // FormData Blob at fetch, before the unchanged request is sent to the mock.
+      const photo = await page.evaluate("window.__syntheticPhoto");
+      assert.equal(photo.name, "photo.jpg");
+      assert.equal(photo.type, "image/jpeg");
+      assert.deepEqual(photo.signature, [255, 216, 255]);
+      assert.ok(photo.size > 0 && photo.size <= 5 * 1024 * 1024);
+      assert.equal(photo.metadataRemoved, true);
+      assert.deepEqual(photo.dimensions, count === 1 ? [1600, 1200] : [32, 32]);
       value = { id: "synthetic-photo" };
       if (uploadRejected) { status = 503; value = { code: "UNAVAILABLE", message: "Synthetic unavailable" }; }
     } else if (endpoint === "/mvp/v1/visual/sessions") {
