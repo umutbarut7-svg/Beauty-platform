@@ -1,61 +1,76 @@
-# Photo configuration candidate — 27 October 2026
+# Photo runtime configuration and enablement — 27 October 2026
 
-Status: PREPARED, NOT DEPLOYED. Photo/AI/policy gates remain closed. This file does not record completed legal review.
+Status: **photo/AI enabled in the existing early-access preview**, with authenticated capability acceptance. This is not Stage 33 PASS, a production release or real-photo quality acceptance.
 
-## Verified live evidence
+## Result
 
-[Read-only run 40557187791](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40557187791) reached the preview instance through the existing PreviewOperations role and completed successfully.
+[Activation run 40563100561](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40563100561) completed successfully. Both API and worker kept their existing image IDs. Public HTTPS health and an authenticated synthetic customer request verified:
+- `available=true` from `/mvp/v1/photos/policy`;
+- policy version `orzell-photo-2026-10-27-v1`;
+- the exact prepared notice and 24-hour content retention;
+- a successful logout of the synthetic refresh session.
 
-Both API and worker were running without an OOM flag. Core and S3 flags were true. AI, semantic and photo-policy flags were false. Photo notice/version were absent; retention values were absent or invalid. Per-user daily quota was 5 and platform daily quota was 20. Configuration presence does not prove bucket safety, cleanup completion or provider credentials.
+The owner previously explicitly requested opening the photo approval/feature and continuing the missing setup. Operational policy and AI flags were enabled under that instruction. This records owner-requested early-preview enablement and the reviewed technical notice content, not independent verification of operator identity, legal-compliance certification or professional legal signoff.
 
-The API and worker report different image IDs. Determine their application revisions and cleanup compatibility before enabling real-photo ingestion; different IDs alone do not prove incompatibility.
+Runtime values after activation:
+- `STAGE33_MVP_ENABLED=true`;
+- `MVP_AI_ENABLED=true`;
+- `MVP_PHOTO_POLICY_REVIEWED=true`;
+- `MVP_PHOTO_RETENTION_HOURS=24`;
+- `MVP_PHOTO_AUDIT_RETENTION_DAYS=90`;
+- existing quotas retained: 5 requests per user/day and 20 globally/day.
 
-## Runtime provenance verified — 27 October 2026
+Semantic matching and business-verification gates were not enabled. The database, secret helper, gateway and admin container identities were unchanged. No new AWS resources, schema migrations or paid model calls were made by these operations.
 
-[Run 40558284363](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40558284363) completed successfully through the existing PreviewOperations role. No runtime settings were changed.
+## Verified runtime evidence
 
-Both services use working directory `/opt/epifiz/application-123e7339/infra/preview` and base `compose.yml` there. The API additionally uses `/opt/epifiz/operations/booking-context-20261022/mvp.yml` and its `live.env`. The worker additionally uses `/opt/epifiz/operations/mvp-test-20261022/mvp-test.yml` and its `live.env`. These environment-file paths were observed; their contents were not emitted.
+| Run | Evidence |
+| --- | --- |
+| [40557187791](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40557187791) | Both target processes running; core/S3 enabled; missing notice/version/retention; closed photo/AI gates; existing quotas. |
+| [40558284363](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40558284363) | Exact per-service Compose provenance and a long-running worker process. Process presence does not prove successful expiry sweeps. |
+| [40560495268](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40560495268) | Notice and 24h/90d settings staged with gates still closed, same images, exact environment agreement and healthy services. |
+| [40561044269](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40561044269) | Both containers passed private-bucket security checks, read the existing encrypted OpenAI parameter in memory, authenticated to the non-billable models endpoint, and found the configured vision model. No key was exported or logged. |
+| [40562432658](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40562432658) | A reserved, newly generated synthetic object was normalized without EXIF, privately uploaded/read with AES256 encryption, denied anonymous access, and received a successful S3 DeleteObject acknowledgement. |
+| [40563100561](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40563100561) | Owner-requested photo/AI enablement plus authenticated public capability, exact version/notice/retention and refresh logout acceptance. |
 
-A long-running `dist/worker.js` process was observed. This proves process presence, not successful expiry sweeps or physical deletion.
+The runtime role intentionally lacks bucket-list permission. The synthetic storage check therefore does **not** claim an independent post-delete absence listing. No extra IAM permissions were granted just for this check. Successful S3 deletion acknowledgement, earlier CI adapter absence evidence, continuous cleanup acceptance and backup/restore erasure guarantees are distinct pieces of evidence.
 
-## Prepared change
+## Actual runtime provenance
 
-`infra/operations/photo-policy.pending.override.json` stages the same notice, draft policy version, 24-hour photo/consultation retention and 90-day evidence retention for both API and worker. It explicitly leaves AI, semantic and policy review false. No keys, database credentials, image changes, ports or resource declarations are included.
+Both target services originally used working directory `/opt/epifiz/application-123e7339/infra/preview` and its `compose.yml`.
 
-It is not a standalone Compose deployment and is not applied automatically by this PR. Do not use an old base Compose file to recreate running services: it could revert core rollout, images, origins or earlier fixes. First identify and preserve the actual runtime Compose files, non-secret environment-file path and image digests.
+- API additionally used `/opt/epifiz/operations/booking-context-20261022/mvp.yml` with that folder's `live.env`.
+- Worker additionally used `/opt/epifiz/operations/mvp-test-20261022/mvp-test.yml` with that folder's `live.env`.
 
-The user-declared operator/contact in the existing policy draft are Umut Barut / orzellapp@gmail.com. They have not been independently verified here. The notice is a review candidate, not a legal-compliance certification. Review photo processing separately from business-verification policy; unrelated registry/reviewer setup is not a technical prerequisite for the photo gate.
+Staging and activation append separate service-specific override files in private operation folders. Each service retains its original sources and its own image ID. Environment-file contents and process credentials were not printed. Always inspect current Compose labels before later maintenance; do not recreate these services from an old shared manifest.
 
-## Provider retention clarification
+## Prepared and applied code
 
-[OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data), checked 27 October 2026: `store:false` is not a Zero Data Retention guarantee. Default abuse-monitoring logs can include customer content and generally remain for up to 30 days, subject to the documented exceptions. The account's retention controls and processing arrangements were not inspected. ORZELL's 24-hour lifecycle must not be represented as the provider's retention guarantee.
+- `photo-policy.pending.override.json` remains a **closed-gate draft input**. It contains no key, credential, port, image or resource setting. Its state is not a live-status indicator.
+- `stage_photo_configuration.py` defaults to a local plan. Explicit staging derives current per-service Compose sources, rejects drift/credential-bearing configuration and pins each current image. Only worker and API are recreated with `--no-deps --pull never --no-build`.
+- `activate_photo_configuration.py` additionally requires the exact staged notice fingerprint, the recorded draft version and the existing 5/20 quotas. The explicit activation path enables only photo-policy and AI gates and changes the policy to v1.
+- The replacement helper verifies image/environment agreement, API health, worker process presence, public API readiness and unchanged unrelated containers. If an acceptance callback fails, rollback is attempted through each original service source; failed rollback is explicitly reported.
+- `stage-photo-configuration-command.sh` pins staging revision `3adce2cbd8fe82c9a251da3e88264b89e88c77d9`. `activate-photo-configuration-command.sh` pins activation bundle `1a508a024e23a3c1e93c54b3d81fda5a655bbb0c`. Both verify SHA256 input hashes before execution.
+- Read-only provenance/provider probes and the scoped synthetic storage probe are included separately.
 
-The candidate notice replaces the old placeholder provider link and distinguishes application access expiry, asynchronous physical deletion and provider retention.
+The first staging attempts stopped before service replacement because the preflight comparison did not handle Compose's `entrypoint: null` inheritance correctly. That comparison was corrected against [Docker's documented semantics](https://docs.docker.com/reference/compose-file/services/) and covered by a regression test; a real changed entrypoint still blocks replacement.
 
-## Remaining actions
+## Provider retention notice
 
-1. Runtime Compose provenance and long-running worker entry point were inspected successfully; preserve the distinct service configurations recorded above.
-2. Confirm existing SSM OpenAI binding and private storage/IAM settings without exposing credentials.
-3. Review the exact candidate notice and provider arrangements before setting a reviewed-policy value.
-4. Stage the closed-gate notice/retention configuration using current image digests and a rollback plan; verify API/worker agreement and health.
-5. Verify cleanup using isolated synthetic fixtures. Never label physical erasure complete on a failed storage delete.
-6. Enable only approved photo/AI gates, preserving request quotas, then verify authenticated policy retrieval, explicit consent, upload, analysis and withdrawal. Real person photos require the person's separate in-app consent.
+The notice distinguishes ORZELL's content-access/erasure lifecycle from [OpenAI's API data controls](https://developers.openai.com/api/docs/guides/your-data). `store:false` is not a Zero Data Retention guarantee. Default abuse-monitoring logs can contain customer content and generally remain for up to 30 days, subject to documented exceptions. This work does not certify the account's provider-specific retention controls.
 
-No deployment, paid model request, customer photo upload or runtime approval flag change was performed by this PR.
+Operator/contact values follow the existing owner declaration: Umut Barut / orzellapp@gmail.com. Photo and consultation access expires after 24 hours; physical deletion is asynchronous and must not be reported complete when storage erasure fails. Consent/operation evidence uses the recorded 90-day lifetime.
 
-## Closed-gate staging command
+## Validation and remaining acceptance boundary
 
-`infra/operations/stage_photo_configuration.py` validates the candidate without Docker/network access by default. Its separate `--approved-staging` mode:
-- derives each service's own current Compose source and environment-file paths;
-- rejects changed images, changed gates, existing policy values, credential-bearing container environment, baseline drift, unexpected mounts/ports and paths outside the application root;
-- pins each current image ID and recreates only worker, then API with `--no-deps --pull never --no-build`;
-- checks exact resulting non-secret environment, API health, worker process presence, public API readiness and unchanged identities of database/secret helper/gateway/admin;
-- attempts rollback through the original service sources if application or readiness fails. A failed rollback is explicitly reported, not counted as success.
-
-`infra/operations/stage-photo-configuration-command.sh` is the complete proposed server command. It downloads the candidate and staging program from pinned revision `355a34a5e5bf201fca3c6c89d1ccef58d7f1d0c7`, verifies their SHA256 hashes before execution and stages only closed-gate settings. It must be reviewed/authorized before replacing the main operations command; copying this file into the draft branch does not execute it.
-
-Validation: seven local tests passed for a no-Docker/no-network plan, rejected activation/retention mismatch/credential fields, credential export refusal, path traversal refusal, per-service source/image preservation, API-health rollback, and concurrent API replacement protection. The actual candidate also passed plan validation. These are local/mocked checks; live staging and live rollback are not claimed.
+Ten local tests passed for closed-gate input validation, exact activation notice/narrow gates, Compose null inheritance versus real entrypoint drift, credential/path safeguards, per-service source/image preservation, failed-health rollback, failed-authenticated-capability rollback and concurrent replacement protection. Both actual configuration candidates passed plan validation without Docker/network requests. Rollback tests are mocked; live rollback was not forced.
 
 Reproduce: `python3 -m unittest discover -s infra/operations -p test_stage_photo_configuration.py -v`.
 
-The prepared command does **not** set policy review or AI true, fetch the OpenAI key, send a photo, migrate the database, build an image or create AWS resources. The remaining provider/storage/cleanup and notice-approval gates still apply before photo activation.
+Still unproven by this enablement:
+- real-person photo analysis quality, PLAN-to-matches relevance and follow-up-answer quality;
+- the complete live browser/native consent/upload/analyze/withdraw journey;
+- continuous wall-clock expiry and independently observed physical cleanup, backup/recovery erasure and sustained load;
+- final platform/policy acceptance and real-device acceptance for Stage 33.
+
+Only synthetic data was used here. The activation smoke created a private synthetic customer record and revoked its refresh session; it did not upload a person photo or call the paid vision endpoint. Real people must separately read and accept the in-app photo consent before uploading.
