@@ -2,9 +2,9 @@
 set -euo pipefail
 python3 - <<'PY'
 import hashlib,pathlib,subprocess,tempfile,urllib.request
-revision='355a34a5e5bf201fca3c6c89d1ccef58d7f1d0c7'
+revision='3adce2cbd8fe82c9a251da3e88264b89e88c77d9'
 items=[
- ('infra/operations/stage_photo_configuration.py','974e08b91c26c8995491113bc63b63bfbc61bf968aba750c82d064324580e3c2','stage_photo_configuration.py'),
+ ('infra/operations/stage_photo_configuration.py','aaec33749644b3a63e9a8371ff3011f8996d7e9deaf6ffc7375f450a0c4e2d52','stage_photo_configuration.py'),
  ('infra/operations/photo-policy.pending.override.json','a35bb78bf35fabbe8c48954ae609f5237280632eea729c47f9bc3cd8ad6f1c8b','pending.json'),
 ]
 folder=pathlib.Path(tempfile.mkdtemp(prefix='photo-stage-source-',dir='/opt/epifiz/operations'))
