@@ -59,6 +59,17 @@ class SafetyTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 stage.checked_path(raw)
 
+    def test_compose_null_inherits_image_defaults_but_changed_entrypoint_is_rejected(self):
+        env = {'STAGE33_MVP_ENABLED': 'true', **{name: 'false' for name in stage.GATES}}
+        image = {'Id': stage.EXPECTED_IMAGE['api'], 'Config': {'Cmd': ['api'], 'Entrypoint': ['node', '/preview-bootstrap/entrypoint.cjs']}}
+        container = {'Image': image['Id'], 'State': {'Running': True}, 'Config': {**image['Config'], 'Env': [key + '=' + value for key, value in env.items()]}, 'HostConfig': {}, 'Mounts': []}
+        base = {'image': image['Id'], 'environment': env, 'command': None, 'entrypoint': None}
+        with patch.object(stage, 'run', return_value=json.dumps([image])):
+            self.assertEqual(stage.validate_baseline('api', container, base), env)
+            for override in [[], ['node', '/different-entrypoint.js']]:
+                with self.subTest(override=override), self.assertRaises(ValueError):
+                    stage.validate_baseline('api', container, {**base, 'entrypoint': override})
+
     def exercise_apply(self, fail_api=False, concurrent=False):
         settings = stage.validate_candidate(candidate())
         env = {'STAGE33_MVP_ENABLED': 'true', 'MVP_AI_ENABLED': 'false', 'MVP_PHOTO_POLICY_REVIEWED': 'false', 'MVP_SEMANTIC_ENABLED': 'false'}
