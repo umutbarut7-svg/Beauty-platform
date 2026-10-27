@@ -1283,16 +1283,34 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           value = { id: "synthetic-browser-consent" };
         } else if (path === "/mvp/v1/photos/upload/synthetic-browser-consent") {
           const uploadHeaders = request.headers();
+          const body = request.postDataBuffer();
+          expect(body).not.toBeNull();
           uploadedMultipart =
             Boolean(uploadHeaders["authorization"]?.startsWith("Bearer ")) &&
             Boolean(
               uploadHeaders["content-type"]?.startsWith(
                 "multipart/form-data; boundary=",
               ),
-            ) &&
-            Boolean(
-              request.postDataBuffer()?.includes(Buffer.from("photo.png")),
             );
+          // The selected PNG now becomes a local JPEG before upload. Decode the
+          // actual multipart file rather than accepting only a filename marker.
+          const parts = await new Response(new Uint8Array(body!), {
+            headers: { "content-type": uploadHeaders["content-type"]! },
+          }).formData();
+          const photo = parts.get("photo");
+          if (!photo || typeof photo === "string")
+            throw new Error("Expected the actual prepared photo file");
+          expect(photo.name).toBe("photo.jpg");
+          expect(photo.type).toBe("image/jpeg");
+          expect(photo.size).toBeGreaterThan(0);
+          expect(photo.size).toBeLessThanOrEqual(5 * 1024 * 1024);
+          const bytes = Buffer.from(await photo.arrayBuffer());
+          expect([...bytes.subarray(0, 3)]).toEqual([255, 216, 255]);
+          const decoded = await sharp(bytes).metadata();
+          expect(decoded.format).toBe("jpeg");
+          expect(decoded.width).toBe(20);
+          expect(decoded.height).toBe(20);
+          expect(decoded.exif).toBeUndefined();
           value = { id: "synthetic-browser-photo" };
         } else if (path === "/mvp/v1/visual/sessions") {
           value = visual;
@@ -1395,6 +1413,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           },
         })
           .png()
+          .withMetadata({ orientation: 6 })
           .toBuffer(),
       });
       await page
