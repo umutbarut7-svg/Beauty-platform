@@ -100,14 +100,18 @@ def compose_prefix(container):
     return command
 
 
-def validate_baseline(service, container, config):
+def validate_baseline(service, container, config, existing_policy=None):
     env = environment(container)
     if container['Image'] != EXPECTED_IMAGE[service] or not container['State'].get('Running'):
         raise PreflightError('Runtime release changed; no replacement')
     if any(env.get(name) != 'false' for name in GATES) or env.get('STAGE33_MVP_ENABLED') != 'true':
         raise PreflightError('Runtime gates changed; no replacement')
-    if any(env.get(name) for name in ['MVP_PHOTO_NOTICE', 'MVP_PHOTO_POLICY_VERSION', 'MVP_PHOTO_RETENTION_HOURS', 'MVP_PHOTO_AUDIT_RETENTION_DAYS']):
-        raise PreflightError('Existing policy settings require separate review')
+    policy_fields = ['MVP_PHOTO_NOTICE', 'MVP_PHOTO_POLICY_VERSION', 'MVP_PHOTO_RETENTION_HOURS', 'MVP_PHOTO_AUDIT_RETENTION_DAYS']
+    if existing_policy is None:
+        if any(env.get(name) for name in policy_fields):
+            raise PreflightError('Existing policy settings require separate review')
+    elif any(env.get(name) != existing_policy.get(name) for name in policy_fields):
+        raise PreflightError('Staged notice or retention differs from activation candidate')
     if any(env.get(key) != str(value) for key, value in config.get('environment', {}).items()):
         raise PreflightError('Compose environment differs from the running service')
     image = json.loads(run(['docker', 'image', 'inspect', config['image']]))[0]
@@ -159,7 +163,7 @@ def verify_service(service, expected):
     raise StagingError('Service readiness deadline reached')
 
 
-def apply_staging(plans, folder, settings):
+def apply_staging(plans, folder, settings, acceptance=None):
     attempted = []
     unchanged = {name: inspect(name)['Id'] for name in ['postgres', 'prepare-secrets', 'gateway', 'admin']}
     try:
@@ -184,6 +188,8 @@ def apply_staging(plans, folder, settings):
                     raise StagingError('Public API readiness failed')
         if any(inspect(name)['Id'] != identity for name, identity in unchanged.items()):
             raise StagingError('Unrelated service replacement detected')
+        if acceptance is not None:
+            acceptance()
     except Exception:
         restored = True
         for service, before, prefix, env, rollback_path in reversed(attempted):
@@ -197,7 +203,10 @@ def apply_staging(plans, folder, settings):
                 restored = False
         print('Rollback verification: ' + ('PASS' if restored else 'MANUAL_REVIEW_REQUIRED'), flush=True)
         raise StagingError('Staging did not pass; see rollback status') from None
-    print('Photo notice/retention staged; AI, semantic and policy gates remain FALSE.', flush=True)
+    if all(settings.get(name) == 'false' for name in GATES):
+        print('Photo notice/retention staged; AI, semantic and policy gates remain FALSE.', flush=True)
+    else:
+        print('Owner-requested photo/AI activation applied; semantic matching unchanged.', flush=True)
     print('Database, secret helper, gateway and admin container identities unchanged: PASS', flush=True)
     print('No customer photo, paid model call, new resource or migration performed.', flush=True)
 
