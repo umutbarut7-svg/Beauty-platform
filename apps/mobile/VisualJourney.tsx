@@ -2,7 +2,11 @@ import { AppText as Text, palette } from "./ui";
 import { useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { MAX_PHOTO_BYTES, PhotoPreparationError, prepareWebPhoto } from "./photo-upload";
+import {
+  MAX_PHOTO_BYTES,
+  PhotoPreparationError,
+  prepareWebPhoto,
+} from "./photo-upload";
 import type {
   MvpApiClient,
   MvpVisualSession,
@@ -157,11 +161,18 @@ export function VisualJourney({
                 const jpeg = await prepareWebPhoto(asset);
                 form.append("photo", jpeg, "photo.jpg");
               } else {
-                const type = asset.mimeType ??
-                  (asset.uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
-                if (!["image/jpeg", "image/png"].includes(type) ||
-                    (asset.fileSize ?? 0) > MAX_PHOTO_BYTES)
-                  throw new PhotoPreparationError("En fazla 5 MB boyutunda JPEG veya PNG seçin.");
+                const type =
+                  asset.mimeType ??
+                  (asset.uri.toLowerCase().endsWith(".png")
+                    ? "image/png"
+                    : "image/jpeg");
+                if (
+                  !["image/jpeg", "image/png"].includes(type) ||
+                  (asset.fileSize ?? 0) > MAX_PHOTO_BYTES
+                )
+                  throw new PhotoPreparationError(
+                    "En fazla 5 MB boyutunda JPEG veya PNG seçin.",
+                  );
                 form.append("photo", {
                   uri: asset.uri,
                   name: type === "image/png" ? "photo.png" : "photo.jpg",
@@ -207,12 +218,16 @@ export function VisualJourney({
               );
               if (epoch !== generation.current) return;
               setSession(next);
-              setUploadMessage("Fotoğraf kaydedildi. Analizi başlatabilirsiniz.");
+              setUploadMessage(
+                "Fotoğraf kaydedildi. Analizi başlatabilirsiniz.",
+              );
             } catch (error) {
               if (epoch !== generation.current) return;
-              setUploadMessage(error instanceof PhotoPreparationError
-                ? error.message
-                : "Fotoğraf yüklenemedi. Yeniden deneyin.");
+              setUploadMessage(
+                error instanceof PhotoPreparationError
+                  ? error.message
+                  : "Fotoğraf yüklenemedi. Yeniden deneyin.",
+              );
               if (!(error instanceof PhotoPreparationError)) throw error;
             }
           })}
