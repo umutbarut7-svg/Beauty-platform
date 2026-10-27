@@ -27,6 +27,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @beauty-platform/types build
+      - name: Format photo change for review
+        run: |
+          pnpm exec prettier --write apps/mobile/VisualJourney.tsx apps/mobile/photo-upload.ts scripts/check-photo-picker-web.cjs
+          node -e 'const f=require("node:fs");for(const p of ["apps/mobile/VisualJourney.tsx","apps/mobile/photo-upload.ts","scripts/check-photo-picker-web.cjs"])console.log("PHOTO_FORMATTED "+JSON.stringify({path:p,content:f.readFileSync(p,"utf8")}))'
       - run: pnpm --filter @beauty-platform/mobile typecheck
       - run: pnpm exec vitest run apps/mobile/src packages/types/src/mvp-client.test.ts
       - run: pnpm --filter @beauty-platform/mobile exec expo export --platform web --output-dir dist --max-workers 2
