@@ -6,15 +6,20 @@ const MAX_EDGE = 1600;
 
 export class PhotoPreparationError extends Error {}
 
-export function photoEncoding(bytes: Uint8Array): "jpeg" | "png" | "heic" | null {
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg";
+export function photoEncoding(
+  bytes: Uint8Array,
+): "jpeg" | "png" | "heic" | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return "jpeg";
   if ([137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => bytes[i] === v))
     return "png";
   const ascii = (start: number) =>
     String.fromCharCode(...bytes.slice(start, start + 4));
   if (ascii(4) === "ftyp") {
     for (let offset = 8; offset + 4 <= bytes.length; offset += 4)
-      if (["heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(ascii(offset)))
+      if (
+        ["heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(ascii(offset))
+      )
         return "heic";
   }
   return null;
@@ -48,7 +53,9 @@ export async function prepareWebPhoto(asset: { uri: string; file?: Blob }) {
     new Uint8Array(await source.slice(0, 64).arrayBuffer()),
   );
   if (!encoding)
-    throw new PhotoPreparationError("JPEG, PNG veya iPhone HEIC fotoğrafı seçin.");
+    throw new PhotoPreparationError(
+      "JPEG, PNG veya iPhone HEIC fotoğrafı seçin.",
+    );
 
   const image = new Image();
   const canvas = document.createElement("canvas");
@@ -57,7 +64,10 @@ export async function prepareWebPhoto(asset: { uri: string; file?: Blob }) {
   try {
     await new Promise<void>((resolve, reject) => {
       deadline = setTimeout(
-        () => reject(new PhotoPreparationError("Fotoğraf açılamadı. Yeniden seçin.")),
+        () =>
+          reject(
+            new PhotoPreparationError("Fotoğraf açılamadı. Yeniden seçin."),
+          ),
         20000,
       );
       image.onload = () => resolve();
@@ -77,7 +87,9 @@ export async function prepareWebPhoto(asset: { uri: string; file?: Blob }) {
     canvas.height = size.height;
     const context = canvas.getContext("2d");
     if (!context)
-      throw new PhotoPreparationError("Fotoğraf hazırlanamadı. Yeniden deneyin.");
+      throw new PhotoPreparationError(
+        "Fotoğraf hazırlanamadı. Yeniden deneyin.",
+      );
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, size.width, size.height);
     context.drawImage(image, 0, 0, size.width, size.height);
@@ -86,10 +98,16 @@ export async function prepareWebPhoto(asset: { uri: string; file?: Blob }) {
       const jpeg = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", quality),
       );
-      if (jpeg?.type === "image/jpeg" && jpeg.size > 0 && jpeg.size <= MAX_PHOTO_BYTES)
+      if (
+        jpeg?.type === "image/jpeg" &&
+        jpeg.size > 0 &&
+        jpeg.size <= MAX_PHOTO_BYTES
+      )
         return jpeg;
     }
-    throw new PhotoPreparationError("Fotoğraf küçültülemedi. Başka bir fotoğraf seçin.");
+    throw new PhotoPreparationError(
+      "Fotoğraf küçültülemedi. Başka bir fotoğraf seçin.",
+    );
   } finally {
     clearTimeout(deadline);
     image.onload = null;
