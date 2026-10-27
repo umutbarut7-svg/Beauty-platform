@@ -1,32 +1,24 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import json, subprocess, pathlib
-for service in ['api','worker']:
-    r=subprocess.run(['docker','inspect','beauty-preview-'+service+'-1'],capture_output=True,text=True,timeout=20)
-    if r.returncode: raise SystemExit('Inspection failed')
-    v=json.loads(r.stdout)[0]
-    labels=v.get('Config',{}).get('Labels',{})
-    for name in ['com.docker.compose.project.working_dir','com.docker.compose.project.config_files','com.docker.compose.project.environment_file']:
-        value=labels.get(name,'')
-        if value and all(part.startswith('/opt/epifiz/') and '\n' not in part for part in value.split(',')):
-            print(service+' '+name+'='+value)
-        else: print(service+' '+name+'=UNVERIFIED')
-    print(service+' running='+str(bool(v['State'].get('Running'))))
-    # Print only whether the current process is the expected long-running worker.
-    if service=='worker':
-        pid=v['State'].get('Pid',0)
-        queue=[pid]; seen=set(); found=False
-        try:
-            while queue and len(seen)<32:
-                pid=queue.pop()
-                if not pid or pid in seen: continue
-                seen.add(pid)
-                folder=pathlib.Path('/proc')/str(pid)
-                args=(folder/'cmdline').read_bytes().split(b'\0')
-                if any(a.endswith(b'dist/worker.js') for a in args) and b'--once' not in args: found=True
-                queue.extend(int(x) for x in (folder/'task'/str(pid)/'children').read_text().split())
-        except (OSError,ValueError): pass
-        print('long_running_worker_observed='+str(found))
-print('READ_ONLY; no environment values, keys, photo data or database content emitted')
+import hashlib,pathlib,subprocess,tempfile,urllib.request
+revision='355a34a5e5bf201fca3c6c89d1ccef58d7f1d0c7'
+items=[
+ ('infra/operations/stage_photo_configuration.py','974e08b91c26c8995491113bc63b63bfbc61bf968aba750c82d064324580e3c2','stage_photo_configuration.py'),
+ ('infra/operations/photo-policy.pending.override.json','a35bb78bf35fabbe8c48954ae609f5237280632eea729c47f9bc3cd8ad6f1c8b','pending.json'),
+]
+folder=pathlib.Path(tempfile.mkdtemp(prefix='photo-stage-source-',dir='/opt/epifiz/operations'))
+for relative,expected,name in items:
+    url='https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/'+revision+'/'+relative
+    with urllib.request.urlopen(url,timeout=20) as reply:
+        data=reply.read(32769)
+    if len(data)>32768 or hashlib.sha256(data).hexdigest()!=expected:
+        raise SystemExit('Pinned staging input differs; nothing applied')
+    path=folder/name
+    with path.open('xb') as handle:
+        handle.write(data)
+    path.chmod(0o600)
+result=subprocess.run(['python3',str(folder/'stage_photo_configuration.py'),'--candidate',str(folder/'pending.json'),'--approved-staging'],timeout=720)
+if result.returncode:
+    raise SystemExit('Photo notice staging did not pass; read rollback status before any retry')
 PY
