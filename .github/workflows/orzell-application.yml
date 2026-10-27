@@ -27,12 +27,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @beauty-platform/types build
+      - name: Check photo source formatting
+        run: pnpm exec prettier --check apps/mobile/VisualJourney.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs
       - run: pnpm --filter @beauty-platform/mobile typecheck
       - run: pnpm exec vitest run apps/mobile/src packages/types/src/mvp-client.test.ts
       - run: pnpm --filter @beauty-platform/mobile exec expo export --platform web --output-dir dist --max-workers 2
-      - run: pnpm exec playwright install chromium --with-deps
+      - run: pnpm exec playwright install chromium webkit --with-deps
       - name: Exercise isolated customer and business screens
         run: node scripts/check-orzell-application.cjs apps/mobile/dist /tmp/orzell-application-review
+      - name: Exercise photo picker in isolated Chromium and WebKit
+        run: node scripts/check-photo-picker-web.cjs apps/mobile/dist /tmp/orzell-application-review
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

@@ -1,4 +1,4 @@
-# Release candidate: booking and keyboard fixes tested at 589fe6a; Android form run 40178178431 passed.
+# Release candidate: native phone-photo preparation and inline upload progress.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -43,6 +43,10 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @beauty-platform/types build
+      - name: Verify the exact mobile release before native generation
+        run: |
+          pnpm --filter @beauty-platform/mobile typecheck
+          pnpm --filter @beauty-platform/mobile test
       - name: Generate release project with real Apple identity
         shell: bash
         run: |
