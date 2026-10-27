@@ -3,8 +3,8 @@ set -euo pipefail
 python3 - <<'PY'
 import hashlib, json, pathlib, subprocess, urllib.request
 
-REV = 'd1308775c2c880b3f7f9a6de0816a0e1d664e383'
-EXPECTED = {'VisualJourney.tsx': 'b802ab0c7a83568745f387b21fbf0bf7f4e1f38a7586dbcdd14797636ef778e8', 'photo-upload.ts': '2b11c6c01529bbb1ce854da35fde75a7068ace6863e74491e3e026ce21070d45'}
+REV = 'bef1f8c88547528546955485273bda45a69aad73'
+EXPECTED = {'VisualJourney.tsx': 'd24408f80752508c531e193dbc8db544d5d0da7cca6f509fd4151baefb566260', 'photo-upload.ts': '3c0a584a38c746d1e399c43dd609cbf3baf53f99def52b2f5a872d380c430ae8'}
 OLD = 'sha256:be20529c1e0c9e1d8ab03109079d8e3c1d6b2acf85374a0e8155b3de2dfdf1a2'
 BASE = 'sha256:9ecf655d9b97645eb91f040489baa1d3da5befb11d6b324a2e539b48fcf19286'
 OLD_SOURCE = {'App.tsx':'efb1f2725ae8fa4ba071d1f1ddcb35f7f0bc0b8e519085cacd74f84f9061fec4','BusinessDemand.tsx':'afe7190a5b09ee61686a62699ab29d53f83761e79df3e263aa74fd404c4519cf','BusinessIntelligenceSetup.tsx':'924c52843827acd1bb1b982ed600b1f7b0b3c68cb6ba2cdd8e63ed7cb2fd0231','BusinessSetup.tsx':'ba4097f58c4461f038ebb881cf18c59f32754e4ded11f6cc9928d484a72b2e88','VisualJourney.tsx':'9fbcf49340816c17590741940d977243f363e6434a844d04cd0ada1d23152afb','OrzellBrand.tsx':'1202455be84abfc139e4748216c3a74a66295115f0385e87b433aabdae428c07','presentation.ts':'197f85db3a2e7a4433589e91d00715a8985e5e2dac897e42d5bfd327749a3519','ui.tsx':'1c1baaab1027af9129570d4cbb524698a185c0c80f7f74c293d026afade5e31f','app.json':'949f11fef113928b5b73958e79d36a833bad6ffade967afeec505595dc5b0fc7','assets/orzell-original-reference.jpg':'16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4'}
