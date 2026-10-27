@@ -10,6 +10,14 @@ Both API and worker were running without an OOM flag. Core and S3 flags were tru
 
 The API and worker report different image IDs. Determine their application revisions and cleanup compatibility before enabling real-photo ingestion; different IDs alone do not prove incompatibility.
 
+## Runtime provenance verified — 27 October 2026
+
+[Run 40558284363](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40558284363) completed successfully through the existing PreviewOperations role. No runtime settings were changed.
+
+Both services use working directory `/opt/epifiz/application-123e7339/infra/preview` and base `compose.yml` there. The API additionally uses `/opt/epifiz/operations/booking-context-20261022/mvp.yml` and its `live.env`. The worker additionally uses `/opt/epifiz/operations/mvp-test-20261022/mvp-test.yml` and its `live.env`. These environment-file paths were observed; their contents were not emitted.
+
+A long-running `dist/worker.js` process was observed. This proves process presence, not successful expiry sweeps or physical deletion.
+
 ## Prepared change
 
 `infra/operations/photo-policy.pending.override.json` stages the same notice, draft policy version, 24-hour photo/consultation retention and 90-day evidence retention for both API and worker. It explicitly leaves AI, semantic and policy review false. No keys, database credentials, image changes, ports or resource declarations are included.
@@ -26,7 +34,7 @@ The candidate notice replaces the old placeholder provider link and distinguishe
 
 ## Remaining actions
 
-1. Inspect actual runtime Compose provenance and long-running worker entry point without printing secrets.
+1. Runtime Compose provenance and long-running worker entry point were inspected successfully; preserve the distinct service configurations recorded above.
 2. Confirm existing SSM OpenAI binding and private storage/IAM settings without exposing credentials.
 3. Review the exact candidate notice and provider arrangements before setting a reviewed-policy value.
 4. Stage the closed-gate notice/retention configuration using current image digests and a rollback plan; verify API/worker agreement and health.
@@ -34,3 +42,20 @@ The candidate notice replaces the old placeholder provider link and distinguishe
 6. Enable only approved photo/AI gates, preserving request quotas, then verify authenticated policy retrieval, explicit consent, upload, analysis and withdrawal. Real person photos require the person's separate in-app consent.
 
 No deployment, paid model request, customer photo upload or runtime approval flag change was performed by this PR.
+
+## Closed-gate staging command
+
+`infra/operations/stage_photo_configuration.py` validates the candidate without Docker/network access by default. Its separate `--approved-staging` mode:
+- derives each service's own current Compose source and environment-file paths;
+- rejects changed images, changed gates, existing policy values, credential-bearing container environment, baseline drift, unexpected mounts/ports and paths outside the application root;
+- pins each current image ID and recreates only worker, then API with `--no-deps --pull never --no-build`;
+- checks exact resulting non-secret environment, API health, worker process presence, public API readiness and unchanged identities of database/secret helper/gateway/admin;
+- attempts rollback through the original service sources if application or readiness fails. A failed rollback is explicitly reported, not counted as success.
+
+`infra/operations/stage-photo-configuration-command.sh` is the complete proposed server command. It downloads the candidate and staging program from pinned revision `355a34a5e5bf201fca3c6c89d1ccef58d7f1d0c7`, verifies their SHA256 hashes before execution and stages only closed-gate settings. It must be reviewed/authorized before replacing the main operations command; copying this file into the draft branch does not execute it.
+
+Validation: seven local tests passed for a no-Docker/no-network plan, rejected activation/retention mismatch/credential fields, credential export refusal, path traversal refusal, per-service source/image preservation, API-health rollback, and concurrent API replacement protection. The actual candidate also passed plan validation. These are local/mocked checks; live staging and live rollback are not claimed.
+
+Reproduce: `python3 -m unittest discover -s infra/operations -p test_stage_photo_configuration.py -v`.
+
+The prepared command does **not** set policy review or AI true, fetch the OpenAI key, send a photo, migrate the database, build an image or create AWS resources. The remaining provider/storage/cleanup and notice-approval gates still apply before photo activation.
