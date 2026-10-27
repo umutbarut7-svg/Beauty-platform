@@ -113,9 +113,16 @@ def validate_baseline(service, container, config):
     image = json.loads(run(['docker', 'image', 'inspect', config['image']]))[0]
     if image['Id'] != container['Image']:
         raise PreflightError('Compose image differs from running image')
-    if config.get('command', image.get('Config', {}).get('Cmd')) != container['Config'].get('Cmd'):
+    command = config.get('command')
+    if command is None:
+        command = image.get('Config', {}).get('Cmd')
+    if command != container['Config'].get('Cmd'):
         raise PreflightError('Compose command differs from running command')
-    if config.get('entrypoint', image.get('Config', {}).get('Entrypoint')) != container['Config'].get('Entrypoint'):
+    entrypoint = config.get('entrypoint')
+    if entrypoint is None:
+        # Compose null means inherit the image's default, not an empty entrypoint.
+        entrypoint = image.get('Config', {}).get('Entrypoint')
+    if entrypoint != container['Config'].get('Entrypoint'):
         raise PreflightError('Compose entrypoint differs from running entrypoint')
     if config.get('ports') or config.get('volumes') or container.get('Mounts') or container['HostConfig'].get('PortBindings'):
         raise PreflightError('Unexpected target mount or published port')
