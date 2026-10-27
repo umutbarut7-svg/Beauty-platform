@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -8,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import stage_photo_configuration as stage
+import activate_photo_configuration as activation
 
 
 def candidate():
@@ -70,7 +72,24 @@ class SafetyTests(unittest.TestCase):
                 with self.subTest(override=override), self.assertRaises(ValueError):
                     stage.validate_baseline('api', container, {**base, 'entrypoint': override})
 
-    def exercise_apply(self, fail_api=False, concurrent=False):
+    def test_activation_preserves_notice_and_retention_and_leaves_semantic_closed(self):
+        value = candidate()
+        for service in ['api', 'worker']:
+            value['services'][service]['environment']['MVP_PHOTO_POLICY_VERSION'] = 'orzell-photo-2026-10-27-draft-1'
+        notice = value['services']['api']['environment']['MVP_PHOTO_NOTICE']
+        with patch.object(activation, 'NOTICE_SHA256', hashlib.sha256(notice.encode()).hexdigest()):
+            staged, active = activation.active_settings(value)
+            self.assertEqual(staged['MVP_PHOTO_POLICY_REVIEWED'], 'false')
+            self.assertEqual(active['MVP_PHOTO_POLICY_REVIEWED'], 'true')
+            self.assertEqual(active['MVP_AI_ENABLED'], 'true')
+            self.assertEqual(active['MVP_SEMANTIC_ENABLED'], 'false')
+            self.assertEqual(active['MVP_PHOTO_POLICY_VERSION'], 'orzell-photo-2026-10-27-v1')
+            for name in ['MVP_PHOTO_NOTICE', 'MVP_PHOTO_RETENTION_HOURS', 'MVP_PHOTO_AUDIT_RETENTION_DAYS']:
+                self.assertEqual(active[name], staged[name])
+        with self.assertRaises(ValueError):
+            activation.active_settings(value)
+
+    def exercise_apply(self, fail_api=False, concurrent=False, fail_acceptance=False):
         settings = stage.validate_candidate(candidate())
         env = {'STAGE33_MVP_ENABLED': 'true', 'MVP_AI_ENABLED': 'false', 'MVP_PHOTO_POLICY_REVIEWED': 'false', 'MVP_SEMANTIC_ENABLED': 'false'}
         before = {s: {'Id': s + '-old', 'Image': stage.EXPECTED_IMAGE[s]} for s in ['api', 'worker']}
@@ -93,14 +112,17 @@ class SafetyTests(unittest.TestCase):
             if fail_api and name == 'api' and not failed:
                 failed = True
                 raise RuntimeError('Simulated failed API readiness')
+        def acceptance():
+            if fail_acceptance:
+                raise RuntimeError('Simulated failed authenticated photo capability')
         class Reply:
             status = 200
             def __enter__(self): return self
             def __exit__(self, *_): pass
         with tempfile.TemporaryDirectory() as folder, patch.object(stage, 'inspect', side_effect=inspect), patch.object(stage, 'run', side_effect=run), patch.object(stage, 'verify_service', side_effect=verify), patch.object(stage.urllib.request, 'urlopen', return_value=Reply()), patch('sys.stdout', new_callable=io.StringIO) as output:
-            if fail_api or concurrent:
+            if fail_api or concurrent or fail_acceptance:
                 with self.assertRaises(RuntimeError):
-                    stage.apply_staging(plans, pathlib.Path(folder), settings)
+                    stage.apply_staging(plans, pathlib.Path(folder), settings, acceptance=acceptance)
                 self.assertIn('Rollback verification: PASS', output.getvalue())
             else:
                 stage.apply_staging(plans, pathlib.Path(folder), settings)
@@ -132,6 +154,10 @@ class SafetyTests(unittest.TestCase):
     def test_concurrent_api_replacement_is_not_overwritten(self):
         calls, _ = self.exercise_apply(concurrent=True)
         self.assertEqual([args[-1] for args in calls], ['worker', 'worker'])
+
+    def test_failed_authenticated_capability_rolls_back_both_services(self):
+        calls, _ = self.exercise_apply(fail_acceptance=True)
+        self.assertEqual([args[-1] for args in calls], ['worker', 'api', 'api', 'worker'])
 
 
 if __name__ == '__main__':
