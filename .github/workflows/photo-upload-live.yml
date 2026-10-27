@@ -1,0 +1,46 @@
+name: ORZELL photo upload live acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/photo-upload-live.yml]
+permissions:
+  contents: read
+concurrency:
+  group: orzell-photo-upload-live-acceptance
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact photo acceptance harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+      - name: Checkout existing browser dependency lock
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 3be316d1b2458c49fde162147244aa8077a1f614
+          path: application
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install pinned browser tooling
+        working-directory: application
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec playwright install chromium --with-deps
+      - name: Exercise live photo upload with synthetic pixels and revoke consent
+        working-directory: application
+        run: |
+          cp ../harness/scripts/check-photo-upload-live.cjs ./check-photo-upload-live.cjs
+          node check-photo-upload-live.cjs
