@@ -37,6 +37,8 @@ jobs:
         run: node scripts/check-orzell-application.cjs apps/mobile/dist /tmp/orzell-application-review
       - name: Exercise photo picker in isolated Chromium and WebKit
         run: node scripts/check-photo-picker-web.cjs apps/mobile/dist /tmp/orzell-application-review
+      - name: Check matching availability and preserve plans in Chromium and WebKit
+        run: node scripts/check-matching-availability.cjs apps/mobile/dist /tmp/orzell-application-review
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
