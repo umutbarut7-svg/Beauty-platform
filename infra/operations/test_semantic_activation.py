@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPT = pathlib.Path(__file__).resolve().parents[2] / '.github/operations/preview-commands.sh'
+SCRIPT = pathlib.Path(__file__).resolve().parents[2] / 'infra/operations/activate-preview-semantic.sh'
 SOURCE = SCRIPT.read_text().split("python3 - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
 DEFINITIONS = SOURCE.rsplit('\ntry:\n    main()', 1)[0]
 
