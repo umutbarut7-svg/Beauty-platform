@@ -1,4 +1,4 @@
-# Release candidate: native phone-photo preparation and inline upload progress.
+# Release candidate: native file-header reads and Expo-compatible photo multipart upload.
 name: ORZELL signed iOS TestFlight upload
 
 on:

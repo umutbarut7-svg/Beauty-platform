@@ -1,0 +1,71 @@
+name: ORZELL native photo runtime
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-photo-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install exact dependencies and check mobile source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/types build
+          pnpm --filter @beauty-platform/mobile typecheck
+          pnpm --filter @beauty-platform/mobile test
+      - name: Prepare disposable probe entrypoint with loopback-only HTTP
+        run: |
+          cp scripts/native-photo-probe.tsx apps/mobile/NativePhotoProbe.tsx
+          node <<'NODE'
+          const fs=require('node:fs');
+          fs.writeFileSync('apps/mobile/index.ts', 'import { registerRootComponent } from "expo";\nimport Probe from "./NativePhotoProbe";\nregisterRootComponent(Probe);\n');
+          const p='apps/mobile/app.json', c=JSON.parse(fs.readFileSync(p));
+          c.expo.ios.infoPlist={...(c.expo.ios.infoPlist||{}),NSAppTransportSecurity:{NSAllowsArbitraryLoads:true}};
+          fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
+          NODE
+          node scripts/stage33-native-config.cjs
+          pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ios --no-install --skip-dependency-update expo,react,react-native
+          git diff --exit-code -- pnpm-lock.yaml
+      - name: Build unsigned synthetic probe for simulator only
+        run: |
+          set -euo pipefail
+          cd apps/mobile/ios
+          pod install
+          cd ../../..
+          workspace=$(find apps/mobile/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/photo-probe-build" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/photo-probe-build.log" 2>&1 || { tail -n 100 "$RUNNER_TEMP/photo-probe-build.log"; exit 1; }
+      - name: Run real native photo IO and Expo HTTP multipart acceptance
+        run: |
+          set -euo pipefail
+          app=$(find "$RUNNER_TEMP/photo-probe-build/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app"
+          python3 scripts/check-native-photo-probe.py "$app" "$RUNNER_TEMP/native-photo-evidence"
+      - name: Preserve only synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-photo-runtime-evidence
+          path: ${{ runner.temp }}/native-photo-evidence/native-photo-runtime.json
+          if-no-files-found: warn
+          retention-days: 7
