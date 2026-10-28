@@ -60,6 +60,9 @@ def main():
     stage = 'compiled availability source inspection'
     diagnostic = """const fs=require('node:fs'),crypto=require('node:crypto');const p='dist/appointments/availability.service.js';if(!fs.existsSync(p)){console.log('Compiled availability source unavailable');process.exit(0)}const s=fs.readFileSync(p,'utf8');console.log(JSON.stringify({sha256:crypto.createHash('sha256').update(s).digest('hex'),profileServiceSupported:s.includes('staffProfileService'),profileStaffLookupSupported:s.includes('staff.findFirst'),legacyStaffLookupPresent:s.includes('businessMember.findFirst'),businessBookingGatePresent:s.includes('bookingEnabled')}))"""
     print('Compiled availability features: ' + run(['docker', 'exec', 'beauty-preview-api-1', 'node', '-e', diagnostic]).strip())
+    stage = 'compiled public catalog projection inspection'
+    catalog_diagnostic = """const fs=require('node:fs'),crypto=require('node:crypto');const p='dist/mvp/mvp.service.js';if(!fs.existsSync(p)){console.log('Compiled public catalog source unavailable');process.exit(0)}const s=fs.readFileSync(p,'utf8'),start=s.indexOf('async catalog('),end=s.indexOf('async bookings(',start);const method=start>=0&&end>start?s.slice(start,end).trim():null;console.log(JSON.stringify({sha256:crypto.createHash('sha256').update(s).digest('hex'),methodLocated:method!==null,publicCatalogProjection:method}))"""
+    print('Compiled public catalog projection: ' + run(['docker', 'exec', 'beauty-preview-api-1', 'node', '-e', catalog_diagnostic]).strip())
     stage = 'runtime identity inspection'
     for service in ['api','worker']:
         c = json.loads(run(['docker','inspect','beauty-preview-'+service+'-1']))[0]
