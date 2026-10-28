@@ -48,6 +48,8 @@ jobs:
           node scripts/stage33-native-config.cjs
           pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ios --no-install --skip-dependency-update expo,react,react-native
           git diff --exit-code -- pnpm-lock.yaml
+      - name: Warm the preferred iPhone simulator during native compilation
+        run: python3 scripts/check-native-photo-probe.py --warm "$RUNNER_TEMP/native-photo-evidence"
       - name: Build unsigned synthetic probe for simulator only
         run: |
           set -euo pipefail
@@ -69,6 +71,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-photo-runtime-evidence
-          path: ${{ runner.temp }}/native-photo-evidence/native-photo-runtime.json
+          path: |
+            ${{ runner.temp }}/native-photo-evidence/native-photo-runtime.json
+            ${{ runner.temp }}/native-photo-evidence/probe-stdout.log
+            ${{ runner.temp }}/native-photo-evidence/probe-stderr.log
           if-no-files-found: warn
           retention-days: 7

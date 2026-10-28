@@ -5,6 +5,7 @@ import email.parser
 import http.server
 import json
 import pathlib
+import plistlib
 import random
 import struct
 import subprocess
@@ -98,28 +99,51 @@ def run(*args, timeout=120):
     return subprocess.run(args, check=True, text=True, capture_output=True, timeout=timeout).stdout
 
 
-server = http.server.ThreadingHTTPServer(('127.0.0.1', 18733), Server)
-threading.Thread(target=server.serve_forever, daemon=True).start()
 devices = json.loads(run('xcrun', 'simctl', 'list', 'devices', 'available', '-j'))['devices']
 candidates = [(runtime, device) for runtime, group in devices.items() for device in group
               if device.get('isAvailable') and device['name'].startswith('iPhone')]
 assert candidates
 candidates.sort(key=lambda item: (item[0], item[1]['name']), reverse=True)
-runtime, device = candidates[0]
+preferred = ('iPhone 16e', 'iPhone 16', 'iPhone 17', 'iPhone 17 Pro')
+runtime, device = next((item for name in preferred for item in candidates if item[1]['name'] == name), candidates[0])
 udid = device['udid']
 owned_boot = device['state'] != 'Booted'
-try:
-    if owned_boot:
+warm = ROOT / 'simulator-selection.json'
+if sys.argv[1] == '--warm':
+    if device['state'] == 'Shutdown':
         run('xcrun', 'simctl', 'boot', udid)
     run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
-    run('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=360)
+    warm.write_text(json.dumps({'udid': udid, 'ownedBoot': owned_boot}) + '\n')
+    print('Warming preferred simulator during compilation: ' + device['name'] + ' / ' + runtime, flush=True)
+    sys.exit(0)
+if warm.exists():
+    selection = json.loads(warm.read_text())
+    runtime, device = next(item for item in candidates if item[1]['udid'] == selection['udid'])
+    udid = device['udid']
+    owned_boot = selection['ownedBoot']
+print('Runtime probe simulator: ' + device['name'] + ' / ' + runtime, flush=True)
+app_info = plistlib.loads((pathlib.Path(sys.argv[1]) / 'Info.plist').read_bytes())
+assert app_info['CFBundleIdentifier'] == 'com.beautyplatform.stage33test'
+assert app_info['NSAppTransportSecurity']['NSAllowsArbitraryLoads'] is True
+server = http.server.ThreadingHTTPServer(('127.0.0.1', 18733), Server)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+try:
+    if device['state'] == 'Shutdown':
+        run('xcrun', 'simctl', 'boot', udid)
+    run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
+    subprocess.run(['xcrun', 'simctl', 'bootstatus', udid, '-b'], check=True, timeout=360)
     run('xcrun', 'simctl', 'install', udid, sys.argv[1])
-    run('xcrun', 'simctl', 'launch', '--terminate-running-process', udid, 'com.beautyplatform.stage33test')
+    run('xcrun', 'simctl', 'launch', '--stdout=' + str(ROOT / 'probe-stdout.log'), '--stderr=' + str(ROOT / 'probe-stderr.log'), '--terminate-running-process', udid, 'com.beautyplatform.stage33test')
     for _ in range(90):
         if REPORT.exists():
             break
         time.sleep(2)
-    assert REPORT.exists(), 'Native photo probe did not report completion'
+    if not REPORT.exists():
+        for name in ['probe-stdout.log', 'probe-stderr.log']:
+            log = ROOT / name
+            if log.exists():
+                print(name + ':\n' + log.read_text(errors='replace')[-6000:], flush=True)
+        raise AssertionError('Native photo probe did not report completion')
     result = json.loads(REPORT.read_text())
     result.update({'simulator': device['name'], 'runtime': runtime, 'physicalDeviceAcceptance': False})
     REPORT.write_text(json.dumps(result, indent=2) + '\n')
