@@ -7,19 +7,19 @@ Full Stage 33 status: **NOT PASS**. This checkpoint separates technical evidence
 Application candidate: `589fe6ae579cf10beac4f045c9b6e26e2e13e2c0`.
 The booking branch/professional fix was merged in PR #41. PR #43 adds a keyboard-aware screen container and Android status-bar spacing.
 
-| Gate                                               | Evidence                             | Result                                                       |
-| -------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
-| Mobile/client checks                               | Local typecheck, lint and 18 tests   | PASS                                                         |
-| Full regression                                    | Run 40178154400                      | PASS                                                         |
-| Isolated web UI journey                            | Run 40178154516                      | PASS                                                         |
-| Android and iOS compilation                        | Run 40178154459                      | PASS                                                         |
-| Android API 35 native forms                        | Run 40178178431 / job 121123326301   | PASS                                                         |
-| Current API privacy-worker recovery                | Run 40177962465, API source 06242d0  | PASS                                                         |
-| Current API before/after-withdrawal restore matrix | Run 40177962492, API source 06242d0  | PASS                                                         |
-| Recovery harness regression                        | Run 40177962460                      | PASS                                                         |
-| Live service health and CORS                       | Run 40178245687                      | PASS                                                         |
-| Read-only backup scheduling inspection             | Run 40178762105                      | Completed; not backup acceptance                             |
-| Live S3 and OpenAI adapters                        | Run 40179062434 / job 121125980340   | PASS                                                         |
+| Gate                                               | Evidence                             | Result                                                                           |
+| -------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------- |
+| Mobile/client checks                               | Local typecheck, lint and 18 tests   | PASS                                                                             |
+| Full regression                                    | Run 40178154400                      | PASS                                                                             |
+| Isolated web UI journey                            | Run 40178154516                      | PASS                                                                             |
+| Android and iOS compilation                        | Run 40178154459                      | PASS                                                                             |
+| Android API 35 native forms                        | Run 40178178431 / job 121123326301   | PASS                                                                             |
+| Current API privacy-worker recovery                | Run 40177962465, API source 06242d0  | PASS                                                                             |
+| Current API before/after-withdrawal restore matrix | Run 40177962492, API source 06242d0  | PASS                                                                             |
+| Recovery harness regression                        | Run 40177962460                      | PASS                                                                             |
+| Live service health and CORS                       | Run 40178245687                      | PASS                                                                             |
+| Read-only backup scheduling inspection             | Run 40178762105                      | Completed; not backup acceptance                                                 |
+| Live S3 and OpenAI adapters                        | Run 40179062434 / job 121125980340   | PASS                                                                             |
 | Signed iOS upload                                  | Run 40178879560, ORZELL 1.0.0 (1031) | PASS: processed VALID and available to existing internal group (run 40179728482) |
 
 The keyboard-aware candidate changes UI only relative to the API source used by the recovery tests.

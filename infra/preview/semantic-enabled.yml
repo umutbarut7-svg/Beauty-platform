@@ -1,0 +1,9 @@
+# Optional overlay, applied only after owner approval of the preview change.
+# Does not index services or make provider requests. Never use on its own.
+services:
+  api:
+    environment:
+      MVP_SEMANTIC_ENABLED: "true"
+  worker:
+    environment:
+      MVP_SEMANTIC_ENABLED: "true"
