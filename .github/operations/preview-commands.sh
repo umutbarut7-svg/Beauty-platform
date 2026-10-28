@@ -27,5 +27,12 @@ for host in ['preview.13-51-112-228.sslip.io','admin.13-51-112-228.sslip.io']:
     origin='https://'+host
     with urllib.request.urlopen(urllib.request.Request(origin+'/api/health/ready',headers={'Origin':origin}),timeout=15) as response:
         print('Public API health: '+str(response.status))
+def sql(query):
+    return run(['docker','exec','beauty-preview-postgres-1','psql','-XAtq','-v','ON_ERROR_STOP=1','-U','beauty','-d','beauty_preview','-c','SET statement_timeout=5000; BEGIN READ ONLY; '+query+'; COMMIT;']).strip()
+schema=json.loads(sql("""SELECT json_build_object('vectorExtension', EXISTS(SELECT 1 FROM pg_extension WHERE extname='vector'),'vectorTable',to_regclass('"MvpCatalogVector"') IS NOT NULL)"""))
+print('Catalog index schema: '+json.dumps(schema,sort_keys=True))
+if schema.get('vectorTable'):
+    counts=json.loads(sql("""SELECT json_build_object('publicBookableServices',(SELECT count(*) FROM "Service" s JOIN "Business" b ON b.id=s."businessId" WHERE b."isPublic" AND b.status='ACTIVE' AND s."isActive" AND s."isBookable"),'indexedRows',(SELECT count(*) FROM "MvpCatalogVector"),'currentPublicIndexedServices',(SELECT count(*) FROM "MvpCatalogVector" v JOIN "Service" s ON s.id=v."serviceId" AND s."businessId"=v."businessId" JOIN "Business" b ON b.id=v."businessId" WHERE v.model='text-embedding-3-small' AND b."isPublic" AND b.status='ACTIVE' AND s."isActive" AND s."isBookable" AND s."updatedAt"=v."sourceUpdatedAt" AND b."updatedAt"=v."businessUpdatedAt"))"""))
+    print('Catalog aggregate counts: '+json.dumps(counts,sort_keys=True))
 print('READ ONLY; no customer data, paid request, index change, restart, secret output or configuration change')
 PY
