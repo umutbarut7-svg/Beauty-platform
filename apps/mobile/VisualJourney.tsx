@@ -2,6 +2,7 @@ import { AppText as Text, palette } from "./ui";
 import { useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { PhotoPreparationError, prepareWebPhoto } from "./photo-upload";
 import type {
   MvpApiClient,
   MvpVisualSession,
@@ -35,6 +36,7 @@ export function VisualJourney({
   const [answers, setAnswers] = useState<string[]>([]);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
   const [message, setMessage] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
   const [activeConsents, setActiveConsents] = useState<
     Array<{ id: string; expiresAt: string }>
@@ -134,85 +136,106 @@ export function VisualJourney({
               return;
             }
             const epoch = ++generation.current;
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["images"],
-              base64: false,
-              exif: false,
-              quality: 0.8,
-            });
-            if (
-              epoch !== generation.current ||
-              result.canceled ||
-              !result.assets[0]
-            )
-              return;
-            const asset = result.assets[0];
-            const type =
-              asset.mimeType ??
-              (asset.uri.toLowerCase().endsWith(".png")
-                ? "image/png"
-                : "image/jpeg");
-            if (
-              !["image/jpeg", "image/png"].includes(type) ||
-              (asset.fileSize ?? 0) > 5 * 1024 * 1024
-            ) {
-              setMessage("En fazla 5 MB boyutunda JPEG veya PNG seçin.");
-              return;
-            }
-            setSession(null);
-            setMatches(null);
-            setAnswers([]);
-            if (consentId)
-              await api.request(
-                `/mvp/v1/photos/consents/${consentId}/withdraw`,
+            setMessage("");
+            setUploadMessage("");
+            let cleanup: (() => void) | undefined;
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ["images"],
+                base64: false,
+                exif: false,
+                quality: 0.8,
+                ...(Platform.OS !== "web"
+                  ? {
+                      shouldDownloadFromNetwork: true,
+                      preferredAssetRepresentationMode:
+                        ImagePicker
+                          .UIImagePickerPreferredAssetRepresentationMode
+                          .Compatible,
+                    }
+                  : {}),
+              });
+              if (epoch !== generation.current) return;
+              if (result.canceled || !result.assets[0]) {
+                setUploadMessage("Fotoğraf seçimi iptal edildi.");
+                return;
+              }
+              const asset = result.assets[0];
+              setUploadMessage("Fotoğraf hazırlanıyor…");
+              const form = new FormData();
+              if (Platform.OS === "web") {
+                const jpeg = await prepareWebPhoto(asset);
+                form.append("photo", jpeg, "photo.jpg");
+              } else {
+                const { prepareDevicePhoto } =
+                  await import("./native-photo-expo");
+                const photo = await prepareDevicePhoto(asset);
+                cleanup = photo.cleanup;
+                form.append("photo", {
+                  uri: photo.uri,
+                  name: photo.name,
+                  type: photo.type,
+                } as unknown as Blob);
+              }
+              if (epoch !== generation.current) return;
+              setSession(null);
+              setMatches(null);
+              setAnswers([]);
+              if (consentId)
+                await api.request(
+                  `/mvp/v1/photos/consents/${consentId}/withdraw`,
+                  "POST",
+                );
+              if (epoch !== generation.current) return;
+              const consent = await api.request<{ id: string }>(
+                "/mvp/v1/photos/consents",
                 "POST",
+                { policyVersion: capability.policy!.version, accepted: true },
               );
-            if (epoch !== generation.current) return;
-            const consent = await api.request<{ id: string }>(
-              "/mvp/v1/photos/consents",
-              "POST",
-              { policyVersion: capability.policy!.version, accepted: true },
-            );
-            if (epoch !== generation.current) {
-              await api.request(
-                `/mvp/v1/photos/consents/${consent.id}/withdraw`,
+              if (epoch !== generation.current) {
+                await api.request(
+                  `/mvp/v1/photos/consents/${consent.id}/withdraw`,
+                  "POST",
+                );
+                return;
+              }
+              setConsentId(consent.id);
+              setUploadMessage("Fotoğraf yükleniyor…");
+              if (epoch !== generation.current) return;
+              const photo = await api.request<{ id: string }>(
+                `/mvp/v1/photos/upload/${consent.id}`,
                 "POST",
+                form,
+                { multipart: true, timeoutMs: 45000 },
               );
-              return;
-            }
-            setConsentId(consent.id);
-            const form = new FormData();
-            if (Platform.OS === "web") {
-              const blob = await (await fetch(asset.uri)).blob();
-              form.append(
-                "photo",
-                blob,
-                type === "image/png" ? "photo.png" : "photo.jpg",
+              if (epoch !== generation.current) return;
+              const next = await api.request<MvpVisualSession>(
+                "/mvp/v1/visual/sessions",
+                "POST",
+                { photoId: photo.id, intent, target },
               );
-            } else {
-              form.append("photo", {
-                uri: asset.uri,
-                name: type === "image/png" ? "photo.png" : "photo.jpg",
-                type,
-              } as unknown as Blob);
+              if (epoch !== generation.current) return;
+              setSession(next);
+              setUploadMessage(
+                "Fotoğraf kaydedildi. Analizi başlatabilirsiniz.",
+              );
+            } catch (error) {
+              if (epoch !== generation.current) return;
+              setUploadMessage(
+                error instanceof PhotoPreparationError
+                  ? error.message
+                  : "Fotoğraf yüklenemedi. Yeniden deneyin.",
+              );
+              if (!(error instanceof PhotoPreparationError)) throw error;
+            } finally {
+              cleanup?.();
             }
-            if (epoch !== generation.current) return;
-            const photo = await api.request<{ id: string }>(
-              `/mvp/v1/photos/upload/${consent.id}`,
-              "POST",
-              form,
-              { multipart: true, timeoutMs: 45000 },
-            );
-            if (epoch !== generation.current) return;
-            const next = await api.request<MvpVisualSession>(
-              "/mvp/v1/visual/sessions",
-              "POST",
-              { photoId: photo.id, intent, target },
-            );
-            if (epoch !== generation.current) return;
-            setSession(next);
-            setMessage("Fotoğraf kaydedildi. Analizi başlatabilirsiniz.");
           })}
+          {uploadMessage ? (
+            <Text accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {uploadMessage}
+            </Text>
+          ) : null}
         </>
       )}
       {consentId && (
@@ -224,6 +247,7 @@ export function VisualJourney({
           onPress={() => {
             const id = consentId;
             generation.current++;
+            setUploadMessage("");
             setSession(null);
             setMatches(null);
             setAnswers([]);
