@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 concurrency:
   group: native-photo-runtime-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   runtime:
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
@@ -19,29 +18,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-          fetch-depth: 0
-      - name: Verify exact native SDK compatibility
-        run: |
-          python3 - <<'PY'
-          import pathlib,subprocess
-          for p in ['pnpm-lock.yaml','apps/mobile/package.json','apps/mobile/app.json']:
-              expected=subprocess.run(['git','show','1c642978334c919c637c8b19a3ef490dccb00c06:'+p],capture_output=True,check=True).stdout
-              assert pathlib.Path(p).read_bytes()==expected, 'Native shell SDK mismatch: '+p
-          PY
-      - name: Retrieve exact reviewed simulator shell
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 120 --header "Authorization: Bearer $GH_TOKEN" --header "Accept: application/vnd.github+json" https://api.github.com/repos/umutbarut7-svg/Beauty-platform/actions/artifacts/12806841242/zip --output "$RUNNER_TEMP/native-shell.zip"
-          python3 - <<'PY'
-          import hashlib,os,pathlib
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'native-shell.zip'
-          assert hashlib.sha256(p.read_bytes()).hexdigest()=='737982e23c2c3b35cbdcc8d57753efb0c2a42673c524ff6c7140bef5e8650cad'
-          PY
-          unzip -p "$RUNNER_TEMP/native-shell.zip" stage33-ios-simulator.zip > "$RUNNER_TEMP/native-shell-inner.zip"
-          mkdir -p "$RUNNER_TEMP/native-shell"
-          ditto -x -k "$RUNNER_TEMP/native-shell-inner.zip" "$RUNNER_TEMP/native-shell"
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 10.28.1
@@ -50,41 +26,47 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Check current mobile code with exact dependencies
+      - name: Install exact dependencies and check mobile source
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/mobile typecheck
           pnpm --filter @beauty-platform/mobile test
-      - name: Warm preferred iPhone
-        run: python3 scripts/check-native-photo-probe.py --warm "$RUNNER_TEMP/native-photo-evidence"
-      - name: Embed actual photo code in the disposable probe
+      - name: Prepare disposable probe entrypoint with loopback-only HTTP
         run: |
-          set -euo pipefail
           cp scripts/native-photo-probe.tsx apps/mobile/NativePhotoProbe.tsx
           node <<'NODE'
           const fs=require('node:fs');
-          fs.writeFileSync('apps/mobile/index.ts','import { registerRootComponent } from "expo";\nimport Probe from "./NativePhotoProbe";\nregisterRootComponent(Probe);\n');
-          const p='apps/mobile/package.json',c=JSON.parse(fs.readFileSync(p));c.main='index.ts';fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
+          fs.writeFileSync('apps/mobile/index.ts', 'import { registerRootComponent } from "expo";\nimport Probe from "./NativePhotoProbe";\nregisterRootComponent(Probe);\n');
+          const manifest='apps/mobile/package.json', pkg=JSON.parse(fs.readFileSync(manifest));
+          pkg.main='index.ts';
+          fs.writeFileSync(manifest,JSON.stringify(pkg,null,2)+'\n');
+          const p='apps/mobile/app.json', c=JSON.parse(fs.readFileSync(p));
+          c.expo.ios.infoPlist={...(c.expo.ios.infoPlist||{}),NSAppTransportSecurity:{NSAllowsArbitraryLoads:true}};
+          fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
           NODE
-          app=$(find "$RUNNER_TEMP/native-shell" -maxdepth 2 -name '*.app' -print -quit)
-          test -n "$app"
-          pnpm --filter @beauty-platform/mobile exec expo export:embed --platform ios --entry-file index.ts --dev false --bytecode --max-workers 2 --bundle-output "$app/main.jsbundle" --assets-dest "$app"
-          python3 - <<'PY'
-          import os,pathlib,plistlib
-          apps=list((pathlib.Path(os.environ['RUNNER_TEMP'])/'native-shell').glob('*.app'));assert len(apps)==1
-          p=apps[0]/'Info.plist';c=plistlib.loads(p.read_bytes())
-          assert c['CFBundleIdentifier']=='com.beautyplatform.stage33test'
-          c['NSAppTransportSecurity']={'NSAllowsArbitraryLoads':True}
-          p.write_bytes(plistlib.dumps(c,fmt=plistlib.FMT_BINARY))
-          PY
-      - name: Exercise native File IO and multipart HTTP
+          node scripts/stage33-native-config.cjs
+          pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ios --no-install --skip-dependency-update expo,react,react-native
+          git diff --exit-code -- pnpm-lock.yaml
+      - name: Warm the preferred iPhone simulator during native compilation
+        run: python3 scripts/check-native-photo-probe.py --warm "$RUNNER_TEMP/native-photo-evidence"
+      - name: Build unsigned synthetic probe for simulator only
         run: |
           set -euo pipefail
-          app=$(find "$RUNNER_TEMP/native-shell" -maxdepth 2 -name '*.app' -print -quit)
+          cd apps/mobile/ios
+          pod install
+          cd ../../..
+          workspace=$(find apps/mobile/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          xcodebuild -jobs 2 -workspace "$workspace" -scheme "$scheme" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/photo-probe-build" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/photo-probe-build.log" 2>&1 || { tail -n 100 "$RUNNER_TEMP/photo-probe-build.log"; exit 1; }
+      - name: Run real native photo IO and Expo HTTP multipart acceptance
+        run: |
+          set -euo pipefail
+          app=$(find "$RUNNER_TEMP/photo-probe-build/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
           test -n "$app"
           python3 scripts/check-native-photo-probe.py "$app" "$RUNNER_TEMP/native-photo-evidence"
-      - name: Preserve synthetic diagnostics
+      - name: Preserve only synthetic test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
