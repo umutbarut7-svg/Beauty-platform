@@ -178,4 +178,3 @@ export const BUSINESS_MVP_STEPS = [
   "Result",
   "Revenue",
 ] as const;
-

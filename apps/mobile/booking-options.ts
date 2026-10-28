@@ -16,7 +16,10 @@ export function staffForBooking(
   );
 }
 
-export function hasUnknownStaffLocations(catalog: MvpCatalog, serviceId: string) {
+export function hasUnknownStaffLocations(
+  catalog: MvpCatalog,
+  serviceId: string,
+) {
   return catalog.staff.some(
     (staff) =>
       staff.services.some((service) => service.serviceId === serviceId) &&
@@ -46,4 +49,3 @@ export function locationLabel(
     length++;
   return `${location.name} · ${location.id.slice(-length)}`;
 }
-

@@ -3,10 +3,10 @@
 // Synthetic UI contract tests. Every non-local request is intercepted or aborted.
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { expect } = require("@playwright/test");
+const { expect, webkit } = require("@playwright/test");
 const { main } = require("./orzell-web-server.cjs");
 
-main(async (browser, origin, output) => {
+async function journey(browser, origin, output, engine) {
   const page = await browser.newPage({
     viewport: { width: 390, height: 844 },
     timezoneId: "Europe/Istanbul",
@@ -174,7 +174,8 @@ main(async (browser, origin, output) => {
     page.getByRole("button", { name, exact: true }).click();
   const tab = (name) => page.getByRole("tab", { name, exact: true }).click();
   const shot = async (name) => {
-    await page.screenshot({ path: path.join(output, name + ".png") });
+    const suffix = engine === "chromium" ? "" : `-${engine}`;
+    await page.screenshot({ path: path.join(output, name + suffix + ".png") });
   };
   await page.goto(origin);
   await click("Giriş yap");
@@ -375,10 +376,19 @@ main(async (browser, origin, output) => {
   assert.deepEqual(unexpected, []);
   await page.close();
   console.log(
-    "Synthetic application journey: PASS (registration, discovery, explicit booking/cancellation, tabs, business summary, terminal status, authorization, logout)",
+    `${engine} synthetic application journey: PASS (unknown branch assignments, refresh, registration, discovery, explicit booking/cancellation, tabs, business summary, terminal status, authorization, logout)`,
   );
+}
+
+main(async (browser, origin, output) => {
+  await journey(browser, origin, output, "chromium");
+  const safari = await webkit.launch({ headless: true });
+  try {
+    await journey(safari, origin, output, "webkit");
+  } finally {
+    await safari.close();
+  }
 }).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

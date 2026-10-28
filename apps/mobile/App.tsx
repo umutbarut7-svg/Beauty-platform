@@ -765,8 +765,9 @@ export default function App() {
                           (hasUnknownStaffLocations(catalog, serviceId) ? (
                             <>
                               <Text style={styles.body}>
-                                Bu şube için profesyonel bilgileri doğrulanamadı.
-                                Bilgileri yenileyip yeniden seçim yapabilirsin.
+                                Bu şube için profesyonel bilgileri
+                                doğrulanamadı. Bilgileri yenileyip yeniden seçim
+                                yapabilirsin.
                               </Text>
                               {button(
                                 "Hizmet ve şube bilgilerini yenile",
@@ -1843,4 +1844,3 @@ const styles = StyleSheet.create({
   tabLabel: { color: palette.muted, fontSize: 10, fontWeight: "500" },
   activeTabText: { color: palette.lavender },
 });
-

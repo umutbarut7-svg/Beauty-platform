@@ -103,4 +103,3 @@ describe("booking branch and service eligibility", () => {
     );
   });
 });
-
