@@ -38,6 +38,9 @@ jobs:
           node <<'NODE'
           const fs=require('node:fs');
           fs.writeFileSync('apps/mobile/index.ts', 'import { registerRootComponent } from "expo";\nimport Probe from "./NativePhotoProbe";\nregisterRootComponent(Probe);\n');
+          const manifest='apps/mobile/package.json', pkg=JSON.parse(fs.readFileSync(manifest));
+          pkg.main='index.ts';
+          fs.writeFileSync(manifest,JSON.stringify(pkg,null,2)+'\n');
           const p='apps/mobile/app.json', c=JSON.parse(fs.readFileSync(p));
           c.expo.ios.infoPlist={...(c.expo.ios.infoPlist||{}),NSAppTransportSecurity:{NSAllowsArbitraryLoads:true}};
           fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
