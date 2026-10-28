@@ -125,7 +125,7 @@ export interface MvpCatalog {
   staff: Array<{
     id: string;
     displayName: string;
-    // Optional during rolling upgrades; absent means the server has not supplied assignments.
+    // Optional during rolling upgrades; absent assignments do not establish branch eligibility.
     locations?: Array<{ locationId: string }>;
     services: Array<{ serviceId: string }>;
   }>;
@@ -178,3 +178,4 @@ export const BUSINESS_MVP_STEPS = [
   "Result",
   "Revenue",
 ] as const;
+

@@ -17,6 +17,7 @@ main(async (browser, origin, output) => {
   page.on("pageerror", (e) => errors.push(e.message));
   let bookings = [],
     deny = false,
+    catalogueMode = "legacy",
     availabilityMode = "slots";
   const startsAt =
     new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) +
@@ -89,7 +90,9 @@ main(async (browser, origin, output) => {
           {
             id: "staff-1",
             displayName: "Deneme Uzmanı",
-            locations: [{ locationId: "location-2" }],
+            ...(catalogueMode === "scoped"
+              ? { locations: [{ locationId: "location-2" }] }
+              : {}),
             services: [{ serviceId: service.id }],
           },
         ],
@@ -203,6 +206,33 @@ main(async (browser, origin, output) => {
   await search.fill("Saç");
   await click("Ara");
   await click("Deneme Salonu hizmetlerini gör");
+  await click("Saç bakımı hizmetini seç");
+  await click("Merkez · tion-1");
+  const missingBranchData = page.getByText(
+    "Bu şube için profesyonel bilgileri doğrulanamadı. Bilgileri yenileyip yeniden seçim yapabilirsin.",
+    { exact: true },
+  );
+  await expect(missingBranchData).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Deneme Uzmanı", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Müsait saatleri bul", exact: true }),
+  ).toHaveCount(0);
+  assert.equal(
+    calls.filter((c) => c.endpoint.endsWith("/availability")).length,
+    0,
+  );
+  await missingBranchData.scrollIntoViewIfNeeded();
+  await shot("booking-location-data-missing");
+  catalogueMode = "scoped";
+  await click("Hizmet ve şube bilgilerini yenile");
+  await expect(
+    page.getByRole("button", { name: "Deneme Uzmanı ✓", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Müsait saatleri bul", exact: true }),
+  ).toHaveCount(0);
   await click("Saç bakımı hizmetini seç");
   await click("Merkez · tion-1");
   await expect(
@@ -351,3 +381,4 @@ main(async (browser, origin, output) => {
   console.error(error);
   process.exitCode = 1;
 });
+

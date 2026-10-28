@@ -9,8 +9,18 @@ export function staffForBooking(
     (staff) =>
       staff.services.some((service) => service.serviceId === serviceId) &&
       (!locationId ||
-        staff.locations === undefined ||
-        staff.locations.some((location) => location.locationId === locationId)),
+        (Array.isArray(staff.locations) &&
+          staff.locations.some(
+            (location) => location.locationId === locationId,
+          ))),
+  );
+}
+
+export function hasUnknownStaffLocations(catalog: MvpCatalog, serviceId: string) {
+  return catalog.staff.some(
+    (staff) =>
+      staff.services.some((service) => service.serviceId === serviceId) &&
+      !Array.isArray(staff.locations),
   );
 }
 
@@ -36,3 +46,4 @@ export function locationLabel(
     length++;
   return `${location.name} · ${location.id.slice(-length)}`;
 }
+
