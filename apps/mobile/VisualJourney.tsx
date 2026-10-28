@@ -167,15 +167,11 @@ export function VisualJourney({
                 const jpeg = await prepareWebPhoto(asset);
                 form.append("photo", jpeg, "photo.jpg");
               } else {
-                const { prepareDevicePhoto } =
+                const { prepareDevicePhoto, appendDevicePhoto } =
                   await import("./native-photo-expo");
                 const photo = await prepareDevicePhoto(asset);
                 cleanup = photo.cleanup;
-                form.append("photo", {
-                  uri: photo.uri,
-                  name: photo.name,
-                  type: photo.type,
-                } as unknown as Blob);
+                appendDevicePhoto(form, photo);
               }
               if (epoch !== generation.current) return;
               setSession(null);
