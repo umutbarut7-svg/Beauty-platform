@@ -55,26 +55,45 @@ class Server(http.server.BaseHTTPRequestHandler):
             self.respond({'status': 'NOT_FOUND'}, 404)
 
     def do_POST(self):
+        validation = 'content length'
+        facts = {}
         try:
             length = int(self.headers.get('Content-Length', '0'))
+            facts['contentLength'] = length
+            facts['transferEncoding'] = self.headers.get('Transfer-Encoding')
             assert 0 < length < 6 * 1024 * 1024
             body = self.rfile.read(length)
             if self.path == '/auth/login':
                 assert json.loads(body) == {'email': 'synthetic@example.test', 'password': 'synthetic-native-password'}
                 self.respond({'accessToken': 'synthetic-native-token', 'refreshToken': 'synthetic-refresh', 'user': {'id': 'synthetic-native', 'role': 'CUSTOMER'}})
             elif self.path == '/upload':
+                validation = 'authorization'
                 assert self.headers.get('Authorization') == 'Bearer synthetic-native-token'
+                validation = 'multipart parse'
                 message = email.parser.BytesParser(policy=email.policy.default).parsebytes(
                     ('Content-Type: ' + self.headers['Content-Type'] + '\r\nMIME-Version: 1.0\r\n\r\n').encode() + body)
                 parts = list(message.iter_parts())
+                facts['parts'] = len(parts)
                 assert len(parts) == 1
                 part = parts[0]
+                validation = 'part name'
                 assert part.get_param('name', header='content-disposition') == 'photo'
+                validation = 'JPEG MIME'
+                facts['mime'] = part.get_content_type()
                 assert part.get_content_type() == 'image/jpeg'
+                validation = 'JPEG filename'
+                facts['jpegFilename'] = bool(part.get_filename() and part.get_filename().lower().endswith('.jpg'))
                 assert part.get_filename().lower().endswith('.jpg')
                 jpeg = part.get_payload(decode=True)
+                validation = 'JPEG byte signature and size'
+                facts['jpegBytes'] = len(jpeg)
                 assert jpeg.startswith(b'\xff\xd8\xff') and 0 < len(jpeg) <= 5 * 1024 * 1024
+                (ROOT / 'synthetic-upload.jpg').write_bytes(jpeg)
+                validation = 'source metadata removal'
+                facts['sourceMarkerPresent'] = MARKER in jpeg
+                facts['exifPresent'] = b'Exif\x00\x00' in jpeg
                 assert MARKER not in jpeg and b'Exif\x00\x00' not in jpeg
+                validation = 'decoded JPEG dimensions'
                 with tempfile.TemporaryDirectory() as temp:
                     path = pathlib.Path(temp) / 'prepared.jpg'
                     path.write_bytes(jpeg)
@@ -91,7 +110,7 @@ class Server(http.server.BaseHTTPRequestHandler):
             else:
                 self.respond({'status': 'NOT_FOUND'}, 404)
         except Exception as error:
-            ERRORS.append(type(error).__name__)
+            ERRORS.append({'type': type(error).__name__, 'validation': validation, 'facts': facts})
             self.respond({'status': 'REJECTED'}, 400)
 
 
