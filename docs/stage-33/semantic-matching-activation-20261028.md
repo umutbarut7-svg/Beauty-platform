@@ -1,4 +1,4 @@
-# ORZELL preview matching: prepared activation
+# ORZELL preview matching: controlled activation
 
 The owner reached a completed consultation plan on physical iPhone TestFlight
 1.0.0 (1051). “Plana göre profesyonel ara” then returned the generic unavailable
@@ -91,9 +91,31 @@ A matching HTTP 503 also preserves the plan. Genuine NO_MATCH remains distinct,
 and late results cannot reappear after withdrawal. Capability reads never start
 analysis, indexing or a paid matching request.
 
+## Owner-approved execution
+
+On 28 October 2026 the owner explicitly approved enabling semantic matching,
+recreating the API/worker and using the existing OpenAI key for at most two
+embedding requests: the published service index and one synthetic search.
+
+The checked-in preview operation preserves each service's own Compose inputs,
+compares the running configuration hash and locally available image, and permits
+only the semantic environment flag to change. It refuses queued semantic jobs,
+model/quota/feature drift and concurrent target changes. The operation retains
+rollback inputs, checks HTTPS readiness/CORS and confirms unrelated container
+identities and start times. Failure after recreation rolls attempted services
+back in reverse order. A completed or failed operation record blocks replay.
+
+Ten offline tests cover successful activation, replay protection, partial API
+failure and rollback, queued jobs, configuration hash drift, overlay drift,
+model drift, runtime image/environment drift and failed-record protection.
+
+The operation itself starts zero paid requests. The two authorized requests
+still require the existing business owner's normal authenticated console;
+no operator token, impersonation or membership changes are introduced.
+
 ## Status
 
-Prepared only. This work does not activate semantic matching, index a live
-service, make a paid provider request, distribute another TestFlight build or
-declare Stage 33 PASS. Runtime activation and the two bounded embedding actions
-remain for owner approval and the normal authenticated business flow.
+Owner approval received; live execution and authenticated index/search results
+must be recorded before claiming success. The companion mobile correction is
+PR #54 and has not been distributed as another TestFlight build. Stage 33
+acceptance remains open.
