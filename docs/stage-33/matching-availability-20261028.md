@@ -13,6 +13,8 @@ rechecks capabilities immediately before requesting matches; a newly closed
 gate avoids the POST. A race-time matching 503 also preserves the plan with the
 specific unavailable message. Genuine NO_MATCH remains a separate outcome.
 Existing withdrawal generation checks discard late matching results.
+An expired authenticated capability read uses the parent screen's existing
+sign-out/reset handler, so private plan content is cleared on HTTP 401.
 
 Capabilities are configuration-only: an enabled response does not establish
 catalog population, provider health or recommendation quality. No capability
@@ -23,7 +25,7 @@ Local checks: mobile typecheck, changed-file lint/formatting, web export and all
 36 mobile/client tests passed. Browser acceptance runs in the existing isolated
 application-review workflow: Chromium and WebKit exercise closed and failed
 capabilities, refresh, closing between render and click, server 503, NO_MATCH and
-withdrawal while matching is in flight. All requests use intercepted synthetic
+withdrawal while matching is in flight, and expired-session reset. All requests use intercepted synthetic
 responses and pixels. CI results must be recorded against the candidate before
 calling browser acceptance complete.
 

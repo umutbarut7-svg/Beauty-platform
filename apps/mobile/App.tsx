@@ -989,6 +989,7 @@ export default function App() {
                     target={target}
                     busy={busy}
                     run={run}
+                    report={report}
                     choose={choose}
                   />
                 </View>

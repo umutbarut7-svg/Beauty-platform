@@ -1,5 +1,11 @@
 import { AppText as Text, palette } from "./ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { ApiError } from "@beauty-platform/types";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -17,6 +23,7 @@ export function VisualJourney({
   target,
   busy,
   run,
+  report,
   choose,
 }: {
   api: MvpApiClient;
@@ -24,6 +31,7 @@ export function VisualJourney({
   target: string;
   busy: boolean;
   run: (action: () => Promise<void>) => Promise<void>;
+  report: (error: unknown) => void;
   choose: (business: {
     id: string;
     name: string;
@@ -47,6 +55,9 @@ export function VisualJourney({
     Array<{ id: string; expiresAt: string }>
   >([]);
   const generation = useRef(0);
+  const reportCapabilityError = useEffectEvent((error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) report(error);
+  });
   const matchingAvailable = useCallback(async () => {
     const value = await api.request<{
       enabled?: boolean;
@@ -66,10 +77,11 @@ export function VisualJourney({
         setMatchingState(available ? "available" : "unavailable");
         if (!available) setMatches(null);
       },
-      () => {
+      (error: unknown) => {
         if (!active) return;
         setMatchingState("error");
         setMatches(null);
+        reportCapabilityError(error);
       },
     );
     return () => {
@@ -390,10 +402,12 @@ export function VisualJourney({
                 button("Plana göre profesyonel ara", async () => {
                   const epoch = generation.current;
                   setMatches(null);
+                  let capabilityChecked = false;
                   try {
                     // Recheck at the explicit action: a flag can close after PLAN loads.
                     const available = await matchingAvailable();
                     if (epoch !== generation.current) return;
+                    capabilityChecked = true;
                     if (!available) {
                       setMatchingState("unavailable");
                       return;
@@ -407,6 +421,12 @@ export function VisualJourney({
                     if (epoch === generation.current) setMatches(result);
                   } catch (error) {
                     if (epoch !== generation.current) return;
+                    if (error instanceof ApiError && error.status === 401)
+                      throw error;
+                    if (!capabilityChecked) {
+                      setMatchingState("error");
+                      return;
+                    }
                     if (error instanceof ApiError && error.status === 503) {
                       setMatchingState("unavailable");
                       return;

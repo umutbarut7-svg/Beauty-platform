@@ -70,6 +70,7 @@ async function journey(browser, origin, output, engine) {
       };
     else if (endpoint === "/mvp/v1/capabilities") {
       if (capability === "error") status = 503;
+      if (capability === "expired") status = 401;
       value = {
         enabled: true,
         matching: { semanticVectorAvailable: capability === "open" },
@@ -165,6 +166,18 @@ async function journey(browser, origin, output, engine) {
   await button("Eşleştirme durumunu yenile").click();
   await expect(button("Plana göre profesyonel ara")).toBeVisible();
   assert.equal(countMatches(), 0); // Availability alone never starts paid matching.
+  capability = "error";
+  await button("Plana göre profesyonel ara").click();
+  await expect(
+    page.getByText(
+      "Eşleştirme durumu kontrol edilemedi. Planın bu ekranda duruyor; yeniden deneyebilirsin.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  assert.equal(countMatches(), 0);
+  capability = "open";
+  await button("Eşleştirme durumunu yenile").click();
+  await expect(button("Plana göre profesyonel ara")).toBeVisible();
   capability = "closed";
   await button("Plana göre profesyonel ara").click();
   await expect(unavailable).toBeVisible();
@@ -204,6 +217,26 @@ async function journey(browser, origin, output, engine) {
     }),
   ).toHaveCount(0);
   await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  // A failed authenticated capability read must use the parent's sign-out path.
+  await page.getByRole("checkbox").click();
+  const nextChooser = page.waitForEvent("filechooser");
+  await button("İzinle fotoğraf seç ve yükle").click();
+  await (
+    await nextChooser
+  ).setFiles({
+    name: "synthetic.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  capability = "expired";
+  await button("Görsel analizi başlat").click();
+  await expect(button("Giriş yap")).toBeVisible();
+  await expect(
+    page.getByText("1. Synthetic saved plan", { exact: true }),
+  ).toHaveCount(0);
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
   await page.close();
