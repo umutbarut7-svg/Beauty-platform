@@ -1,28 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 python3 - <<'PY'
-import json, subprocess
+import json, re, subprocess
+stage = 'startup'
 
 def run(args):
     p = subprocess.run(args, capture_output=True, text=True, timeout=30)
     if p.returncode:
-        raise RuntimeError('Read-only diagnostic unavailable; raw output withheld')
+        state = re.search(r'ERROR:\s+([0-9A-Z]{5})\b', p.stderr)
+        raise RuntimeError('Read-only command unavailable; SQLSTATE=' + (state.group(1) if state else 'UNAVAILABLE'))
     return p.stdout
 
 def sql(query):
-    return run(['docker', 'exec', 'beauty-preview-postgres-1', 'psql', '-XAtq', '-v', 'ON_ERROR_STOP=1', '-U', 'beauty', '-d', 'beauty_preview', '-c', 'SET statement_timeout=5000; BEGIN READ ONLY; ' + query + '; COMMIT;']).strip()
+    return run(['docker', 'exec', 'beauty-preview-postgres-1', 'psql', '-XAtq', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=sqlstate', '-U', 'beauty', '-d', 'beauty_preview', '-c', 'SET statement_timeout=5000; BEGIN READ ONLY; ' + query + '; COMMIT;']).strip()
 
 TARGET = '''WITH target AS (
  SELECT s.id AS sid, b.id AS bid FROM "Service" s
  JOIN "Business" b ON b.id=s."businessId"
- WHERE lower(b.name)='restart hair design' AND b."isPublic" AND b.status='ACTIVE'
- AND lower(s.name)='kaynak' AND s."isActive" AND s."isBookable"
+ WHERE lower(btrim(b.name))='restart hair design' AND b."isPublic" AND b.status='ACTIVE'
+ AND lower(btrim(s.name))='kaynak' AND s."isActive" AND s."isBookable"
 ) '''
 
 def main():
+    global stage
+    stage = 'public catalog precondition'
     count = int(sql(TARGET + 'SELECT count(*) FROM target'))
+    print('Matching public service count: ' + str(count), flush=True)
     if count != 1:
         raise RuntimeError('Expected one public Kaynak service; stop on catalog drift')
+    stage = 'booking prerequisite SELECT'
     query = TARGET + '''SELECT json_build_object(
       'businessSuffix',right(b.id,6),
       'businessActive',b.status='ACTIVE',
@@ -50,9 +56,11 @@ def main():
     ) FROM target t JOIN "Business" b ON b.id=t.bid JOIN "Service" s ON s.id=t.sid
     LEFT JOIN "BusinessSettings" bs ON bs."businessId"=t.bid'''
     result = json.loads(sql(query))
-    print('Booking prerequisites: ' + json.dumps(result, sort_keys=True))
+    print('Booking prerequisites: ' + json.dumps(result, sort_keys=True), flush=True)
+    stage = 'compiled availability source inspection'
     diagnostic = """const fs=require('node:fs'),crypto=require('node:crypto');const p='dist/appointments/availability.service.js';if(!fs.existsSync(p)){console.log('Compiled availability source unavailable');process.exit(0)}const s=fs.readFileSync(p,'utf8');console.log(JSON.stringify({sha256:crypto.createHash('sha256').update(s).digest('hex'),profileServiceSupported:s.includes('staffProfileService'),profileStaffLookupSupported:s.includes('staff.findFirst'),legacyStaffLookupPresent:s.includes('businessMember.findFirst'),businessBookingGatePresent:s.includes('bookingEnabled')}))"""
     print('Compiled availability features: ' + run(['docker', 'exec', 'beauty-preview-api-1', 'node', '-e', diagnostic]).strip())
+    stage = 'runtime identity inspection'
     for service in ['api','worker']:
         c = json.loads(run(['docker','inspect','beauty-preview-'+service+'-1']))[0]
         print(service + ' image: ' + c['Image'])
@@ -61,7 +69,7 @@ def main():
 
 try:
     main()
-except Exception:
-    print('Booking inspection stopped; private diagnostics withheld')
+except Exception as error:
+    print('Booking inspection stopped at ' + stage + ': ' + (str(error) if isinstance(error, RuntimeError) else type(error).__name__) + '; private diagnostics withheld')
     raise SystemExit(1)
 PY
