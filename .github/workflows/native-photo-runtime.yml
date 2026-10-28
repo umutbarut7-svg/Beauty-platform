@@ -28,8 +28,6 @@ jobs:
               expected=subprocess.run(['git','show','1c642978334c919c637c8b19a3ef490dccb00c06:'+p],capture_output=True,check=True).stdout
               assert pathlib.Path(p).read_bytes()==expected, 'Native shell SDK mismatch: '+p
           PY
-      - name: Warm preferred iPhone
-        run: python3 scripts/check-native-photo-probe.py --warm "$RUNNER_TEMP/native-photo-evidence"
       - name: Retrieve exact reviewed simulator shell
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,6 +56,8 @@ jobs:
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/mobile typecheck
           pnpm --filter @beauty-platform/mobile test
+      - name: Warm preferred iPhone
+        run: python3 scripts/check-native-photo-probe.py --warm "$RUNNER_TEMP/native-photo-evidence"
       - name: Embed actual photo code in the disposable probe
         run: |
           set -euo pipefail
