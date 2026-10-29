@@ -5,6 +5,8 @@ on:
     paths:
       - infra/operations/publish-preview-catalog-bindings.sh
       - infra/operations/test_catalog_bindings.py
+      - infra/operations/queue-preview-catalog-bindings.sh
+      - infra/operations/catalog-bindings-request.json
       - .github/workflows/preview-catalog-bindings.yml
       - .github/operations/preview-commands.sh
   workflow_dispatch:
