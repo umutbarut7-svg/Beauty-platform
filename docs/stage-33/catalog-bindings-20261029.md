@@ -44,7 +44,7 @@ HTTP upload, source metadata removal, temporary-file cleanup and source retentio
 Its report has no server errors. This simulator result does not replace a physical
 device test.
 
-The prepared server operation has 18 offline tests, including failure recovery,
+The prepared server operation has 19 offline tests, including failure recovery,
 replay prevention, Compose/image/environment drift, writable-layer drift, offline
 build isolation, and rejection of the old catalog projection. They passed locally.
 The real host candidate build and post-publication checks have not run.

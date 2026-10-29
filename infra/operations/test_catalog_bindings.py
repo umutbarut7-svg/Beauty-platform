@@ -1,9 +1,11 @@
 """Offline failure and rollback tests; never connects to Docker, AWS or a DB."""
 import contextlib
 import copy
+import hashlib
 import io
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -196,6 +198,21 @@ class CatalogPublicationTests(unittest.TestCase):
             )
             result = subprocess.run(['node', '-e', probe], capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, expected, result.stderr)
+
+
+class ExecutionQueueTests(unittest.TestCase):
+    def test_queue_is_bounded_and_pinned_to_the_reviewed_helper(self):
+        root = SCRIPT.parents[2]
+        queue = (root / '.github/operations/preview-commands.sh').read_text()
+        self.assertLess(len(queue), 12000)
+        self.assertRegex(queue, r"REV = '[0-9a-f]{40}'")
+        digest = re.search(r"EXPECTED = '([0-9a-f]{64})'", queue).group(1)
+        self.assertEqual(digest, hashlib.sha256(SCRIPT.read_bytes()).hexdigest())
+        self.assertIn('response.read(20001)', queue)
+        self.assertIn('hashlib.sha256(script).hexdigest() != EXPECTED', queue)
+        self.assertIn("https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/", queue)
+        request = json.loads((root / '.github/operations/preview-request.json').read_text())
+        self.assertEqual(request, {'request_id': 'orzell-catalog-bindings-20261029', 'mode': 'approved-maintenance'})
 
 
 class CandidateBuildTests(unittest.TestCase):
