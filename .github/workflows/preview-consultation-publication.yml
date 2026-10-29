@@ -11,7 +11,7 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -20,3 +20,34 @@ jobs:
         run: |
           bash -n infra/operations/publish-preview-consultation-recovery.sh
           python3 -m unittest discover -s infra/operations -p test_consultation_publication.py -v
+      - name: Check out the exact fully tested application for emitter comparison
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 9112386fc2c029cd8a4977be1f8e467f2dab5694
+          path: emitter-comparison
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Compare isolated emission to the full reviewed Nest build
+        run: |
+          pnpm --dir emitter-comparison install --frozen-lockfile
+          pnpm --dir emitter-comparison --filter @beauty-platform/types build
+          pnpm --dir emitter-comparison --filter @beauty-platform/api build
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),assert=require('node:assert/strict');
+          const root=path.resolve('emitter-comparison');
+          const script=fs.readFileSync('infra/operations/publish-preview-consultation-recovery.sh','utf8');
+          const emitter=script.split('    emitter = r"""\n')[1]?.split('\n"""')[0];
+          assert(emitter,'Expected exactly the reviewed isolated emitter');
+          const files=['visual.service','visual.controller'].map(n=>path.join(root,'apps/api/dist/mvp',n+'.js'));
+          const before=files.map(f=>fs.readFileSync(f));
+          const emitted=cp.spawnSync(process.execPath,['-e',emitter.replaceAll('/repo',root)],{encoding:'utf8',timeout:60000,env:{...process.env,NODE_OPTIONS:'--max-old-space-size=256'}});
+          assert.equal(emitted.status,0,'Isolated emitter failed');
+          files.forEach((f,i)=>assert.deepEqual(fs.readFileSync(f),before[i],'Isolated output differs from full Nest build'));
+          console.log('Both isolated modules exactly match the full reviewed Nest build: PASS');
+          NODE
