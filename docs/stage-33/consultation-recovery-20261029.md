@@ -55,10 +55,24 @@ and existing internal-group access verification
 [40935043013](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40935043013)
 both passed; Apple reported `VALID` and `IN_BETA_TESTING`.
 
-The remaining first owner action is TestFlight update to 1081, then
-Keşfet → Fotoğraflı danışmanlık → Aktif danışmanlıklarımı yükle → open an existing
-consultation. This read-only action needs no new paid analysis. An empty list
-must be assessed before proposing a paid retry. Saved-plan and recommendation
-quality on a physical phone, result/satisfaction/passport physical acceptance,
-Android physical acceptance and full Stage 33 remain open. The completed
-booking/approval/cancellation scenario is recorded in PR #54 and is not reopened.
+## Physical iPhone recovery acceptance, 29 October 2026
+
+The owner supplied physical-phone screenshots at 21:58 and 21:59 Istanbul time
+after the guided TestFlight update. The active-consultation list displayed three
+existing entries. Opening the first entry displayed
+`Kaydedilmiş danışmanlık açıldı.`, `Danışmanlık durumu: Plan hazır`, the restored
+analysis text, five recommendation steps and the plan-to-professional search
+button. The owner confirmed the opening action. PASS: listing existing
+consultations and restoring one saved plan on the physical iPhone.
+
+The screenshots do not display the installed build number and do not establish
+accuracy against the source photo, professional recommendation quality,
+plan-to-matching, a new photo-picker/upload journey or result/satisfaction/passport
+acceptance. No additional paid analysis or matching action is requested for this
+recovery check.
+
+Next physical step: open Randevular and identify a suitable completed test
+appointment for result → satisfaction → Beauty Passport acceptance. Inspect the
+actual list before creating or completing another appointment. Plan-to-matching
+quality and Android physical acceptance remain open; full Stage 33 is not PASS.
+Existing booking/approval/cancellation acceptance in PR #54 is not reopened.
