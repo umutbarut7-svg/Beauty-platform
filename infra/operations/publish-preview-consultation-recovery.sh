@@ -5,7 +5,8 @@ python3 - <<'PY'
 import copy, fcntl, hashlib, json, pathlib, re, subprocess, time, urllib.request, urllib.error
 
 ROOT = pathlib.Path('/opt/epifiz/operations')
-WORK = ROOT / 'consultation-recovery-20261029'
+PREVIOUS_WORK = ROOT / 'consultation-recovery-20261029'
+WORK = ROOT / 'consultation-recovery-20261029-retry-1'
 CATALOG_RESULT = ROOT / 'catalog-bindings-20261029/result.json'
 ORIGINAL_IMAGE = 'sha256:2b21a3c1dfa5f60f07cf04a1d1e741396f40b8ff7a86a79c9e74831810ce8f64'
 IMAGE = None
@@ -158,14 +159,45 @@ def build(original):
     for stem, hashes in SOURCES.items():
         download(BASE_REF, stem, hashes['baseline'], WORK / 'baseline' / (stem + '.ts'))
         download(CANDIDATE_REF, stem, hashes['candidate'], WORK / 'candidate' / (stem + '.ts'))
-    name = 'orzell-consultation-compiler-20261029'
-    run(['docker', 'create', '--name', name, '--user', '0:0', '--network', 'none', '--memory', '896m', '--cpus', '1', '-e', 'CI=1', '-e', 'NODE_OPTIONS=--max-old-space-size=640', '--entrypoint', 'sh', BUILDER, '-c', 'cd /repo && pnpm --filter @beauty-platform/api build'])
+    # The reviewed source already passed full type/build tests. Emit only the two
+    # isolated modules here, then prove byte equality against the live baseline.
+    # This avoids a full Nest workspace build on the small preview instance.
+    emitter = r"""
+const fs=require('node:fs'),path=require('node:path');
+const ts=require(require.resolve('typescript',{paths:['/repo/apps/api','/repo']}));
+const file='/repo/apps/api/tsconfig.build.json';
+const config=ts.readConfigFile(file,ts.sys.readFile);
+if(config.error) throw new Error('Compiler configuration unavailable');
+const parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,path.dirname(file),undefined,file);
+if(parsed.errors.length||parsed.options.isolatedModules!==true||parsed.options.module!==ts.ModuleKind.NodeNext) throw new Error('Reviewed isolated compiler configuration changed');
+const sources=['visual.service','visual.controller'].map(stem=>'/repo/apps/api/src/mvp/'+stem+'.ts');
+const program=ts.createProgram(sources,{...parsed.options,declaration:false,noEmitOnError:false});
+for(const source of sources){
+ const unit=program.getSourceFile(source);
+ if(!unit) throw new Error('Reviewed compiler input unavailable');
+ let wrote=false;
+ const emitted=program.emit(unit,(target,data)=>{
+  if(target.endsWith('.js')){
+   if(target!=='/repo/apps/api/dist/mvp/'+path.basename(source,'.ts')+'.js') throw new Error('Unexpected emitted module path');
+   fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,data);wrote=true;
+  }
+ });
+ if(!wrote||emitted.emitSkipped||emitted.diagnostics.some(d=>d.category===ts.DiagnosticCategory.Error)) throw new Error('Reviewed module emission failed');
+}
+console.log('Two program modules emitted; baseline byte comparison is still required');
+"""
+    emitter_path = WORK / 'emit.cjs'
+    emitter_path.write_text(emitter)
+    name = 'orzell-consultation-compiler-20261029-retry-1'
+    run(['docker', 'create', '--name', name, '--user', '0:0', '--network', 'none', '--memory', '640m', '--cpus', '1', '-e', 'CI=1', '-e', 'NODE_OPTIONS=--max-old-space-size=512', '--entrypoint', 'node', BUILDER, '/tmp/orzell-emit.cjs'])
     try:
+        run(['docker', 'cp', str(emitter_path), name + ':/tmp/orzell-emit.cjs'])
         for phase in ['baseline', 'candidate']:
+            print('Offline two-module emission: ' + phase, flush=True)
             for stem in SOURCES:
                 run(['docker', 'cp', str(WORK / phase / (stem + '.ts')), name + ':/repo/apps/api/src/mvp/' + stem + '.ts'])
-            run(['docker', 'start', '-a', name], timeout=240)
-            require(inspect(name)['State'].get('ExitCode') == 0, 'Offline API compilation failed')
+            run(['docker', 'start', '-a', name], timeout=90)
+            require(inspect(name)['State'].get('ExitCode') == 0, 'Offline module emission failed')
             for stem in SOURCES:
                 if phase == 'baseline':
                     baseline = WORK / 'baseline' / (stem + '.js')
@@ -175,6 +207,7 @@ def build(original):
                     require(baseline.read_bytes() == live.read_bytes(), 'Compiled baseline differs from current API')
                 else:
                     run(['docker', 'cp', name + ':/repo/apps/api/dist/mvp/' + stem + '.js', str(WORK / 'compiled' / (stem + '.js'))])
+            print('Offline two-module emission accepted: ' + phase, flush=True)
     finally:
         run(['docker', 'rm', '-f', name])
     run(['docker', 'tag', IMAGE, 'orzell-api:consultation-base-20261029'])
@@ -270,12 +303,36 @@ def apply():
         raise Stop('Publication stopped; rollback ' + ('PASS' if ok else 'NEEDS REVIEW')) from None
 
 
+def inspect_failed_preparation():
+    require(not PREVIOUS_WORK.is_symlink() and PREVIOUS_WORK.is_dir(), 'Prior preparation directory unavailable')
+    require(not (PREVIOUS_WORK / 'result.json').exists(), 'Prior publication state requires review')
+    require({p.name for p in PREVIOUS_WORK.iterdir()} == {'baseline', 'candidate', 'compiled', 'live'}, 'Prior preparation inventory requires review')
+    for phase in ['baseline', 'candidate', 'compiled', 'live']:
+        folder = PREVIOUS_WORK / phase
+        require(not folder.is_symlink() and folder.is_dir(), 'Prior preparation path requires review')
+        if phase in ['compiled', 'live']:
+            require(not list(folder.iterdir()), 'Prior preparation passed first compiler stage; review required')
+        else:
+            require({p.name for p in folder.iterdir()} == {stem + '.ts' for stem in SOURCES}, 'Prior pinned source inventory changed')
+            for stem, hashes in SOURCES.items():
+                source = folder / (stem + '.ts')
+                require(not source.is_symlink(), 'Prior source cannot be a symlink')
+                data = source.read_bytes()
+                require(len(data) <= 64000 and hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == hashes[phase], 'Prior pinned source digest mismatch')
+    require(not run(['docker', 'ps', '-aq', '--filter', 'name=^/orzell-consultation-compiler-20261029$']).strip(), 'Prior compiler still exists; no retry')
+    require(inspect('beauty-preview-api-1')['Image'] == IMAGE, 'Prior API image changed; no retry')
+    ready()
+    print('Prior attempt stopped before first emitted module; original healthy API retained: PASS', flush=True)
+
+
 def main():
     global IMAGE
     ROOT.mkdir(exist_ok=True)
     with open(ROOT / 'consultation-recovery-20261029.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         IMAGE = load_baseline()
+        if not (WORK / 'result.json').exists():
+            inspect_failed_preparation()
         apply()
 
 try:

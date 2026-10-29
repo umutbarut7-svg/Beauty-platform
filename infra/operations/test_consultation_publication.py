@@ -203,7 +203,7 @@ class ExecutionQueueTests(unittest.TestCase):
         self.assertIn('response.read(24001)', queue)
         self.assertIn('hashlib.sha256(script).hexdigest() != EXPECTED', queue)
         self.assertEqual(json.loads((root / '.github/operations/preview-request.json').read_text()), {
-            'request_id': 'orzell-consultation-recovery-20261029',
+            'request_id': 'orzell-consultation-recovery-20261029-retry-1',
             'mode': 'approved-maintenance',
         })
 
@@ -274,9 +274,88 @@ class PinnedSourceTests(unittest.TestCase):
             self.ns['verify_module']({'unexpected-module': '0' * 64})
 
 
+class InterruptedPreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.ns = {}
+        exec(compile(DEFINITIONS, str(SCRIPT), 'exec'), self.ns)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.previous = pathlib.Path(self.temp.name) / 'previous'
+        self.previous.mkdir()
+        self.ns['PREVIOUS_WORK'] = self.previous
+        self.ns['IMAGE'] = 'synthetic-original-image'
+        data = b'// synthetic source\n'
+        digest = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+        self.ns['SOURCES'] = {'visual.service': {'baseline': digest, 'candidate': digest}}
+        for phase in ['baseline', 'candidate', 'compiled', 'live']:
+            folder = self.previous / phase
+            folder.mkdir()
+            if phase in ['baseline', 'candidate']:
+                (folder / 'visual.service.ts').write_bytes(data)
+        self.ns['run'] = lambda args: ''
+        self.ns['inspect'] = lambda name: {'Image': self.ns['IMAGE']}
+        self.health = []
+        self.ns['ready'] = lambda: self.health.append(True)
+
+    def invoke(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.ns['inspect_failed_preparation']()
+
+    def test_exact_interrupted_preparation_and_healthy_original_allow_retry(self):
+        self.invoke()
+        self.assertEqual(self.health, [True])
+
+    def test_existing_publication_record_blocks_retry(self):
+        (self.previous / 'result.json').write_text('{}')
+        with self.assertRaisesRegex(self.ns['Stop'], 'publication state'):
+            self.invoke()
+
+    def test_emitted_baseline_blocks_retry(self):
+        (self.previous / 'live/visual.service.js').write_text('synthetic')
+        with self.assertRaisesRegex(self.ns['Stop'], 'first compiler stage'):
+            self.invoke()
+
+    def test_pinned_source_drift_blocks_retry(self):
+        (self.previous / 'baseline/visual.service.ts').write_text('changed')
+        with self.assertRaisesRegex(self.ns['Stop'], 'digest mismatch'):
+            self.invoke()
+
+    def test_unknown_preparation_file_blocks_retry(self):
+        (self.previous / 'unexpected').touch()
+        with self.assertRaisesRegex(self.ns['Stop'], 'inventory'):
+            self.invoke()
+
+    def test_symlinked_source_blocks_retry(self):
+        source = self.previous / 'candidate/visual.service.ts'
+        source.unlink()
+        source.symlink_to(self.previous / 'baseline/visual.service.ts')
+        with self.assertRaisesRegex(self.ns['Stop'], 'symlink'):
+            self.invoke()
+
+    def test_running_or_leftover_compiler_blocks_retry(self):
+        self.ns['run'] = lambda args: 'synthetic-container-id'
+        with self.assertRaisesRegex(self.ns['Stop'], 'compiler still exists'):
+            self.invoke()
+
+    def test_changed_api_image_blocks_retry(self):
+        self.ns['inspect'] = lambda name: {'Image': 'changed'}
+        with self.assertRaisesRegex(self.ns['Stop'], 'API image changed'):
+            self.invoke()
+
+    def test_unhealthy_original_blocks_retry(self):
+        def unhealthy():
+            raise self.ns['Stop']('synthetic unhealthy original')
+        self.ns['ready'] = unhealthy
+        with self.assertRaisesRegex(self.ns['Stop'], 'unhealthy original'):
+            self.invoke()
+
+    def test_emitter_is_bounded_offline_and_baseline_comparison_retained(self):
+        self.assertIn('ts.createProgram(', SOURCE)
+        self.assertIn("parsed.options.isolatedModules!==true", SOURCE)
+        self.assertIn("baseline.read_bytes() == live.read_bytes()", SOURCE)
+        self.assertIn("['docker', 'start', '-a', name], timeout=90", SOURCE)
+        self.assertNotIn('pnpm --filter @beauty-platform/api build', SOURCE)
+
+
 if __name__ == '__main__':
     unittest.main()
-
-
-
-

@@ -39,3 +39,26 @@ control-plane proposal must pass its own safety/general CI before execution.
 The previous catalog queue and request are preserved under infra/operations.
 Its existing tests now read those stable files, retaining every original
 assertion while the current execution queue advances to this new operation.
+
+## Bounded preparation retry
+
+Operations run 40854564408 / SSM ede37ad1-91ee-4eff-a2aa-a28684bb5bcc
+ended Failed at 10:08 UTC with the command timeout guard. The elapsed time points
+to the full offline Nest build's 240-second limit; the helper suppressed private
+command output. This is not a successful publication.
+
+The retry requires the first work directory to contain only the four expected
+preparation directories, exact original pinned source files and no result record,
+compiled modules or copied live baseline. It also requires the old compiler to
+be absent and the original catalog-corrected API image to remain healthy. Any
+other state stops the retry for review. The original directory is preserved.
+
+Preparation now emits only the two already typechecked isolated modules using a TypeScript program with resolved decorator types and
+the existing compiler and reviewed configuration. CI compares both outputs to a
+full Nest build of the exact reviewed application. Live preparation independently
+requires the original emitted modules to match current API bytes before building
+or publishing the candidate. Network isolation, immutable inputs, authentication,
+image-only Compose delta, rollback, quotas, keys and unrelated-service guards
+remain. Each isolated emission has a 90-second timeout and 640 MB memory limit.
+A separate retry work directory retains no-replay behavior. No paid AI request
+or database write is part of this operation.
