@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import pathlib
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -189,6 +190,22 @@ class CatalogPublicationTests(unittest.TestCase):
             self.invoke()
         self.assertEqual(self.commands, [])
         self.assertEqual(self.containers, self.initial)
+
+
+class ExecutionQueueTests(unittest.TestCase):
+    def test_queue_is_bounded_and_hash_pinned(self):
+        root = SCRIPT.parents[2]
+        queue = (root / '.github/operations/preview-commands.sh').read_text()
+        self.assertLess(len(queue), 12000)
+        self.assertRegex(queue, r"REV = '[0-9a-f]{40}'")
+        digest = re.search(r"EXPECTED = '([0-9a-f]{64})'", queue).group(1)
+        self.assertEqual(digest, hashlib.sha256(SCRIPT.read_bytes()).hexdigest())
+        self.assertIn('response.read(24001)', queue)
+        self.assertIn('hashlib.sha256(script).hexdigest() != EXPECTED', queue)
+        self.assertEqual(json.loads((root / '.github/operations/preview-request.json').read_text()), {
+            'request_id': 'orzell-consultation-recovery-20261029',
+            'mode': 'approved-maintenance',
+        })
 
 
 class PinnedSourceTests(unittest.TestCase):
