@@ -1,0 +1,47 @@
+name: Controlled single matching test
+on:
+  pull_request:
+    paths:
+      - infra/operations/controlled-matching-test.py
+      - infra/operations/test_controlled_matching.py
+      - .github/workflows/controlled-matching-test.yml
+      - .github/workflows/controlled-matching-job.yml
+      - .github/operations/controlled-matching-request.json
+  push:
+    branches: [main]
+    paths: [.github/operations/controlled-matching-request.json]
+permissions:
+  contents: read
+concurrency:
+  group: controlled-matching-20261029-second-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  safety:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify one-attempt bounds and private result projection offline
+        run: |
+          python3 -m unittest discover -s infra/operations -p test_matching_window.py -v
+          python3 -m unittest discover -s infra/operations -p test_controlled_matching.py -v
+  open:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: ./.github/workflows/controlled-matching-job.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      mode: open
+  observe:
+    needs: open
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: ./.github/workflows/controlled-matching-job.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      mode: observe

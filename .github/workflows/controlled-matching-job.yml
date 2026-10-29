@@ -1,0 +1,76 @@
+name: Execute the reviewed controlled matching step
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  operation:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact approved main source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Obtain the existing temporary preview operations identity
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: controlled-match-${{ inputs.mode }}-${{ github.run_id }}
+          role-duration-seconds: 1800
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Execute only the checked-in approved step
+        env:
+          AWS_PAGER: ""
+          MATCHING_MODE: ${{ inputs.mode }}
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess,time
+          mode=os.environ['MATCHING_MODE']
+          if mode not in {'open','observe'}:
+              raise SystemExit('Unsupported operation step')
+          request=json.loads(pathlib.Path('.github/operations/controlled-matching-request.json').read_text())
+          if request!={'request_id':'orzell-controlled-matching-20261029-2','mode':'one-approved-matching'}:
+              raise SystemExit('Unexpected owner-approved request')
+          source=pathlib.Path('infra/operations/controlled-matching-test.py').read_text()
+          if len(source)>16000:
+              raise SystemExit('Operation code exceeds its bound')
+          compile(source,'controlled-matching-test.py','exec')
+          def aws(*args):
+              result=subprocess.run(['aws',*args,'--region','eu-north-1','--output','json','--no-cli-pager','--cli-connect-timeout','5','--cli-read-timeout','20'],capture_output=True,text=True,timeout=35)
+              if result.returncode:
+                  raise SystemExit('AWS operation failed; private diagnostics withheld')
+              return json.loads(result.stdout)
+          identity=aws('sts','get-caller-identity')
+          if identity.get('Account')!='926642724499' or not identity.get('Arn','').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected account or operations role')
+          command="python3 - "+mode+" <<'CONTROLLED_MATCHING_CODE'\n"+source+"\nCONTROLLED_MATCHING_CODE"
+          sent=aws('ssm','send-command','--instance-ids','i-09fe7fdb5f10d63b6','--document-name','AWS-RunShellScript','--parameters',json.dumps({'commands':[command],'executionTimeout':['900']}),'--comment','Approved controlled matching '+mode+' '+os.environ['GITHUB_RUN_ID'])
+          command_id=sent['Command']['CommandId']
+          print('SSM command:',command_id,flush=True)
+          for _ in range(90):
+              time.sleep(10)
+              result=aws('ssm','get-command-invocation','--command-id',command_id,'--instance-id','i-09fe7fdb5f10d63b6')
+              if result['Status'] not in {'Pending','InProgress','Delayed'}:
+                  break
+          else:
+              raise SystemExit('Monitoring deadline; do not resend the opportunity')
+          print('Status:',result['Status'])
+          print(result.get('StandardOutputContent',''))
+          if result.get('StandardErrorContent'):
+              print('Private command diagnostics withheld')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
+              summary.write('## Controlled matching '+mode+'\n\nStatus: **'+result['Status']+'**\n\nNo provider call is made by this operational step.\n')
+          if result['Status']!='Success':
+              raise SystemExit(1)
+          PY
