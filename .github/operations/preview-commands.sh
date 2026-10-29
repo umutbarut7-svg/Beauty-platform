@@ -2,8 +2,8 @@
 set -euo pipefail
 python3 - <<'PY'
 import hashlib, subprocess, urllib.request
-REV = '195f91e1a9969590dccd7fcd5cdd7188ce39c591'
-EXPECTED = '2c48f3acae4b01a8a7d6d6a10dc5984044a74f5ce0dbf8cdf6d735acc9566bcb'
+REV = 'bad352f6f2b6453cbb32a72293a54fe432155a0f'
+EXPECTED = '208ec400cc4f868cc444368a35cf55cb9c894dd50c9742c05f04d143a9312f44'
 try:
     url = 'https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/' + REV + '/infra/operations/publish-preview-consultation-recovery.sh'
     with urllib.request.urlopen(url, timeout=20) as response:
