@@ -89,3 +89,25 @@ Immediate owner action is TestFlight update to 1091 only. Do not ask for another
 potentially paid match under the previous one-attempt approval. A further live
 matching attempt would require a newly approved, strictly bounded opportunity
 using the corrected metadata-preservation helper and its own operation record.
+
+## Owner-reported request-limit wording and prepared next opportunity
+
+After the guided 1091 update, the owner reported “İstek sınırına ulaşıldı”.
+This is physical-user feedback for the corrected 429 wording. It does not prove
+a successful provider match or a new successful embedding. The original
+runtime allowance remains closed; no operation or provider request was started
+while preparing the next step.
+
+[PR #68](https://github.com/umutbarut7-svg/Beauty-platform/pull/68), head
+`1261187377d4bb035b0ee18ee2a0ef7b17d3b217`, prepares a separate one-attempt
+opportunity with current-counter preflight, unchanged global cap 20, the pinned
+#67 metadata-preserving helper, a distinct record/timer, automatic restoration
+and automatic read-only observation. Its dedicated PR CI 40945228006 passed all
+15 preservation/opportunity tests; full repository CI 40945227628 was still
+running at this checkpoint. Privileged jobs are skipped on PRs.
+
+The PR is unmerged and the new opportunity has not opened. A new explicit owner
+approval must cover merging #68 (which starts the checked-in main-only operation),
+one new potentially paid app matching request and its automatic read-only result
+inspection. Do not consume another potentially paid request under the previous
+one-attempt approval.
