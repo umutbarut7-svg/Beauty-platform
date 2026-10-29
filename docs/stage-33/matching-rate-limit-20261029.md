@@ -62,3 +62,30 @@ TestFlight delivery is running from `602e740bc3551d3c0b3d2150477a1bfe98c2f3ee`
 in [40941963152](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40941963152).
 Its expected build is 1091; Apple processing and internal access are not yet
 claimed complete.
+
+## Final internal delivery and acceptance boundary
+
+ORZELL 1.0.0 (1091) is delivered to the existing owner internal TestFlight group:
+
+- [Signed upload 40941963152](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40941963152) passed. Its 30 mobile release tests passed; Apple accepted the binary at 22:47 Istanbul time and temporary signing credentials were removed.
+- [Apple processing and internal access 40943282462](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40943282462) passed. Build 1091 is VALID and IN_BETA_TESTING in the existing ORZELL iç test group at 22:49.
+- No dependency/lockfile/network/encryption inventory change, external tester, public release or App Review submission was introduced.
+
+[PR #67](https://github.com/umutbarut7-svg/Beauty-platform/pull/67) also merged to
+main as `febec24635793d94dc808fcaaf7a527f778d5751` after dedicated safety
+40942646971 and full repository validation 40942647155 passed. This preserves
+bounded response metadata before future quota restoration. It is source-only:
+no operation was started, no prior allowance reopened and no provider called.
+
+The read-only follow-up approved in #66 is complete. The original quota was
+confirmed restored. No new paid retry was made. The one permitted matching
+attempt's result/provider execution is still not established because the
+previous container's HTTP log was not preserved. Existing consultation,
+result/satisfaction/passport display acceptance remains recorded; live matching
+quality, other device/provider/policy conditions, the baseline historical
+publication-queue assertion and full Stage 33 remain open.
+
+Immediate owner action is TestFlight update to 1091 only. Do not ask for another
+potentially paid match under the previous one-attempt approval. A further live
+matching attempt would require a newly approved, strictly bounded opportunity
+using the corrected metadata-preservation helper and its own operation record.
