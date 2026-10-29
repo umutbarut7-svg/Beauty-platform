@@ -46,6 +46,11 @@ const environment = {
   JWT_REFRESH_SECRET: "isolated-stage33-test-refresh-not-production",
   CORS_ORIGINS: "http://localhost:8081,http://localhost:3000",
   RATE_LIMIT_DEFAULT: "10000",
+  MVP_PHOTO_POLICY_REVIEWED: "true",
+  MVP_PHOTO_POLICY_VERSION: "synthetic-session-recovery-v1",
+  MVP_PHOTO_NOTICE: "Synthetic recovery fixture, not a product notice",
+  MVP_PHOTO_RETENTION_HOURS: "24",
+  MVP_PHOTO_AUDIT_RETENTION_DAYS: "90",
   MVP_VERIFICATION_POLICY_REVIEWED: "true",
   MVP_VERIFICATION_POLICY_VERSION: "synthetic-ci-verification-v1",
   MVP_VERIFICATION_NOTICE:
@@ -277,6 +282,107 @@ afterAll(async () => {
 });
 
 describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
+  it("recovers only the authenticated owner's active consultations without provider calls or content mutation", async () => {
+    const endpoint = "/mvp/v1/visual/sessions";
+    expect((await request(endpoint, "")).status).toBe(401);
+    const stranger = await db.user.findUniqueOrThrow({
+      where: { email: `other-${key}@example.test` },
+    });
+    const rows: Array<{ id: string; photoId: string; consentId: string }> = [];
+    const future = new Date(Date.now() + 3600000);
+    const expired = new Date(0);
+    async function fixture(ownerId: string, options: {
+      analysisExpires?: Date;
+      photoExpires?: Date;
+      consentExpires?: Date;
+      photoRevoked?: boolean;
+      photoDeleted?: boolean;
+      consentRevoked?: boolean;
+      policyVersion?: string;
+      status?: string;
+    } = {}) {
+      const consent = await db.mvpPhotoConsent.create({
+        data: {
+          ownerId,
+          policyVersion: options.policyVersion ?? "synthetic-session-recovery-v1",
+          noticeHash: "0".repeat(64),
+          expiresAt: options.consentExpires ?? future,
+          auditExpiresAt: new Date(Date.now() + 90 * 86400000),
+          revokedAt: options.consentRevoked ? new Date() : null,
+        },
+      });
+      const photo = await db.mvpPhoto.create({
+        data: {
+          ownerId, consentId: consent.id,
+          objectKey: `synthetic-no-upload/${randomUUID()}`,
+          mime: "image/jpeg", bytes: 100,
+          uploadExpiresAt: future,
+          expiresAt: options.photoExpires ?? future,
+          revokedAt: options.photoRevoked ? new Date() : null,
+          deletedAt: options.photoDeleted ? new Date() : null,
+        },
+      });
+      const row = await db.mvpPhotoAnalysis.create({
+        data: {
+          ownerId, photoId: photo.id, intent: "Synthetic saved intent",
+          target: "Synthetic saved target", answers: [],
+          status: options.status ?? "PLAN",
+          attempts: 1,
+          output: { status: "PLAN", observations: [], questions: [], steps: ["Synthetic saved plan"], searchQuery: "Synthetic care", limitations: [] },
+          expiresAt: options.analysisExpires ?? future,
+        },
+      });
+      rows.push({ id: row.id, photoId: photo.id, consentId: consent.id });
+      return rows[rows.length - 1]!;
+    }
+    try {
+      const own = await fixture(customerId);
+      const foreign = await fixture(stranger.id);
+      for (const options of [
+        { analysisExpires: expired }, { photoExpires: expired },
+        { consentExpires: expired }, { photoRevoked: true },
+        { photoDeleted: true }, { consentRevoked: true },
+        { policyVersion: "superseded-policy" }, { status: "REVOKED" },
+        { status: "EXPIRED" },
+      ]) await fixture(customerId, options);
+      const eventCount = await db.mvpPrivacyEvent.count({ where: { ownerId: customerId } });
+      const recovered = await request(endpoint, customerToken);
+      expect(recovered.status).toBe(200);
+      expect(recovered.body.items).toEqual([{
+        id: own.id, status: "PLAN", intent: "Synthetic saved intent",
+        target: "Synthetic saved target", consentId: own.consentId,
+        expiresAt: future.toISOString(), createdAt: expect.any(String),
+      }]);
+      expect(JSON.stringify(recovered.body)).not.toMatch(/objectKey|noticeHash|ownerId|photoId|output|answers/);
+      expect((await request(endpoint + `?ownerId=${stranger.id}`, customerToken)).body).toEqual(recovered.body);
+      expect((await request(endpoint, strangerToken)).body.items.map((r: { id: string }) => r.id)).toEqual([foreign.id]);
+      expect((await request(endpoint + "/" + own.id, strangerToken)).status).toBe(404);
+      const restored = await request(endpoint + "/" + own.id, customerToken);
+      expect(restored.status).toBe(200);
+      expect(restored.body).toMatchObject({ status: "PLAN", attempts: 1, output: { steps: ["Synthetic saved plan"] } });
+      const cache = await fetch(base + endpoint, { headers: { authorization: `Bearer ${customerToken}` } });
+      expect(cache.headers.get("cache-control")).toBe("no-store");
+      await cache.arrayBuffer();
+      expect(await db.mvpPrivacyEvent.count({ where: { ownerId: customerId } })).toBe(eventCount);
+      expect(await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: own.id } })).toMatchObject({ status: "PLAN", attempts: 1 });
+      const additional = Array.from({ length: 21 }, (_, index) => ({
+        id: randomUUID(), ownerId: customerId, photoId: own.photoId,
+        intent: "Synthetic bounded history", target: "Synthetic history",
+        answers: [], status: "CREATED", expiresAt: future,
+        createdAt: new Date(Date.now() + 1000 + index),
+      }));
+      await db.mvpPhotoAnalysis.createMany({ data: additional });
+      rows.push(...additional.map(row => ({ id: row.id, photoId: own.photoId, consentId: own.consentId })));
+      expect((await request(endpoint, customerToken)).body.items.map((row: { id: string }) => row.id)).toEqual(additional.map(row => row.id).reverse().slice(0, 20));
+      expect((await request(`/mvp/v1/photos/consents/${own.consentId}/withdraw`, customerToken, "POST")).status).toBe(201);
+      expect((await request(endpoint, customerToken)).body.items).toEqual([]);
+      expect((await request(endpoint + "/" + own.id, customerToken)).status).toBe(404);
+    } finally {
+      await db.mvpPhotoAnalysis.deleteMany({ where: { id: { in: rows.map(r => r.id) } } });
+      await db.mvpPhoto.deleteMany({ where: { id: { in: rows.map(r => r.photoId) } } });
+      await db.mvpPhotoConsent.deleteMany({ where: { id: { in: rows.map(r => r.consentId) } } });
+    }
+  }, 30000);
   it("keeps owner self-booking explicit and rejects customer impersonation", async () => {
     const date = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
     const path = `/businesses/${businessId}/appointments`;

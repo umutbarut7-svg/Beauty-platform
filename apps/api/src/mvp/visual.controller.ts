@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Req,
@@ -82,6 +83,11 @@ export class VisualController {
     @Body() dto: VisualSessionDto,
   ) {
     return this.visual.create(user, dto);
+  }
+  @Get("visual/sessions")
+  @Header("Cache-Control", "no-store")
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.visual.list(user);
   }
   @Get("visual/sessions/:sessionId") get(
     @CurrentUser() user: AuthenticatedUser,

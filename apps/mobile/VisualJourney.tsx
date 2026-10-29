@@ -13,6 +13,7 @@ import { PhotoPreparationError, prepareWebPhoto } from "./photo-upload";
 import type {
   MvpApiClient,
   MvpVisualSession,
+  MvpVisualSessionSummary,
   PhotoCapability,
   SemanticMatches,
 } from "@beauty-platform/types";
@@ -25,11 +26,13 @@ export function VisualJourney({
   run,
   report,
   choose,
+  restoreContext,
 }: {
   api: MvpApiClient;
   intent: string;
   target: string;
   busy: boolean;
+  restoreContext: (intent: string, target: string) => void;
   run: (action: () => Promise<void>) => Promise<void>;
   report: (error: unknown) => void;
   choose: (business: {
@@ -43,6 +46,7 @@ export function VisualJourney({
   const [consentId, setConsentId] = useState("");
   const [session, setSession] = useState<MvpVisualSession | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
+  const [consultations, setConsultations] = useState<MvpVisualSessionSummary[] | null>(null);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
   const [matchingState, setMatchingState] = useState<
     "checking" | "available" | "unavailable" | "error"
@@ -55,6 +59,9 @@ export function VisualJourney({
     Array<{ id: string; expiresAt: string }>
   >([]);
   const generation = useRef(0);
+  useEffect(() => () => {
+    generation.current++;
+  }, []);
   const reportCapabilityError = useEffectEvent((error: unknown) => {
     if (error instanceof ApiError && error.status === 401) report(error);
   });
@@ -127,6 +134,37 @@ export function VisualJourney({
         setCapability(value);
         setAccepted(false);
       })}
+      {button("Aktif danışmanlıklarımı yükle", async () => {
+        const epoch = generation.current;
+        const value = await api.request<{ items: MvpVisualSessionSummary[] }>(
+          "/mvp/v1/visual/sessions",
+        );
+        if (epoch === generation.current) setConsultations(value.items);
+      })}
+      {consultations?.length === 0 && (
+        <Text>Aktif danışmanlığın bulunmuyor. Süresi dolan veya izni geri çekilen danışmanlıklar gösterilmez.</Text>
+      )}
+      {consultations?.map((item, index) => (
+        <View key={item.id}>
+          <Text>{item.intent} · {item.target}</Text>
+          <Text>Son kullanım: {new Date(item.expiresAt).toLocaleString("tr-TR")}</Text>
+          {button(`${index + 1}. danışmanlığı aç`, async () => {
+            const epoch = ++generation.current;
+            const restored = await api.request<MvpVisualSession>(
+              `/mvp/v1/visual/sessions/${item.id}`,
+            );
+            if (epoch !== generation.current) return;
+            restoreContext(item.intent, item.target);
+            setConsentId(item.consentId);
+            setSession(restored);
+            setAnswers([]);
+            setMatches(null);
+            setAccepted(false);
+            setUploadMessage("");
+            setMessage("Kaydedilmiş danışmanlık açıldı.");
+          })}
+        </View>
+      ))}
       {message ? <Text accessibilityRole="alert">{message}</Text> : null}
       {button("Aktif fotoğraf izinlerimi yükle", async () => {
         setActiveConsents(await api.request("/mvp/v1/photos/consents"));
@@ -143,6 +181,9 @@ export function VisualJourney({
               await api.request(
                 `/mvp/v1/photos/consents/${consent.id}/withdraw`,
                 "POST",
+              );
+              setConsultations((current) =>
+                current?.filter((item) => item.consentId !== consent.id) ?? null,
               );
               setActiveConsents((current) =>
                 current.filter((c) => c.id !== consent.id),
@@ -222,6 +263,7 @@ export function VisualJourney({
               }
               if (epoch !== generation.current) return;
               setSession(null);
+              setConsultations(null);
               setMatches(null);
               setAnswers([]);
               if (consentId)
@@ -289,6 +331,9 @@ export function VisualJourney({
           style={styles.button}
           onPress={() => {
             const id = consentId;
+            setConsultations((current) =>
+              current?.filter((item) => item.consentId !== id) ?? null,
+            );
             generation.current++;
             setUploadMessage("");
             setSession(null);

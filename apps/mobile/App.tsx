@@ -1008,6 +1008,10 @@ export default function App() {
                     run={run}
                     report={report}
                     choose={choose}
+                    restoreContext={(restoredIntent, restoredTarget) => {
+                      setIntent(restoredIntent);
+                      setTarget(restoredTarget);
+                    }}
                   />
                 </View>
               </>

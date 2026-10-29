@@ -28,7 +28,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @beauty-platform/types build
       - name: Check photo source formatting
-        run: pnpm exec prettier --check apps/mobile/VisualJourney.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs
+        run: |
+          files="apps/mobile/VisualJourney.tsx apps/mobile/App.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs scripts/check-consultation-recovery.cjs apps/api/src/mvp/visual.service.ts apps/api/src/mvp/visual.controller.ts apps/api/integration/mvp.e2e.test.ts packages/types/src/mvp-visual.ts"
+          if ! pnpm exec prettier --check $files; then
+            pnpm exec prettier --write $files
+            git diff --no-ext-diff -- $files
+            exit 1
+          fi
       - run: pnpm --filter @beauty-platform/mobile typecheck
       - run: pnpm exec vitest run apps/mobile/src packages/types/src/mvp-client.test.ts
       - run: pnpm --filter @beauty-platform/mobile exec expo export --platform web --output-dir dist --max-workers 2
@@ -39,6 +45,8 @@ jobs:
         run: node scripts/check-photo-picker-web.cjs apps/mobile/dist /tmp/orzell-application-review
       - name: Check matching availability and preserve plans in Chromium and WebKit
         run: node scripts/check-matching-availability.cjs apps/mobile/dist /tmp/orzell-application-review
+      - name: Restore saved consultations without repeating provider work
+        run: node scripts/check-consultation-recovery.cjs apps/mobile/dist /tmp/orzell-application-review
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
