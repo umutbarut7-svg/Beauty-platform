@@ -128,6 +128,9 @@ export default function App() {
   const [selected, setSelected] = useState<MvpBooking | null>(null);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [result, setResult] = useState<MvpResult | null>(null);
+  const [resultRead, setResultRead] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [passport, setPassport] = useState<MvpResult[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [business, setBusiness] = useState<Business | null>(null);
@@ -159,6 +162,7 @@ export default function App() {
     setBookings([]);
     setSelected(null);
     setResult(null);
+    setResultRead("idle");
     setPassport([]);
     setBusinesses([]);
     setBusiness(null);
@@ -253,6 +257,8 @@ export default function App() {
     setNotice("");
     setSelected(null);
     setResult(null);
+    setResultRead("idle");
+    setSummary("");
     setCancelTarget(null);
     setScreen(next);
   }
@@ -377,6 +383,23 @@ export default function App() {
             )
           : [];
     setBookings(items);
+  }
+  async function loadResult(item: MvpBooking) {
+    setCancelTarget(null);
+    setSelected(item);
+    setSummary("");
+    setResult(null);
+    setResultRead("loading");
+    try {
+      const value = await api.request<{ result: MvpResult | null }>(
+        `/mvp/v1/businesses/${item.businessId}/appointments/${item.id}/result`,
+      );
+      setResult(value.result);
+      setResultRead("ready");
+    } catch (error) {
+      setResultRead("error");
+      throw error;
+    }
   }
   async function cancelSelectedAppointment() {
     if (
@@ -968,6 +991,8 @@ export default function App() {
                           setPendingSlot(null);
                           setSelected(created);
                           setResult(null);
+                          setResultRead("idle");
+                          setSummary("");
                           setScreen("bookings");
                           setNotice(
                             "Randevun kaydedildi. İşletmenin yanıtını Randevular ekranından takip edebilirsin.",
@@ -1083,6 +1108,8 @@ export default function App() {
                         setBookings([]);
                         setSelected(null);
                         setResult(null);
+                        setResultRead("idle");
+                        setSummary("");
                         setRevenue(null);
                       },
                       item.id !== business?.id,
@@ -1328,19 +1355,7 @@ export default function App() {
                       styles.card,
                       selected?.id === item.id && styles.choiceSelected,
                     ]}
-                    onPress={() =>
-                      void run(async () => {
-                        setCancelTarget(null);
-                        setSelected(item);
-                        setResult(null);
-                        const value = await api.request<{
-                          result: MvpResult | null;
-                        }>(
-                          `/mvp/v1/businesses/${item.businessId}/appointments/${item.id}/result`,
-                        );
-                        setResult(value.result);
-                      })
-                    }
+                    onPress={() => void run(() => loadResult(item))}
                   >
                     <Text style={styles.badge}>
                       {statusLabels[item.status] ?? "Durum bilgisi alınamadı"}
@@ -1360,6 +1375,19 @@ export default function App() {
                       {dateLabel(selected.startsAt)} ·{" "}
                       {statusLabels[selected.status]}
                     </Text>
+                    {resultRead === "loading" && (
+                      <Text style={styles.body}>Sonuç bilgisi yükleniyor.</Text>
+                    )}
+                    {resultRead === "error" && (
+                      <>
+                        <Text style={styles.body}>
+                          Sonuç bilgisi yüklenemedi. Tekrar yükleyin.
+                        </Text>
+                        {button("Sonuç bilgisini yeniden yükle", () =>
+                          loadResult(selected),
+                        )}
+                      </>
+                    )}
                     {mode === "customer" &&
                       ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(
                         selected.status,
@@ -1425,30 +1453,40 @@ export default function App() {
                             )
                           ),
                         )}
-                        {selected.status === "COMPLETED" && !result && (
-                          <>
-                            {input(
-                              "Yapılan işlemin sonucu",
-                              summary,
-                              setSummary,
-                            )}
-                            {button("Sonucu kaydet", async () => {
-                              setResult(
-                                await api.request<MvpResult>(
-                                  `${resultPath}/result`,
-                                  "POST",
-                                  {
-                                    summary,
-                                    idempotencyKey: key(
-                                      `${resultPath}:${summary}`,
-                                    ),
-                                  },
-                                ),
-                              );
-                              setNotice("Sonuç kaydedildi.");
-                            })}
-                          </>
-                        )}
+                        {selected.status === "COMPLETED" &&
+                          resultRead === "ready" &&
+                          !result && (
+                            <>
+                              {input(
+                                "Yapılan işlemin sonucu",
+                                summary,
+                                setSummary,
+                              )}
+                              {button("Sonucu kaydet", async () => {
+                                if (resultRead !== "ready" || result) return;
+                                if (!summary.trim() || summary.length > 2000) {
+                                  setNotice(
+                                    "Sonucu 1–2000 karakter arasında yazın.",
+                                  );
+                                  return;
+                                }
+                                setResult(
+                                  await api.request<MvpResult>(
+                                    `${resultPath}/result`,
+                                    "POST",
+                                    {
+                                      summary,
+                                      idempotencyKey: key(
+                                        `${resultPath}:${summary}`,
+                                      ),
+                                    },
+                                  ),
+                                );
+                                setSummary("");
+                                setNotice("Sonuç kaydedildi.");
+                              })}
+                            </>
+                          )}
                       </>
                     )}
                     {result && (
