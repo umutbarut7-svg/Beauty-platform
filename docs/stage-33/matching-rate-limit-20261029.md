@@ -111,3 +111,26 @@ approval must cover merging #68 (which starts the checked-in main-only operation
 one new potentially paid app matching request and its automatic read-only result
 inspection. Do not consume another potentially paid request under the previous
 one-attempt approval.
+
+## Approved observable opportunity is open
+
+The owner explicitly approved PR #68's main merge, one new paid matching request
+and automatic read-only result inspection. Both final-head gates passed:
+40945228006 (15 safety tests) and 40945227628 (repository validation). PR #68
+merged as `d1dbf855f8a635f18b28de42bb469df3e38a3992`.
+
+[Controlled run 40946364002](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40946364002):
+open job 123702667801 PASS at 23:09 Istanbul. Its exact output confirms 14 used,
+temporary cap 15, exactly one remaining attempt for the observed active daily
+actor, unchanged global cap 20, and automatic original-limit restoration. No
+provider request was started by the opener. The owner is to use the existing
+saved plan's professional-search button once and share the response.
+
+The automatic observer job `123702942000` is already running in the same workflow.
+After the attempt or deadline and restoration, read that job's result/logs; no
+further protected-branch push is needed. Look for `CONTROLLED_MATCHING_RESULT`.
+The new private record is
+`/opt/epifiz/operations/matching-one-approved-test-20261029-second/result.json`.
+The reviewed helper preserves whitelisted HTTP metadata before API recreation.
+Do not reopen the record, start a second potentially paid request or infer
+matching acceptance until the actual response is observed.
