@@ -31,6 +31,16 @@ import {
 } from "./providers/provider-config.js";
 import type { PhotoConsentDto, VisualSessionDto } from "./visual.dto.js";
 
+type VisualSessionSummaryRow = {
+  id: string;
+  status: string;
+  expiresAt: Date;
+  createdAt: Date;
+  intent: string;
+  target: string;
+  photo: { consentId: string };
+};
+
 export const visualProjection = {
   attempts: true,
   id: true,
@@ -308,6 +318,51 @@ export class VisualService {
         select: visualProjection,
       });
     });
+  }
+  async list(user: AuthenticatedUser) {
+    assertMvpEnabled();
+    const policy = photoPolicy();
+    if (!policy) return { items: [] };
+    const now = new Date();
+    const rows: VisualSessionSummaryRow[] =
+      await this.db.mvpPhotoAnalysis.findMany({
+        where: {
+          ownerId: user.id,
+          status: {
+            in: ["CREATED", "RUNNING", "NEEDS_INFORMATION", "PLAN", "FAILED"],
+          },
+          expiresAt: { gt: now },
+          photo: {
+            ownerId: user.id,
+            deletedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: now },
+            consent: {
+              ownerId: user.id,
+              revokedAt: null,
+              expiresAt: { gt: now },
+              policyVersion: policy.version,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 20,
+        select: {
+          id: true,
+          status: true,
+          expiresAt: true,
+          createdAt: true,
+          intent: true,
+          target: true,
+          photo: { select: { consentId: true } },
+        },
+      });
+    return {
+      items: rows.map(({ photo, ...row }) => ({
+        ...row,
+        consentId: photo.consentId,
+      })),
+    };
   }
   async get(user: AuthenticatedUser, id: string) {
     assertMvpEnabled();

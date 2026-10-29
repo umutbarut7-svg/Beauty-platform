@@ -19,6 +19,15 @@ export interface MvpVisualSession {
     limitations: string[];
   };
 }
+export interface MvpVisualSessionSummary {
+  id: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  intent: string;
+  target: string;
+  consentId: string;
+}
 export interface SemanticMatches {
   provider: "OPENAI_PGVECTOR";
   status: "MATCHED" | "NO_MATCH";
