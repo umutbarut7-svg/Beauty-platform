@@ -38,8 +38,27 @@ uses the existing sign-out/reset behavior.
 - Existing application/photo/matching, API, integration and native gates remain.
   Formatting failures keep their gate and print the focused repair diff.
 
-These are synthetic tests. No current user consultation has been read and no new
-paid model request has been made. Live deployment, another signed TestFlight
-build and physical-phone plan/match quality acceptance remain separate steps.
-The already completed booking scenario is recorded in PR #54 and is not reopened
-by this source proposal. Full Stage 33 remains open.
+These are synthetic tests. No current user consultation was read and no new
+paid model request was made by these checks.
+
+## Delivery status, 29 October 2026
+
+The API was published successfully in [PR #63](https://github.com/umutbarut7-svg/Beauty-platform/pull/63),
+with healthy/authentication/CORS and module-integrity checks in
+[run 40859059697](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40859059697).
+The corresponding client recovery feature was delivered in internal TestFlight
+1.0.0 (1071), then retained in 1.0.0 (1081) alongside the result-context correction
+from [PR #64](https://github.com/umutbarut7-svg/Beauty-platform/pull/64).
+For build 1081, signed upload
+[40933567057](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40933567057)
+and existing internal-group access verification
+[40935043013](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40935043013)
+both passed; Apple reported `VALID` and `IN_BETA_TESTING`.
+
+The remaining first owner action is TestFlight update to 1081, then
+Keşfet → Fotoğraflı danışmanlık → Aktif danışmanlıklarımı yükle → open an existing
+consultation. This read-only action needs no new paid analysis. An empty list
+must be assessed before proposing a paid retry. Saved-plan and recommendation
+quality on a physical phone, result/satisfaction/passport physical acceptance,
+Android physical acceptance and full Stage 33 remain open. The completed
+booking/approval/cancellation scenario is recorded in PR #54 and is not reopened.

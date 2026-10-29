@@ -52,12 +52,21 @@ tested tree. The subsequent internal-release marker changes only this document
 and the upload workflow's introductory comment; signing, permissions, dependency
 versions and release steps remain unchanged.
 
-The existing owner-authorized signed upload is being started for the result
-correction. Build 1071 does not contain this correction. A new build must complete
-signing, Apple validation/upload, processing and existing internal-group access
-verification before it is presented as available on the phone. No server change,
-new paid AI request, external tester invitation, App Review or public release is
-required for this client-only correction.
+Internal delivery is complete for ORZELL 1.0.0 (1081):
+
+- Release source: `e2654bb542bb9886f0fe42d78c4a2e2f8a7dcf21`.
+- [Signed upload 40933567057](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40933567057) passed on 29 October 2026. The exact mobile release's 30 tests passed; Apple accepted the signed binary at 21:52 Istanbul time. Temporary signing credentials were removed.
+- [Existing internal-group access 40935043013](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40935043013) confirmed build 1081 as `VALID` at 21:55 Istanbul time and `IN_BETA_TESTING` for the existing `ORZELL iç test` group. No group or tester was added.
+- The unchanged dependency/lockfile/network/encryption inventory was verified against build 1071 before reusing its reviewed platform HTTPS-only encryption declaration.
+- No server change, real booking/result, new paid AI request, external testing, App Review or public release occurred.
+
+Build 1071 does not contain this result correction; use 1081 for the remaining
+physical-phone checks. Next owner action: update in TestFlight, then
+Keşfet → Fotoğraflı danışmanlık → Aktif danışmanlıklarımı yükle → open the existing
+consultation. Opening it is read-only; it does not reanalyze, upload, embed or match.
+If the list is empty, inspect its actual state before requesting another paid
+analysis. Then verify result → satisfaction → Beauty Passport on an appropriate
+completed test appointment.
 
 Saved-consultation recovery and plan-to-professional quality still require the
 owner's physical phone. Result/satisfaction/passport physical acceptance, Android
