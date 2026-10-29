@@ -1,0 +1,22 @@
+name: Preview consultation publication safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-preview-consultation-recovery.sh
+      - infra/operations/test_consultation_publication.py
+      - .github/workflows/preview-consultation-publication.yml
+      - .github/operations/preview-commands.sh
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate the bounded API publication and failure recovery
+        run: |
+          bash -n infra/operations/publish-preview-consultation-recovery.sh
+          python3 -m unittest discover -s infra/operations -p test_consultation_publication.py -v
