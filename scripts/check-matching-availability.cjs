@@ -133,9 +133,27 @@ async function journey(browser, origin, output, engine) {
   await page.getByLabel("Hedefiniz", { exact: true }).fill("Synthetic plan");
   await button("Görsel danışmanlık durumunu yükle").click();
   const uploadPlan = async () => {
+    await expect(page.getByLabel("İsteğiniz", { exact: true })).toHaveValue(
+      "Synthetic care",
+    );
+    await expect(page.getByLabel("Hedefiniz", { exact: true })).toHaveValue(
+      "Synthetic plan",
+    );
     if (!(await page.getByRole("checkbox").isChecked()))
       await page.getByRole("checkbox").click();
-    const chooser = page.waitForEvent("filechooser");
+    await expect(page.getByRole("checkbox")).toBeChecked();
+    await expect(button("İzinle fotoğraf seç ve yükle")).toBeEnabled();
+    const chooser = page.waitForEvent("filechooser").catch(async (error) => {
+      await page.screenshot({
+        path: path.join(output, `matching-picker-failure-${engine}.png`),
+        fullPage: true,
+      });
+      console.error(
+        "Synthetic picker failure:",
+        await page.locator("body").innerText(),
+      );
+      throw error;
+    });
     await button("İzinle fotoğraf seç ve yükle").click();
     await (
       await chooser
