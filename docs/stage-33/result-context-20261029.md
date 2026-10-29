@@ -136,3 +136,25 @@ Before another allowance or deployment, inspect its actual OPEN/RESTORED state
 and current usage; never blindly reopen or assume restoration. The owner is to
 tap the existing plan's matching button once and share its result. That phone
 response and actual restoration are pending. Full Stage 33 remains open.
+
+## Latest owner screen, 29 October 22:28 Istanbul
+
+The owner supplied another generic matching-error screen after the bounded test
+opportunity was opened. This screen does not establish the latest HTTP status,
+whether a provider request ran, or the operation's actual restoration state.
+No additional tap or paid retry has been requested.
+
+A bounded read-only inspection of the 22:27–22:31 request window and operation
+status was prepared in [PR #66](https://github.com/umutbarut7-svg/Beauty-platform/pull/66),
+head `6e336e701eb0e169fdde2c78424cb7997f514e0f`. The attempted direct main-ref
+push was rejected by automatic approval review because main activates the
+operational workflow and explicit authorization for that protected-branch push
+was deemed unclear. No new server command ran. The safer reviewable PR is open
+and has not been merged; explicit owner approval is pending. Do not bypass the
+rejection, reopen the allowance or infer provider billing/restoration from the UI.
+
+PR #65 source validation on `0c0cd428a41c16353ae8dffee0d24aff5ca78ac0`:
+API/workspace/integration 40939092136 PASS; application review 40939092022 PASS;
+Android/iOS native compilation 40939091981 PASS. Synthetic native photo runtime
+40939092046 remained in progress. The client wording change is not yet delivered
+to the phone. Full Stage 33 and live matching acceptance remain open.
