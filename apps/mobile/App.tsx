@@ -16,7 +16,11 @@ import {
   type MvpCatalog,
   type MvpResult,
 } from "@beauty-platform/types";
-import { locationLabel, staffForBooking } from "./booking-options";
+import {
+  hasUnknownStaffLocations,
+  locationLabel,
+  staffForBooking,
+} from "./booking-options";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
@@ -757,12 +761,25 @@ export default function App() {
                         )}
                         {locationId &&
                           !staffForBooking(catalog, serviceId, locationId)
-                            .length && (
+                            .length &&
+                          (hasUnknownStaffLocations(catalog, serviceId) ? (
+                            <>
+                              <Text style={styles.body}>
+                                Bu şube için profesyonel bilgileri
+                                doğrulanamadı. Bilgileri yenileyip yeniden seçim
+                                yapabilirsin.
+                              </Text>
+                              {button(
+                                "Hizmet ve şube bilgilerini yenile",
+                                async () => choose(catalog),
+                              )}
+                            </>
+                          ) : (
                             <Text style={styles.body}>
                               Bu şubede seçtiğin hizmet için rezervasyona açık
                               profesyonel yok. Başka bir şube seçebilirsin.
                             </Text>
-                          )}
+                          ))}
                         {locationId &&
                           staffForBooking(catalog, serviceId, locationId).map(
                             (staff) =>
