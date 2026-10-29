@@ -28,3 +28,37 @@ No new photo analysis, indexing or repeated paid retry is authorized. Any
 temporary availability adjustment must remain bounded to that approved attempt,
 preserve the global cap and restore the original configuration. Full Stage 33
 is not PASS.
+
+## Approved read-only follow-up
+
+After explicit owner approval, [PR #66](https://github.com/umutbarut7-svg/Beauty-platform/pull/66)
+merged as `1fe823588edc0f07f0aec1b61e5bdf9d6a706dc1`.
+[Read-only inspection 40941550768](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40941550768)
+passed at 22:36 Istanbul time. It confirmed the original daily cap 5 and global
+cap 20, and the operation record was RESTORED at 22:29:15, before its 22:34:30
+deadline. Current daily/global counters were 12. Four matching
+RATE_LIMIT_EXCEEDED records exist in the 22:27–22:31 window.
+
+The recreated API container no longer held the earlier matching HTTP log.
+Consequently the single allowed attempt's result/provider execution cannot be
+conclusively established from this inspection. Do not claim a successful match
+or no provider charge for that allowed attempt, and do not repeat a potentially
+paid request under the previous one-attempt authorization. The inspection itself
+started no provider request and changed no runtime configuration.
+
+[PR #67](https://github.com/umutbarut7-svg/Beauty-platform/pull/67) prepares
+allowlisted timestamp/method/status preservation before future restoration.
+Seven offline tests passed locally and in its dedicated contents-read-only CI.
+It does not reopen the past operation and cannot recover its lost log. Full
+Stage 33/live matching quality remains open.
+
+All four PR #65 gates passed on `0c0cd428a41c16353ae8dffee0d24aff5ca78ac0`:
+API/integration/workspace 40939092136, application review 40939092022, Android/iOS
+compilation 40939091981 and synthetic native photo runtime 40939092046. PR #65
+merged as `15b901b6567b6fbb8845184c24665c3edf63070a`. The release code differs
+from the tested head only by documentation; the subsequent release marker
+changes only the upload workflow's introductory comment. Signed internal
+TestFlight delivery is running from `602e740bc3551d3c0b3d2150477a1bfe98c2f3ee`
+in [40941963152](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40941963152).
+Its expected build is 1091; Apple processing and internal access are not yet
+claimed complete.
