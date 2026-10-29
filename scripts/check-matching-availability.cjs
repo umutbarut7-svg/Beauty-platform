@@ -143,17 +143,7 @@ async function journey(browser, origin, output, engine) {
       await page.getByRole("checkbox").click();
     await expect(page.getByRole("checkbox")).toBeChecked();
     await expect(button("İzinle fotoğraf seç ve yükle")).toBeEnabled();
-    const chooser = page.waitForEvent("filechooser").catch(async (error) => {
-      await page.screenshot({
-        path: path.join(output, `matching-picker-failure-${engine}.png`),
-        fullPage: true,
-      });
-      console.error(
-        "Synthetic picker failure:",
-        await page.locator("body").innerText(),
-      );
-      throw error;
-    });
+    const chooser = page.waitForEvent("filechooser");
     await button("İzinle fotoğraf seç ve yükle").click();
     await (
       await chooser

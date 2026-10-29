@@ -236,6 +236,7 @@ export function VisualJourney({
             accessibilityRole="checkbox"
             accessibilityLabel="Fotoğraf ve AI işlemeye açık izin veriyorum"
             accessibilityState={{ checked: accepted }}
+            aria-checked={accepted}
             disabled={busy || withdrawing}
             onPress={() => setAccepted(!accepted)}
             style={styles.check}
