@@ -109,6 +109,7 @@ export default function App() {
   const [mode, setMode] = useState<"customer" | "business">("customer");
   const [screen, setScreen] = useState<Screen>("discover");
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -185,7 +186,9 @@ export default function App() {
     );
   }
   async function run(action: () => Promise<void>) {
-    if (busy) return;
+    // Lock synchronously: a second press can arrive before busy renders.
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setBusy(true);
     setNotice("");
     try {
@@ -193,6 +196,7 @@ export default function App() {
     } catch (error) {
       report(error);
     } finally {
+      actionInFlight.current = false;
       setBusy(false);
     }
   }
