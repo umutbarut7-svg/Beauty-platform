@@ -1,6 +1,7 @@
 """One owner-approved matching opportunity, with bounded automatic restoration."""
 
 import copy
+import datetime
 import fcntl
 import hashlib
 import json
@@ -103,6 +104,45 @@ def validate_candidate(baseline, candidate):
     require(expected == candidate, 'Candidate changes more than the daily API limit')
 
 
+def matching_http_rows(text, start, end):
+    text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+    markers = list(re.finditer(r'[\"\x27]?timestamp[\"\x27]?\s*:\s*[\"\x27]([^\"\x27]+)[\"\x27]', text))
+    rows = []
+    for index, marker in enumerate(markers):
+        block = text[marker.start():min(marker.start() + 2500, markers[index + 1].start() if index + 1 < len(markers) else len(text))]
+        def field(name):
+            value = re.search(r'[\"\x27]?' + name + r'[\"\x27]?\s*:\s*[\"\x27]([^\"\x27]+)[\"\x27]', block)
+            return value.group(1) if value else ''
+        timestamp = marker.group(1)
+        if not re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z', timestamp):
+            continue
+        try:
+            instant = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            continue
+        status = re.search(r'[\"\x27]?statusCode[\"\x27]?\s*:\s*([1-5]\d\d)\b', block)
+        route = field('route')
+        if start <= instant <= end and field('method') == 'POST' and '/visual/sessions/' in route and route.endswith('/matches') and status:
+            rows.append({'timestamp': timestamp, 'method': 'POST', 'route': 'visual/sessions/:sessionId/matches', 'status': int(status.group(1))})
+    return rows[-20:]
+
+
+def preserve_matching_responses(record):
+    try:
+        start = record['expiresAt'] - 600
+        end = time.time()
+        since = datetime.datetime.fromtimestamp(start, datetime.timezone.utc).isoformat()
+        logs = subprocess.run(['docker', 'logs', '--since', since, '--tail', '2000', 'beauty-preview-api-1'], capture_output=True, text=True, timeout=20)
+        require(logs.returncode == 0 and len(logs.stdout) + len(logs.stderr) <= 1000000, 'Bounded response metadata unavailable')
+        record['matchingResponses'] = matching_http_rows(logs.stdout + '\n' + logs.stderr, start, end)
+        record['matchingResponseCapture'] = 'CAPTURED'
+    except Exception:
+        record['matchingResponseCapture'] = 'UNAVAILABLE'
+    # Persist the allowlisted status metadata before Compose removes the container.
+    # A failed diagnostic read must not prevent restoring the original quota.
+    save(record)
+
+
 def verify_runtime(current, record, limit):
     values = env(current)
     require(values.get(FLAG) == limit and current['Image'] == record['image'], 'API quota/image drift')
@@ -122,6 +162,7 @@ def restore(reason):
         verify_runtime(current, record, BEFORE)
     else:
         verify_runtime(current, record, AFTER)
+        preserve_matching_responses(record)
         run(record['original'] + ['up', '-d', '--no-deps', '--no-build', '--pull', 'never', 'api'], 100)
         verify_runtime(inspect('api'), record, BEFORE)
     ready()
