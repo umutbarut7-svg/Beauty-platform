@@ -61,15 +61,19 @@ Internal delivery is complete for ORZELL 1.0.0 (1081):
 - No server change, real booking/result, new paid AI request, external testing, App Review or public release occurred.
 
 Build 1071 does not contain this result correction; use 1081 for the remaining
-physical-phone checks. Next owner action: update in TestFlight, then
-Keşfet → Fotoğraflı danışmanlık → Aktif danışmanlıklarımı yükle → open the existing
-consultation. Opening it is read-only; it does not reanalyze, upload, embed or match.
-If the list is empty, inspect its actual state before requesting another paid
-analysis. Then verify result → satisfaction → Beauty Passport on an appropriate
-completed test appointment.
+physical-phone checks. The owner has now demonstrated opening an existing consultation on the phone
+(acceptance below). This recovery action is read-only and does not reanalyze,
+upload, embed or match.
 
-Saved-consultation recovery and plan-to-professional quality still require the
-owner's physical phone. Result/satisfaction/passport physical acceptance, Android
-physical acceptance and the remaining Stage 33 conditions remain open. Physical
+Physical iPhone saved-consultation recovery now passed: the owner's 29 October
+21:58/21:59 Istanbul screenshots show the active list, successful saved-session
+opening, `Plan hazır`, restored analysis and the five-step plan. The screenshots
+do not show the installed build number. Full evidence scope is recorded in
+[consultation recovery](consultation-recovery-20261029.md).
+
+Next owner step is to inspect Randevular and select a suitable completed test
+appointment for result → satisfaction → Beauty Passport. Source-photo/plan
+quality, plan-to-professional matching, result/satisfaction/passport physical
+acceptance, Android physical acceptance and full Stage 33 remain open. Existing
 booking/approval/cancellation acceptance remains recorded in #54 and is not
 reopened.
