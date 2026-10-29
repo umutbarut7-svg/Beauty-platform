@@ -84,6 +84,38 @@ describe("MVP transport security", () => {
       "Invalid API path",
     );
   });
+  it("explains a matching rate limit without retrying or clearing the signed-in session", async () => {
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            accessToken: "test-access",
+            refreshToken: "test-refresh",
+            user: { id: "u", role: "CUSTOMER" },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"message":"PRIVATE_UPSTREAM_CONTENT"}', {
+          status: 429,
+        }),
+      )
+      .mockResolvedValueOnce(new Response("{}"));
+    const api = new MvpApiClient("https://api.example.test", transport);
+    await api.signIn("login", "test@example.test", "test-password");
+    await expect(
+      api.request("/mvp/v1/visual/sessions/fixture/matches", "POST"),
+    ).rejects.toMatchObject({
+      status: 429,
+      message: "İstek sınırına ulaşıldı. Lütfen daha sonra yeniden deneyin.",
+    });
+    expect(transport).toHaveBeenCalledTimes(2);
+    await api.request("/auth/me");
+    expect(transport.mock.calls[2]?.[1].headers.authorization).toBe(
+      "Bearer test-access",
+    );
+  });
   it("rejects an old session's body if credentials are cleared while JSON is streaming", async () => {
     let finish!: (body: unknown) => void;
     let started!: () => void;
