@@ -1,0 +1,123 @@
+name: Preview CI-built consultation API publication
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/operations/consultation-artifact-request.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  operations:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact trusted main revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check out exact reviewed application for private module preparation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 9112386fc2c029cd8a4977be1f8e467f2dab5694
+          path: reviewed-app
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Build exact baseline and candidate modules without logging their contents
+        run: |
+          pnpm --dir reviewed-app install --frozen-lockfile
+          python3 infra/operations/build-consultation-payload.py reviewed-app "$RUNNER_TEMP/consultation-modules.json"
+      - name: Obtain temporary preview operations identity
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: preview-ops-${{ github.run_id }}
+          role-duration-seconds: 1800
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Verify identity and execute checked-in operation
+        shell: bash
+        env:
+          AWS_PAGER: ""
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, subprocess, time, zlib
+          def aws(*args):
+              process = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if process.returncode:
+                  # Never echo raw provider errors that might contain request data.
+                  raise SystemExit('AWS operation failed: ' + ' '.join(args[:2]))
+              return json.loads(process.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected account or role; execution blocked')
+          request = json.loads(pathlib.Path('.github/operations/consultation-artifact-request.json').read_text())
+          if set(request) != {'request_id', 'mode'} or request != {'request_id': 'orzell-consultation-recovery-20261029-ci-1', 'mode': 'approved-maintenance'}:
+              raise SystemExit('Unsupported operation request')
+          script = pathlib.Path('.github/operations/consultation-artifact-commands.sh').read_text()
+          if not script.startswith('#!/bin/bash\nset -euo pipefail\n') or len(script) > 12000:
+              raise SystemExit('Invalid checked-in operation script')
+          payload = pathlib.Path(os.environ['RUNNER_TEMP'], 'consultation-modules.json').read_bytes()
+          if len(payload) > 120000:
+              raise SystemExit('Bounded module payload exceeded')
+          packed = base64.b64encode(zlib.compress(payload, 9)).decode()
+          digest = hashlib.sha256(payload).hexdigest()
+          # The compiled bytes are private SSM command input, never CI log output.
+          prefix = """python3 - <<'ORZELL_PRIVATE_MODULES'
+          import base64,hashlib,os,pathlib,zlib
+          packed=base64.b64decode('PACKED_PAYLOAD',validate=True)
+          decoder=zlib.decompressobj()
+          data=decoder.decompress(packed,120001)
+          if len(data)>120000 or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail or hashlib.sha256(data).hexdigest()!='PAYLOAD_DIGEST':
+              raise SystemExit('Private module envelope failed verification')
+          target=pathlib.Path('/opt/epifiz/operations/consultation-recovery-20261029-ci-1-payload.json')
+          if target.is_symlink():
+              raise SystemExit('Private module path requires review')
+          if target.exists():
+              if target.read_bytes()!=data:
+                  raise SystemExit('Private module payload drift')
+          else:
+              descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+              with os.fdopen(descriptor,'wb') as stream:
+                  stream.write(data)
+          print('Private CI module payload verified; contents withheld')
+          ORZELL_PRIVATE_MODULES
+          """.replace('PACKED_PAYLOAD',packed).replace('PAYLOAD_DIGEST',digest)
+          script = prefix + script
+          if len(script) > 24000:
+              raise SystemExit('Bounded private SSM command exceeded')
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': ['bash -se <<\'EPIFIZ_OPS_SCRIPT\'\n' + script + '\nEPIFIZ_OPS_SCRIPT'], 'executionTimeout': ['900']}), '--comment', 'Reviewed GitHub main operation ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          result = None
+          for _ in range(100):
+              time.sleep(10)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Monitoring deadline reached; command may still run. Do not resend without checking.')
+          print('Status:', result['Status'])
+          # The checked-in script must produce only non-secret diagnostics.
+          print(result.get('StandardOutputContent', ''))
+          if result.get('StandardErrorContent'):
+              print(result['StandardErrorContent'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Preview operations\n\nCommand: `' + command_id + '`\n\nStatus: **' + result['Status'] + '**\n')
+          if result['Status'] != 'Success':
+              raise SystemExit(1)
+          PY

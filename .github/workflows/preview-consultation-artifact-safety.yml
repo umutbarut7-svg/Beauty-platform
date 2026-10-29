@@ -1,0 +1,63 @@
+name: Preview CI module publication safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-preview-consultation-artifact.sh
+      - infra/operations/build-consultation-payload.py
+      - infra/operations/test_consultation_artifact.py
+      - .github/workflows/preview-consultation-artifact-publication.yml
+      - .github/workflows/preview-consultation-artifact-safety.yml
+      - .github/operations/consultation-artifact-commands.sh
+      - .github/operations/consultation-artifact-request.json
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test no-replay, private payload integrity and API-only rollback guards
+        run: |
+          bash -n infra/operations/publish-preview-consultation-artifact.sh
+          python3 -m unittest discover -s infra/operations -p test_consultation_artifact.py -v
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 9112386fc2c029cd8a4977be1f8e467f2dab5694
+          path: reviewed-app
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Verify full-build private payload and bounded SSM transport without deployment
+        run: |
+          pnpm --dir reviewed-app install --frozen-lockfile
+          python3 infra/operations/build-consultation-payload.py reviewed-app "$RUNNER_TEMP/consultation-modules.json"
+          python3 - <<'PY'
+          import ast,base64,hashlib,os,pathlib,textwrap,zlib
+          payload=pathlib.Path(os.environ['RUNNER_TEMP'],'consultation-modules.json')
+          source=pathlib.Path('infra/operations/publish-preview-consultation-artifact.sh').read_text().split("python3 - <<'PY'\n",1)[1].rsplit('\nPY',1)[0].rsplit('\ntry:\n    main()',1)[0]
+          ns={}
+          exec(compile(source,'reviewed-helper','exec'),ns)
+          ns['PAYLOAD']=payload
+          ns['load_payload']()
+          workflow=pathlib.Path('.github/workflows/preview-consultation-artifact-publication.yml').read_text()
+          transport=textwrap.dedent(workflow.split("python3 - <<'PY'\n",1)[1].rsplit('\n          PY',1)[0])
+          tree=ast.parse(transport)
+          assignment=next(n for n in tree.body if isinstance(n,ast.Assign) and isinstance(n.targets[0],ast.Name) and n.targets[0].id=='prefix')
+          data=payload.read_bytes()
+          args={'packed':base64.b64encode(zlib.compress(data,9)).decode(),'digest':hashlib.sha256(data).hexdigest()}
+          exec(compile(ast.Module(body=[assignment],type_ignores=[]),'private-prefix','exec'),args)
+          prefix=args['prefix']
+          ast.parse(prefix.split("python3 - <<'ORZELL_PRIVATE_MODULES'\n",1)[1].rsplit('ORZELL_PRIVATE_MODULES',1)[0])
+          wrapper=pathlib.Path('.github/operations/consultation-artifact-commands.sh').read_text()
+          assert len(prefix+wrapper)<=24000
+          assert 'print(payload' not in transport and 'print(packed' not in transport
+          print('Full-build payload integrity, private transport syntax and command-size bound: PASS')
+          PY
