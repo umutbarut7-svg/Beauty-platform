@@ -55,7 +55,11 @@ async function journey(browser, origin, output, engine) {
       value = { id: "synthetic-photo" };
     else if (endpoint === "/mvp/v1/visual/sessions")
       value = { id: "synthetic-session", status: "CREATED", attempts: 0 };
-    else if (endpoint.endsWith("/analyze"))
+    else if (
+      endpoint.endsWith("/analyze") ||
+      (request.method() === "GET" &&
+        endpoint === "/mvp/v1/visual/sessions/synthetic-session")
+    )
       value = {
         id: "synthetic-session",
         status: "PLAN",
@@ -76,15 +80,17 @@ async function journey(browser, origin, output, engine) {
         matching: { semanticVectorAvailable: capability === "open" },
       };
     } else if (endpoint.endsWith("/matches")) {
-      if (match === "late")
+      const response = match;
+      if (response === "late")
         await new Promise((resolve) => {
           releaseMatch = resolve;
         });
-      status = match === "unavailable" ? 503 : 201;
+      status =
+        response === "unavailable" ? 503 : response === "limited" ? 429 : 201;
       value = {
-        status: match === "empty" ? "NO_MATCH" : "MATCHED",
+        status: response === "empty" ? "NO_MATCH" : "MATCHED",
         items:
-          match === "empty"
+          response === "empty"
             ? []
             : [
                 {
@@ -126,20 +132,24 @@ async function journey(browser, origin, output, engine) {
   await page.getByLabel("İsteğiniz", { exact: true }).fill("Synthetic care");
   await page.getByLabel("Hedefiniz", { exact: true }).fill("Synthetic plan");
   await button("Görsel danışmanlık durumunu yükle").click();
-  await page.getByRole("checkbox").click();
-  const chooser = page.waitForEvent("filechooser");
-  await button("İzinle fotoğraf seç ve yükle").click();
-  await (
-    await chooser
-  ).setFiles({
-    name: "synthetic.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
-      "base64",
-    ),
-  });
-  await button("Görsel analizi başlat").click();
+  const uploadPlan = async () => {
+    if (!(await page.getByRole("checkbox").isChecked()))
+      await page.getByRole("checkbox").click();
+    const chooser = page.waitForEvent("filechooser");
+    await button("İzinle fotoğraf seç ve yükle").click();
+    await (
+      await chooser
+    ).setFiles({
+      name: "synthetic.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    await button("Görsel analizi başlat").click();
+  };
+  await uploadPlan();
   await expect(unavailable).toBeVisible();
   await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
   await expect(
@@ -192,17 +202,74 @@ async function journey(browser, origin, output, engine) {
     page.getByText("1. Synthetic saved plan", { exact: true }),
   ).toBeVisible();
 
-  match = "empty";
+  match = "limited";
   await button("Eşleştirme durumunu yenile").click();
+  await button("Plana göre profesyonel ara").click();
+  await expect(
+    page.getByText(
+      "İstek sınırına ulaşıldı. Lütfen daha sonra yeniden deneyin.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(button("Plana göre profesyonel ara")).toBeEnabled();
+  await expect(
+    page.getByText("1. Synthetic saved plan", { exact: true }),
+  ).toBeVisible();
+  assert.equal(countMatches(), 2); // A denied request never retries automatically.
+
+  match = "late";
+  // Two synchronous presses must share one request even before busy renders.
+  await button("Plana göre profesyonel ara").evaluate((element) => {
+    element.click();
+    element.click();
+  });
+  await expect.poll(countMatches).toBe(3);
+  await expect(button("Plana göre profesyonel ara")).toBeDisabled();
+  releaseMatch();
+  await expect(
+    page.getByText("Arama tamamlandı", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Late synthetic salon · Late synthetic service", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    button("Late synthetic service için hizmetleri gör"),
+  ).toBeVisible();
+  // A subsequent response would be 429. Completed results offer no second paid search.
+  match = "limited";
+  await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  await button("Analiz durumunu yenile").click();
+  await expect(
+    page.getByText("Late synthetic salon · Late synthetic service", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  assert.equal(countMatches(), 3);
+  await page.screenshot({
+    path: path.join(output, `matching-complete-${engine}.png`),
+    fullPage: true,
+  });
+
+  // A new photo/plan explicitly starts a different consultation context.
+  match = "empty";
+  await uploadPlan();
   await button("Plana göre profesyonel ara").click();
   await expect(
     page.getByText("Uygun, güncel arama kaydı bulunamadı.", { exact: true }),
   ).toBeVisible();
-  assert.equal(countMatches(), 2);
+  await expect(
+    page.getByText("Arama tamamlandı", { exact: true }),
+  ).toBeVisible();
+  await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  assert.equal(countMatches(), 4); // NO_MATCH is also a completed successful search.
 
   match = "late";
+  await uploadPlan();
   await button("Plana göre profesyonel ara").click();
-  await expect.poll(countMatches).toBe(3);
+  await expect.poll(countMatches).toBe(5);
   await button("Fotoğraf iznimi geri çek").click();
   releaseMatch();
   await expect(
@@ -218,21 +285,8 @@ async function journey(browser, origin, output, engine) {
   ).toHaveCount(0);
   await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
   // A failed authenticated capability read must use the parent's sign-out path.
-  await page.getByRole("checkbox").click();
-  const nextChooser = page.waitForEvent("filechooser");
-  await button("İzinle fotoğraf seç ve yükle").click();
-  await (
-    await nextChooser
-  ).setFiles({
-    name: "synthetic.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
-      "base64",
-    ),
-  });
   capability = "expired";
-  await button("Görsel analizi başlat").click();
+  await uploadPlan();
   await expect(button("Giriş yap")).toBeVisible();
   await expect(
     page.getByText("1. Synthetic saved plan", { exact: true }),
@@ -242,7 +296,7 @@ async function journey(browser, origin, output, engine) {
   await page.close();
   console.log(
     engine +
-      " closed/failed capability, refresh, preflight race, server 503, real NO_MATCH and withdrawal race: PASS (mock APIs)",
+      " closed/failed capability, refresh, preflight race, server 503/429, duplicate presses, retained MATCHED/NO_MATCH results and withdrawal race: PASS (mock APIs)",
   );
 }
 main(async (browser, origin, output) => {

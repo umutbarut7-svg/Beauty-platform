@@ -61,6 +61,14 @@ export function VisualJourney({
     Array<{ id: string; expiresAt: string }>
   >([]);
   const generation = useRef(0);
+  const matchingRequest = useRef<{
+    key: string;
+    completed: boolean;
+  } | null>(null);
+  const clearMatches = useCallback(() => {
+    matchingRequest.current = null;
+    setMatches(null);
+  }, []);
   useEffect(
     () => () => {
       generation.current++;
@@ -87,12 +95,12 @@ export function VisualJourney({
       (available) => {
         if (!active) return;
         setMatchingState(available ? "available" : "unavailable");
-        if (!available) setMatches(null);
+        if (!available) clearMatches();
       },
       (error: unknown) => {
         if (!active) return;
         setMatchingState("error");
-        setMatches(null);
+        clearMatches();
         reportCapabilityError(error);
       },
     );
@@ -100,7 +108,13 @@ export function VisualJourney({
       active = false;
     };
     // Capability reads never start analysis or a paid matching request.
-  }, [matchingAvailable, session?.id, session?.status, matchingRefresh]);
+  }, [
+    matchingAvailable,
+    clearMatches,
+    session?.id,
+    session?.status,
+    matchingRefresh,
+  ]);
   const button = (label: string, action: () => Promise<void>) => (
     <Pressable
       accessibilityRole="button"
@@ -127,7 +141,7 @@ export function VisualJourney({
     if (generation.current !== epoch) return;
     setSession(next);
     setAnswers([]);
-    setMatches(null);
+    clearMatches();
   }
   return (
     <View style={styles.panel}>
@@ -170,7 +184,7 @@ export function VisualJourney({
             setConsentId(item.consentId);
             setSession(restored);
             setAnswers([]);
-            setMatches(null);
+            clearMatches();
             setAccepted(false);
             setUploadMessage("");
             setMessage("Kaydedilmiş danışmanlık açıldı.");
@@ -278,7 +292,7 @@ export function VisualJourney({
               if (epoch !== generation.current) return;
               setSession(null);
               setConsultations(null);
-              setMatches(null);
+              clearMatches();
               setAnswers([]);
               if (consentId)
                 await api.request(
@@ -352,7 +366,7 @@ export function VisualJourney({
             generation.current++;
             setUploadMessage("");
             setSession(null);
-            setMatches(null);
+            clearMatches();
             setAnswers([]);
             setAccepted(false);
             setWithdrawing(true);
@@ -459,9 +473,14 @@ export function VisualJourney({
                   setMatchingRefresh((value) => value + 1);
                 })}
               {matchingState === "available" &&
+                !matches &&
                 button("Plana göre profesyonel ara", async () => {
                   const epoch = generation.current;
-                  setMatches(null);
+                  const key = `${epoch}:${session.id}:${session.attempts}`;
+                  // Lock before the first await: React's busy state may not have rendered yet.
+                  if (matches || matchingRequest.current?.key === key) return;
+                  const request = { key, completed: false };
+                  matchingRequest.current = request;
                   let capabilityChecked = false;
                   try {
                     // Recheck at the explicit action: a flag can close after PLAN loads.
@@ -478,7 +497,13 @@ export function VisualJourney({
                       undefined,
                       { timeoutMs: 30000 },
                     );
-                    if (epoch === generation.current) setMatches(result);
+                    if (
+                      epoch === generation.current &&
+                      matchingRequest.current === request
+                    ) {
+                      request.completed = true;
+                      setMatches(result);
+                    }
                   } catch (error) {
                     if (epoch !== generation.current) return;
                     if (error instanceof ApiError && error.status === 401)
@@ -492,8 +517,39 @@ export function VisualJourney({
                       return;
                     }
                     throw error;
+                  } finally {
+                    if (
+                      matchingRequest.current === request &&
+                      !request.completed
+                    )
+                      matchingRequest.current = null;
                   }
                 })}
+              {matches && (
+                <Text style={styles.heading} accessibilityLiveRegion="polite">
+                  Arama tamamlandı
+                </Text>
+              )}
+              {matches?.status === "NO_MATCH" && (
+                <Text>Uygun, güncel arama kaydı bulunamadı.</Text>
+              )}
+              {matches?.items.map((match) => (
+                <View key={`${match.businessId}-${match.serviceId}`}>
+                  <Text>
+                    {match.businessName} · {match.serviceName}
+                  </Text>
+                  <Text>
+                    Hizmetin uygunluğu ve müsaitliği ayrıca kontrol edilir.
+                  </Text>
+                  {button(`${match.serviceName} için hizmetleri gör`, () =>
+                    choose({
+                      id: match.businessId,
+                      name: match.businessName,
+                      isVerified: false,
+                    }),
+                  )}
+                </View>
+              ))}
             </>
           )}
           {session.output?.limitations.map((line, i) => (
@@ -505,26 +561,6 @@ export function VisualJourney({
           </Text>
         </>
       )}
-      {matches?.status === "NO_MATCH" && (
-        <Text>Uygun, güncel arama kaydı bulunamadı.</Text>
-      )}
-      {matches?.items.map((match) => (
-        <View key={`${match.businessId}-${match.serviceId}`}>
-          <Text>
-            {match.businessName} · {match.serviceName}
-          </Text>
-          <Text>
-            Anlamsal arama sonucu. Uygunluk ve müsaitlik ayrıca kontrol edilir.
-          </Text>
-          {button(`${match.serviceName} için hizmetleri gör`, () =>
-            choose({
-              id: match.businessId,
-              name: match.businessName,
-              isVerified: false,
-            }),
-          )}
-        </View>
-      ))}
     </View>
   );
 }
