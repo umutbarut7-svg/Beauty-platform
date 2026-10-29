@@ -71,9 +71,31 @@ opening, `Plan hazır`, restored analysis and the five-step plan. The screenshot
 do not show the installed build number. Full evidence scope is recorded in
 [consultation recovery](consultation-recovery-20261029.md).
 
-Next owner step is to inspect Randevular and select a suitable completed test
-appointment for result → satisfaction → Beauty Passport. Source-photo/plan
-quality, plan-to-professional matching, result/satisfaction/passport physical
-acceptance, Android physical acceptance and full Stage 33 remain open. Existing
-booking/approval/cancellation acceptance remains recorded in #54 and is not
-reopened.
+## Physical iPhone existing-result and passport acceptance
+
+On 29 October 2026 at 22:02–22:04 Istanbul time, the owner selected an existing
+completed test appointment. The appointment detail displayed its stored test
+summary and the existing `Kararsız` satisfaction outcome. The Bakımım tab then
+displayed the same test summary and outcome in the owner's care history.
+PASS: physical iPhone reading of an existing completed appointment result,
+stored satisfaction and the corresponding visible passport entry.
+
+This evidence is a read/display acceptance. It does not show a new result
+submission, a new satisfaction submission or fresh worker execution in this
+session. It does not exercise the draft-isolation/write-retry branches fixed
+in #64; those retain their synthetic CI evidence. The screenshots do not show
+the installed build number. No new appointment, result, satisfaction or paid
+provider action was requested for this verification.
+
+The passport's displayed 22 October date is sourced from the result's
+`createdAt`, while the appointment's 23 October date comes from
+`startsAt`. This is a distinction between stored fields, rather than proof of
+a timezone conversion bug. The passport date currently lacks a label explaining
+that it is the result-record date; a clarity improvement remains to be reviewed.
+
+The next independent live check is plan-to-professional matching. Its explicit
+button calls a POST that performs a new query embedding; prior instructions
+require approval before a new paid AI request. No match action was initiated.
+Source-photo/plan quality, live matching quality, Android physical acceptance,
+remaining result-write device checks and full Stage 33 remain open. Existing
+booking/approval/cancellation acceptance in #54 is not reopened.
