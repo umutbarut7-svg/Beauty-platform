@@ -35,3 +35,7 @@ public App Store release is part of this proposal.
 
 Source/application validation and phone acceptance are tracked in PR #60. This
 control-plane proposal must pass its own safety/general CI before execution.
+
+The previous catalog queue and request are preserved under infra/operations.
+Its existing tests now read those stable files, retaining every original
+assertion while the current execution queue advances to this new operation.

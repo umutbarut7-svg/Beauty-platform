@@ -203,7 +203,7 @@ class CatalogPublicationTests(unittest.TestCase):
 class ExecutionQueueTests(unittest.TestCase):
     def test_queue_is_bounded_and_pinned_to_the_reviewed_helper(self):
         root = SCRIPT.parents[2]
-        queue = (root / '.github/operations/preview-commands.sh').read_text()
+        queue = (root / 'infra/operations/queue-preview-catalog-bindings.sh').read_text()
         self.assertLess(len(queue), 12000)
         self.assertRegex(queue, r"REV = '[0-9a-f]{40}'")
         digest = re.search(r"EXPECTED = '([0-9a-f]{64})'", queue).group(1)
@@ -211,7 +211,7 @@ class ExecutionQueueTests(unittest.TestCase):
         self.assertIn('response.read(20001)', queue)
         self.assertIn('hashlib.sha256(script).hexdigest() != EXPECTED', queue)
         self.assertIn("https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/", queue)
-        request = json.loads((root / '.github/operations/preview-request.json').read_text())
+        request = json.loads((root / 'infra/operations/catalog-bindings-request.json').read_text())
         self.assertEqual(request, {'request_id': 'orzell-catalog-bindings-20261029', 'mode': 'approved-maintenance'})
 
 
