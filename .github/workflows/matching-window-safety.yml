@@ -1,0 +1,19 @@
+name: Matching test window safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/matching-test-window.py
+      - infra/operations/test_matching_window.py
+      - .github/workflows/matching-window-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify bounded status preservation before original-quota restoration
+        run: python3 -m unittest discover -s infra/operations -p test_matching_window.py -v
