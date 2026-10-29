@@ -158,3 +158,18 @@ API/workspace/integration 40939092136 PASS; application review 40939092022 PASS;
 Android/iOS native compilation 40939091981 PASS. Synthetic native photo runtime
 40939092046 remained in progress. The client wording change is not yet delivered
 to the phone. Full Stage 33 and live matching acceptance remain open.
+
+## Superseding latest inspection status
+
+The owner approved PR #66, which merged and ran read-only inspection
+[40941550768](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40941550768).
+The original daily limit 5 was confirmed restored at 22:29:15 Istanbul time;
+global cap 20 is unchanged. Four rate-limit records exist for 22:27–22:31.
+The earlier API container was recreated during restoration, so the one allowed
+request's exact response/provider execution remains unverified. No potentially
+paid retry was requested. Detailed evidence, the pre-existing historical
+publication-queue test issue and PR #67's metadata-preservation correction are
+tracked in [matching rate limit](matching-rate-limit-20261029.md). PR #65's four
+gates now pass and its internal build 1091 is being delivered. This supersedes
+earlier pending-approval/pending-native-gate paragraphs; it is not full Stage 33
+or live matching PASS.
