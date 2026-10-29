@@ -104,3 +104,35 @@ observed; execution and acceptance remain pending the phone action.
 Source-photo/plan quality, live matching quality, Android physical acceptance,
 remaining result-write device checks and full Stage 33 remain open. Existing
 booking/approval/cancellation acceptance in #54 is not reopened.
+
+## Matching follow-up and the one approved test opportunity
+
+The owner's 22:09 Istanbul attempt failed with HTTP 429, not an invalid form.
+Read-only [inspection 40938329690](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40938329690)
+observed two matching 429 responses before the provider guard, daily usage 7
+against limit 5, and global usage 7 against limit 20. These denied matching
+requests did not reach the query-embedding provider. Do not ask for another paid
+approval for those denied requests.
+
+[PR #65](https://github.com/umutbarut7-svg/Beauty-platform/pull/65) prepares a clear
+429 message without automatic retry or session reset. Its 9 focused client
+tests passed locally; application and full API/integration CI passed on
+`0c0cd428a41c16353ae8dffee0d24aff5ca78ac0`. Native gates were still running at
+the handoff. This wording is not yet included in installed build 1081.
+
+The existing operations bridge opened one bounded opportunity in
+[40939783083](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40939783083)
+at 22:24 Istanbul time. The observed active daily actor had count 7; the API's
+temporary cap 8 permits exactly one further attempt for that actor. Global cap
+20, keys, image and all other runtime settings remain unchanged. Compose and
+health/CORS checks passed, indexing queues were empty and unrelated services
+were unchanged. No provider request was started by this operation.
+
+A root-owned watchdog is configured to restore the original cap 5 after the
+next observed attempt or ten minutes, allowing the in-flight request to finish.
+Private operational state is
+`/opt/epifiz/operations/matching-one-approved-test-20261029/result.json`.
+Before another allowance or deployment, inspect its actual OPEN/RESTORED state
+and current usage; never blindly reopen or assume restoration. The owner is to
+tap the existing plan's matching button once and share its result. That phone
+response and actual restoration are pending. Full Stage 33 remains open.
