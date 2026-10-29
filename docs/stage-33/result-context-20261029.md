@@ -94,8 +94,13 @@ a timezone conversion bug. The passport date currently lacks a label explaining
 that it is the result-record date; a clarity improvement remains to be reviewed.
 
 The next independent live check is plan-to-professional matching. Its explicit
-button calls a POST that performs a new query embedding; prior instructions
-require approval before a new paid AI request. No match action was initiated.
+button calls a POST that performs a new query embedding. On 29 October 2026,
+after being told this is a new paid AI operation, the owner explicitly approved
+one matching test using an existing saved plan and the existing configured
+connection. This authorizes one explicit plan-to-professional query from the
+physical app. It does not authorize a new photo analysis, catalog reindex,
+credential change or repeated paid retries. No match response has yet been
+observed; execution and acceptance remain pending the phone action.
 Source-photo/plan quality, live matching quality, Android physical acceptance,
 remaining result-write device checks and full Stage 33 remain open. Existing
 booking/approval/cancellation acceptance in #54 is not reopened.
