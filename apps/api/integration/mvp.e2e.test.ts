@@ -1266,7 +1266,14 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
           return;
         }
         let value: unknown;
-        if (path === "/mvp/v1/photos/policy") {
+        if (path === "/mvp/v1/capabilities") {
+          // Only this intercepted UI contract enables matching. The preceding
+          // real HTTP/DB journey keeps its actual runtime capability flags.
+          value = {
+            enabled: true,
+            matching: { semanticVectorAvailable: true },
+          };
+        } else if (path === "/mvp/v1/photos/policy") {
           value = {
             available: true,
             reason: "CI_CONTRACT_ONLY",

@@ -1,5 +1,12 @@
 import { AppText as Text, palette } from "./ui";
-import { useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
+import { ApiError } from "@beauty-platform/types";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { PhotoPreparationError, prepareWebPhoto } from "./photo-upload";
@@ -16,6 +23,7 @@ export function VisualJourney({
   target,
   busy,
   run,
+  report,
   choose,
 }: {
   api: MvpApiClient;
@@ -23,6 +31,7 @@ export function VisualJourney({
   target: string;
   busy: boolean;
   run: (action: () => Promise<void>) => Promise<void>;
+  report: (error: unknown) => void;
   choose: (business: {
     id: string;
     name: string;
@@ -35,6 +44,10 @@ export function VisualJourney({
   const [session, setSession] = useState<MvpVisualSession | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
+  const [matchingState, setMatchingState] = useState<
+    "checking" | "available" | "unavailable" | "error"
+  >("checking");
+  const [matchingRefresh, setMatchingRefresh] = useState(0);
   const [message, setMessage] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -42,6 +55,40 @@ export function VisualJourney({
     Array<{ id: string; expiresAt: string }>
   >([]);
   const generation = useRef(0);
+  const reportCapabilityError = useEffectEvent((error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) report(error);
+  });
+  const matchingAvailable = useCallback(async () => {
+    const value = await api.request<{
+      enabled?: boolean;
+      matching?: { semanticVectorAvailable?: boolean };
+    }>("/mvp/v1/capabilities");
+    return (
+      value.enabled === true && value.matching?.semanticVectorAvailable === true
+    );
+  }, [api]);
+  useEffect(() => {
+    if (session?.status !== "PLAN") return;
+    let active = true;
+    setMatchingState("checking");
+    void matchingAvailable().then(
+      (available) => {
+        if (!active) return;
+        setMatchingState(available ? "available" : "unavailable");
+        if (!available) setMatches(null);
+      },
+      (error: unknown) => {
+        if (!active) return;
+        setMatchingState("error");
+        setMatches(null);
+        reportCapabilityError(error);
+      },
+    );
+    return () => {
+      active = false;
+    };
+    // Capability reads never start analysis or a paid matching request.
+  }, [matchingAvailable, session?.id, session?.status, matchingRefresh]);
   const button = (label: string, action: () => Promise<void>) => (
     <Pressable
       accessibilityRole="button"
@@ -330,16 +377,63 @@ export function VisualJourney({
                   {i + 1}. {line}
                 </Text>
               ))}
-              {button("Plana göre profesyonel ara", async () => {
-                const epoch = generation.current;
-                const result = await api.request<SemanticMatches>(
-                  `/mvp/v1/visual/sessions/${session.id}/matches`,
-                  "POST",
-                  undefined,
-                  { timeoutMs: 30000 },
-                );
-                if (epoch === generation.current) setMatches(result);
-              })}
+              {matchingState === "checking" && (
+                <Text accessibilityLiveRegion="polite">
+                  Eşleştirme durumu kontrol ediliyor…
+                </Text>
+              )}
+              {matchingState === "unavailable" && (
+                <Text accessibilityLiveRegion="polite">
+                  Planına göre profesyonel arama şu anda kullanılamıyor. Planını
+                  inceleyebilir veya Keşfet’ten hizmet ve randevu seçebilirsin.
+                </Text>
+              )}
+              {matchingState === "error" && (
+                <Text accessibilityRole="alert">
+                  Eşleştirme durumu kontrol edilemedi. Planın bu ekranda
+                  duruyor; yeniden deneyebilirsin.
+                </Text>
+              )}
+              {["unavailable", "error"].includes(matchingState) &&
+                button("Eşleştirme durumunu yenile", async () => {
+                  setMatchingRefresh((value) => value + 1);
+                })}
+              {matchingState === "available" &&
+                button("Plana göre profesyonel ara", async () => {
+                  const epoch = generation.current;
+                  setMatches(null);
+                  let capabilityChecked = false;
+                  try {
+                    // Recheck at the explicit action: a flag can close after PLAN loads.
+                    const available = await matchingAvailable();
+                    if (epoch !== generation.current) return;
+                    capabilityChecked = true;
+                    if (!available) {
+                      setMatchingState("unavailable");
+                      return;
+                    }
+                    const result = await api.request<SemanticMatches>(
+                      `/mvp/v1/visual/sessions/${session.id}/matches`,
+                      "POST",
+                      undefined,
+                      { timeoutMs: 30000 },
+                    );
+                    if (epoch === generation.current) setMatches(result);
+                  } catch (error) {
+                    if (epoch !== generation.current) return;
+                    if (error instanceof ApiError && error.status === 401)
+                      throw error;
+                    if (!capabilityChecked) {
+                      setMatchingState("error");
+                      return;
+                    }
+                    if (error instanceof ApiError && error.status === 503) {
+                      setMatchingState("unavailable");
+                      return;
+                    }
+                    throw error;
+                  }
+                })}
             </>
           )}
           {session.output?.limitations.map((line, i) => (
