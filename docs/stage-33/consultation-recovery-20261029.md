@@ -71,8 +71,15 @@ plan-to-matching, a new photo-picker/upload journey or result/satisfaction/passp
 acceptance. No additional paid analysis or matching action is requested for this
 recovery check.
 
-Next physical step: open Randevular and identify a suitable completed test
-appointment for result → satisfaction → Beauty Passport acceptance. Inspect the
-actual list before creating or completing another appointment. Plan-to-matching
-quality and Android physical acceptance remain open; full Stage 33 is not PASS.
-Existing booking/approval/cancellation acceptance in PR #54 is not reopened.
+The next physical read check also passed at 22:02–22:04 Istanbul time:
+an existing completed test appointment displayed its stored result and Kararsız
+satisfaction, and the same summary/outcome appeared in Bakımım. This verifies
+existing-data display; it does not show a new result/satisfaction write or fresh
+worker execution. Detailed evidence and the distinct result-record/appointment
+date fields are recorded in [result context](result-context-20261029.md).
+
+Plan-to-matching quality, source-photo/plan quality, remaining result-write
+device checks and Android physical acceptance remain open; full Stage 33 is not
+PASS. The plan-to-professional button makes a paid query-embedding request;
+obtain the owner's required approval before that next live action. Existing
+booking/approval/cancellation acceptance in PR #54 is not reopened.
