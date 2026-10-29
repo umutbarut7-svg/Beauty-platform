@@ -33,20 +33,34 @@ preservation and same-key retry to the intended appointment. Its existing Chromi
 and WebKit CI steps run these checks with every external request intercepted.
 No real booking, result, satisfaction, photo or provider request is made.
 
-## Validation boundary
+## Validation and internal delivery
 
-Local shared-type compilation, mobile TypeScript, focused lint/formatting,
-JavaScript syntax, whitespace checks and 38 cached mobile/client tests passed.
-The local runtime has pnpm 11 rather than the repository's required pnpm 10.28.1,
-so its automatic install was refused before changing shared dependencies. Local
-checks invoke the existing cached tools directly; they are not a frozen-install
-claim. Local Chromium/WebKit binaries are unavailable. The unchanged GitHub gates
-use pnpm 10.28.1, the frozen lockfile and installed browsers; their final-head
-results must be recorded before claiming this change's complete acceptance.
+The reviewed head `ef1978d4e98b0c38fbcc4a2bd1a5dd55b7b70eb3` passed all four
+GitHub gates with pnpm 10.28.1 and the frozen lockfile:
 
-This source correction is separate from the already delivered 1071 binary.
+- [API, PostgreSQL, HTTP and worker validation](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40909964694): 441 API tests and 17 Stage 33 integration tests.
+- [Application review](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40909964760): shared/mobile TypeScript, 38 mobile/client tests and intercepted Chromium/WebKit journeys, including result isolation, retry, photo picker, availability and consultation recovery.
+- [Android APK and iOS simulator compilation](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40909964675).
+- [Native iOS photo runtime](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40909964948): synthetic native photo IO and Expo HTTP multipart acceptance.
+
+On 29 October 2026, following the owner's instruction to continue delivery,
+[PR #64](https://github.com/umutbarut7-svg/Beauty-platform/pull/64) was merged into
+`codex/orzell-testflight-upload` as
+`c003ed82ea79690bb261ee93d39b4f4a0aefee62`. Its tree is
+`1852b83fa54e30cdb8d682898bc424c70428f22e`, identical to the reviewed head's
+tested tree. The subsequent internal-release marker changes only this document
+and the upload workflow's introductory comment; signing, permissions, dependency
+versions and release steps remain unchanged.
+
+The existing owner-authorized signed upload is being started for the result
+correction. Build 1071 does not contain this correction. A new build must complete
+signing, Apple validation/upload, processing and existing internal-group access
+verification before it is presented as available on the phone. No server change,
+new paid AI request, external tester invitation, App Review or public release is
+required for this client-only correction.
+
 Saved-consultation recovery and plan-to-professional quality still require the
 owner's physical phone. Result/satisfaction/passport physical acceptance, Android
-physical acceptance and the remaining Stage 33 conditions remain open. No new
-paid AI operation, server publication, signed upload or public release is part of
-this correction.
+physical acceptance and the remaining Stage 33 conditions remain open. Physical
+booking/approval/cancellation acceptance remains recorded in #54 and is not
+reopened.
