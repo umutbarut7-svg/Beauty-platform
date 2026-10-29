@@ -53,12 +53,12 @@ compiled modules or copied live baseline. It also requires the old compiler to
 be absent and the original catalog-corrected API image to remain healthy. Any
 other state stops the retry for review. The original directory is preserved.
 
-Preparation now emits only the two already typechecked isolated modules using
+Preparation now emits only the two already typechecked isolated modules using a TypeScript program with resolved decorator types and
 the existing compiler and reviewed configuration. CI compares both outputs to a
 full Nest build of the exact reviewed application. Live preparation independently
 requires the original emitted modules to match current API bytes before building
 or publishing the candidate. Network isolation, immutable inputs, authentication,
 image-only Compose delta, rollback, quotas, keys and unrelated-service guards
-remain. Each isolated emission has a 60-second timeout and 384 MB memory limit.
+remain. Each isolated emission has a 90-second timeout and 640 MB memory limit.
 A separate retry work directory retains no-replay behavior. No paid AI request
 or database write is part of this operation.

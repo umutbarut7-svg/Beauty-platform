@@ -350,10 +350,10 @@ class InterruptedPreparationTests(unittest.TestCase):
             self.invoke()
 
     def test_emitter_is_bounded_offline_and_baseline_comparison_retained(self):
-        self.assertIn('ts.transpileModule(', SOURCE)
+        self.assertIn('ts.createProgram(', SOURCE)
         self.assertIn("parsed.options.isolatedModules!==true", SOURCE)
         self.assertIn("baseline.read_bytes() == live.read_bytes()", SOURCE)
-        self.assertIn("['docker', 'start', '-a', name], timeout=60", SOURCE)
+        self.assertIn("['docker', 'start', '-a', name], timeout=90", SOURCE)
         self.assertNotIn('pnpm --filter @beauty-platform/api build', SOURCE)
 
 

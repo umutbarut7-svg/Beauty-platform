@@ -170,26 +170,33 @@ const config=ts.readConfigFile(file,ts.sys.readFile);
 if(config.error) throw new Error('Compiler configuration unavailable');
 const parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,path.dirname(file),undefined,file);
 if(parsed.errors.length||parsed.options.isolatedModules!==true||parsed.options.module!==ts.ModuleKind.NodeNext) throw new Error('Reviewed isolated compiler configuration changed');
-for(const stem of ['visual.service','visual.controller']){
- const source='/repo/apps/api/src/mvp/'+stem+'.ts';
- const result=ts.transpileModule(fs.readFileSync(source,'utf8'),{fileName:source,compilerOptions:parsed.options,reportDiagnostics:true});
- if(result.diagnostics?.some(d=>d.category===ts.DiagnosticCategory.Error)) throw new Error('Isolated module emission failed');
- fs.mkdirSync('/repo/apps/api/dist/mvp',{recursive:true});
- fs.writeFileSync('/repo/apps/api/dist/mvp/'+stem+'.js',result.outputText);
+const sources=['visual.service','visual.controller'].map(stem=>'/repo/apps/api/src/mvp/'+stem+'.ts');
+const program=ts.createProgram(sources,{...parsed.options,declaration:false,noEmitOnError:false});
+for(const source of sources){
+ const unit=program.getSourceFile(source);
+ if(!unit) throw new Error('Reviewed compiler input unavailable');
+ let wrote=false;
+ const emitted=program.emit(unit,(target,data)=>{
+  if(target.endsWith('.js')){
+   if(target!=='/repo/apps/api/dist/mvp/'+path.basename(source,'.ts')+'.js') throw new Error('Unexpected emitted module path');
+   fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,data);wrote=true;
+  }
+ });
+ if(!wrote||emitted.emitSkipped||emitted.diagnostics.some(d=>d.category===ts.DiagnosticCategory.Error)) throw new Error('Reviewed module emission failed');
 }
-console.log('Two isolated modules emitted; baseline byte comparison is still required');
+console.log('Two program modules emitted; baseline byte comparison is still required');
 """
     emitter_path = WORK / 'emit.cjs'
     emitter_path.write_text(emitter)
     name = 'orzell-consultation-compiler-20261029-retry-1'
-    run(['docker', 'create', '--name', name, '--user', '0:0', '--network', 'none', '--memory', '384m', '--cpus', '1', '-e', 'CI=1', '-e', 'NODE_OPTIONS=--max-old-space-size=256', '--entrypoint', 'node', BUILDER, '/tmp/orzell-emit.cjs'])
+    run(['docker', 'create', '--name', name, '--user', '0:0', '--network', 'none', '--memory', '640m', '--cpus', '1', '-e', 'CI=1', '-e', 'NODE_OPTIONS=--max-old-space-size=512', '--entrypoint', 'node', BUILDER, '/tmp/orzell-emit.cjs'])
     try:
         run(['docker', 'cp', str(emitter_path), name + ':/tmp/orzell-emit.cjs'])
         for phase in ['baseline', 'candidate']:
             print('Offline two-module emission: ' + phase, flush=True)
             for stem in SOURCES:
                 run(['docker', 'cp', str(WORK / phase / (stem + '.ts')), name + ':/repo/apps/api/src/mvp/' + stem + '.ts'])
-            run(['docker', 'start', '-a', name], timeout=60)
+            run(['docker', 'start', '-a', name], timeout=90)
             require(inspect(name)['State'].get('ExitCode') == 0, 'Offline module emission failed')
             for stem in SOURCES:
                 if phase == 'baseline':

@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - name: Compare isolated emission to the full reviewed Nest build
+      - name: Compare program emission to the full reviewed Nest build
         run: |
           pnpm --dir emitter-comparison install --frozen-lockfile
           pnpm --dir emitter-comparison --filter @beauty-platform/types build
@@ -43,11 +43,11 @@ jobs:
           const root=path.resolve('emitter-comparison');
           const script=fs.readFileSync('infra/operations/publish-preview-consultation-recovery.sh','utf8');
           const emitter=script.split('    emitter = r"""\n')[1]?.split('\n"""')[0];
-          assert(emitter,'Expected exactly the reviewed isolated emitter');
+          assert(emitter,'Expected exactly the reviewed program emitter');
           const files=['visual.service','visual.controller'].map(n=>path.join(root,'apps/api/dist/mvp',n+'.js'));
           const before=files.map(f=>fs.readFileSync(f));
-          const emitted=cp.spawnSync(process.execPath,['-e',emitter.replaceAll('/repo',root)],{encoding:'utf8',timeout:60000,env:{...process.env,NODE_OPTIONS:'--max-old-space-size=256'}});
+          const emitted=cp.spawnSync(process.execPath,['-e',emitter.replaceAll('/repo',root)],{encoding:'utf8',timeout:90000,env:{...process.env,NODE_OPTIONS:'--max-old-space-size=512'}});
           assert.equal(emitted.status,0,'Isolated emitter failed');
-          files.forEach((f,i)=>assert.deepEqual(fs.readFileSync(f),before[i],'Isolated output differs from full Nest build'));
+          files.forEach((f,i)=>assert(before[i].equals(fs.readFileSync(f)),'Program output differs from full Nest build'));
           console.log('Both isolated modules exactly match the full reviewed Nest build: PASS');
           NODE
