@@ -134,3 +134,36 @@ The new private record is
 The reviewed helper preserves whitelisted HTTP metadata before API recreation.
 Do not reopen the record, start a second potentially paid request or infer
 matching acceptance until the actual response is observed.
+
+## Completed controlled attempt and result-retention correction
+
+The owner reported that pressing the professional-search button did not open a
+visible result. The automatic observer in
+[40946364002](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/40946364002),
+job 123702942000, passed and recorded RESTORED with responseCapture CAPTURED.
+Its preserved allowlisted metadata shows one matching POST HTTP 201 at
+20:13:09.200Z, then HTTP 429 at 20:13:28.247Z and 20:13:30.103Z on 29 October.
+The original daily cap was automatically restored. The response body was not
+captured: HTTP 201 alone does not establish MATCHED rather than NO_MATCH, the
+provider charge, or the relevance/quality of returned professionals.
+
+The mobile handler kept the search button after a successful response and cleared
+its previous result at the start of the next request. Thus a subsequent 429 could
+remove a successful response from the screen. This correction preserves a
+completed result and replaces that button with an accessible completion heading
+and results immediately below the plan. A synchronous request latch prevents
+same-context double presses before React renders busy state. Both MATCHED and
+NO_MATCH complete the search; errors permit a later explicit retry and never
+retry automatically. The latch and result are discarded when the consultation
+context changes or photo consent is withdrawn. This is in-screen protection,
+not durable server deduplication across reloads or reopening consultations.
+
+Local cached-tool checks passed: shared-type build, mobile typecheck, focused
+ESLint/Prettier, whitespace validation and 38 existing mobile/client tests.
+The expanded intercepted browser acceptance covers 503/429, synchronous double
+presses, retained MATCHED results after a read-only status refresh, completed
+NO_MATCH and consent withdrawal while a response is pending. Browser CI and
+signed TestFlight delivery still require their own results at this checkpoint.
+No live API/provider request was made to verify this correction. The one newly
+approved live matching opportunity is consumed and closed; do not request another
+paid test under that approval. Full Stage 33 and live matching quality stay open.
