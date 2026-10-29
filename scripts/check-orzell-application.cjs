@@ -18,7 +18,11 @@ async function journey(browser, origin, output, engine) {
   let bookings = [],
     deny = false,
     catalogueMode = "legacy",
-    availabilityMode = "slots";
+    availabilityMode = "slots",
+    failResultRead = false,
+    failResultWrite = false;
+  const results = new Map(),
+    resultWrites = [];
   const startsAt =
     new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) +
     "T10:00:00.000Z";
@@ -139,8 +143,29 @@ async function journey(browser, origin, output, engine) {
       };
       bookings = [value];
     } else if (endpoint === "/mvp/v1/bookings") value = { items: bookings };
-    else if (endpoint.endsWith("/result")) value = { result: null };
-    else if (endpoint.endsWith("/cancel")) {
+    else if (endpoint.endsWith("/result")) {
+      const appointmentId = endpoint.split("/").at(-2);
+      if (request.method() === "POST") {
+        const body = request.postDataJSON();
+        resultWrites.push({ appointmentId, body });
+        if (failResultWrite) {
+          status = 503;
+          value = {};
+        } else {
+          value = {
+            id: "result-" + appointmentId,
+            appointmentId,
+            businessId: business.id,
+            summary: body.summary,
+            satisfaction: null,
+          };
+          results.set(appointmentId, value);
+        }
+      } else if (failResultRead) {
+        status = 503;
+        value = {};
+      } else value = { result: results.get(appointmentId) ?? null };
+    } else if (endpoint.endsWith("/cancel")) {
       bookings = bookings.map((b) => ({ ...b, status: "CANCELLED" }));
       value = bookings[0];
     } else if (endpoint === "/mvp/v1/passport") value = { items: [] };
@@ -345,6 +370,94 @@ async function journey(browser, origin, output, engine) {
   await expect(
     page.getByRole("button", { name: "İşlemi başlat", exact: true }),
   ).toHaveCount(0);
+
+  // Result drafts belong to one selected appointment; a failed read is not absence.
+  const completed = (id, name) => ({
+    ...bookings[0],
+    id,
+    service: { ...service, name },
+    status: "COMPLETED",
+  });
+  bookings = [
+    completed("completed-first", "İlk bakım"),
+    completed("completed-second", "İkinci bakım"),
+  ];
+  await click("Randevuları yenile");
+  const first = page.getByRole("button", { name: /İlk bakım.*Tamamlandı/ });
+  const second = page.getByRole("button", { name: /İkinci bakım.*Tamamlandı/ });
+  const summary = page.getByLabel("Yapılan işlemin sonucu", { exact: true });
+  const saveResult = page.getByRole("button", {
+    name: "Sonucu kaydet",
+    exact: true,
+  });
+  await first.click();
+  await summary.fill("Only the first appointment's draft");
+  await second.click();
+  await expect(summary).toHaveValue("");
+  await summary.fill("Only the second appointment's draft");
+  await tab("İşletmem");
+  await tab("Randevular");
+  await first.click();
+  await expect(summary).toHaveValue("");
+  await summary.fill("Another first appointment draft");
+
+  failResultRead = true;
+  await second.click();
+  await expect(
+    page.getByText("Sonuç bilgisi yüklenemedi. Tekrar yükleyin.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(summary).toHaveCount(0);
+  await expect(saveResult).toHaveCount(0);
+  assert.equal(resultWrites.length, 0);
+  results.set("completed-second", {
+    id: "existing-result",
+    appointmentId: "completed-second",
+    businessId: business.id,
+    summary: "Already recorded second appointment result",
+    satisfaction: null,
+  });
+  failResultRead = false;
+  await click("Sonuç bilgisini yeniden yükle");
+  await expect(
+    page.getByText("Already recorded second appointment result", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(summary).toHaveCount(0);
+  await expect(saveResult).toHaveCount(0);
+  assert.equal(resultWrites.length, 0);
+
+  await first.click();
+  await expect(summary).toHaveValue("");
+  await expect(summary).toHaveAttribute("maxLength", "2000");
+  await summary.fill("x".repeat(2001));
+  await expect(summary).toHaveValue("x".repeat(2000));
+  await summary.fill("   ");
+  await saveResult.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Sonucu 1–2000 karakter arasında yazın.",
+  );
+  assert.equal(resultWrites.length, 0);
+  const recordedSummary = "First appointment's confirmed result";
+  await summary.fill(recordedSummary);
+  failResultWrite = true;
+  await saveResult.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Bu özellik şu anda kullanılamıyor.",
+  );
+  await expect(summary).toHaveValue(recordedSummary);
+  failResultWrite = false;
+  await saveResult.click();
+  await expect(page.getByRole("alert")).toHaveText("Sonuç kaydedildi.");
+  await expect(page.getByText(recordedSummary, { exact: true })).toBeVisible();
+  await expect(summary).toHaveCount(0);
+  assert.equal(resultWrites.length, 2);
+  assert.deepEqual(resultWrites[0], resultWrites[1]);
+  assert.equal(resultWrites[1].appointmentId, "completed-first");
+  assert.equal(resultWrites[1].body.summary, recordedSummary);
+  await shot("business-result-recovery");
   await tab("İşletmem");
   await click("İşletme ayarları");
   await expect(page.getByText("Profil", { exact: true })).toBeVisible();
@@ -376,7 +489,7 @@ async function journey(browser, origin, output, engine) {
   assert.deepEqual(unexpected, []);
   await page.close();
   console.log(
-    `${engine} synthetic application journey: PASS (unknown branch assignments, refresh, registration, discovery, explicit booking/cancellation, tabs, business summary, terminal status, authorization, logout)`,
+    `${engine} synthetic application journey: PASS (unknown branch assignments, refresh, registration, discovery, explicit booking/cancellation, tabs, business summary, terminal status, result draft isolation, failed-read recovery, immutable existing result, validated save retry, authorization, logout)`,
   );
 }
 
