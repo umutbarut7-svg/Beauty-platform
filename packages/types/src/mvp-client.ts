@@ -7,9 +7,11 @@ export class ApiError extends Error {
           ? "Bu işlem için yetkiniz yok."
           : status === 409
             ? "Kayıt değişti veya bu işlem daha önce tamamlandı. Yenileyin."
-            : status === 503
-              ? "Bu özellik şu anda kullanılamıyor."
-              : "İşlem tamamlanamadı. Bilgileri kontrol edip yeniden deneyin.",
+            : status === 429
+              ? "İstek sınırına ulaşıldı. Lütfen daha sonra yeniden deneyin."
+              : status === 503
+                ? "Bu özellik şu anda kullanılamıyor."
+                : "İşlem tamamlanamadı. Bilgileri kontrol edip yeniden deneyin.",
     );
   }
 }
