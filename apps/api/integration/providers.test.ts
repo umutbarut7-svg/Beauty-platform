@@ -645,9 +645,11 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
     });
     await maintenance.sweep();
     expect(
-      (await db.mvpPhotoAnalysis.findUniqueOrThrow({
-        where: { id: f.session.id },
-      })).updatedAt,
+      (
+        await db.mvpPhotoAnalysis.findUniqueOrThrow({
+          where: { id: f.session.id },
+        })
+      ).updatedAt,
     ).toEqual(scrubbed.updatedAt);
     expect(search).not.toHaveBeenCalled();
   });
