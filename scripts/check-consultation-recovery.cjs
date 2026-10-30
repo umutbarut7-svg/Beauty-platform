@@ -18,7 +18,15 @@ async function journey(browser, origin, output, engine) {
   const recoveredMatch = {
     provider: "OPENAI_PGVECTOR",
     status: "MATCHED",
-    items: [{ businessId: "recovered-business", serviceId: "recovered-haircut", businessName: "Recovered salon", serviceName: "Recommended cut", similarity: 0.9 }],
+    items: [
+      {
+        businessId: "recovered-business",
+        serviceId: "recovered-haircut",
+        businessName: "Recovered salon",
+        serviceName: "Recommended cut",
+        similarity: 0.9,
+      },
+    ],
   };
   const expiry = new Date(Date.now() + 3600000).toISOString();
   const summary = {
@@ -111,15 +119,51 @@ async function journey(browser, origin, output, engine) {
                 questions: ["Synthetic saved question?"],
               },
             }
-          : plan;
-    } else if (endpoint === "/mvp/v1/visual/sessions/synthetic-session/matches" && request.method() === "GET") {
+          : restoreMode === "expired"
+            ? { ...plan, expiresAt: new Date(Date.now() - 1000).toISOString() }
+            : plan;
+    } else if (
+      endpoint === "/mvp/v1/visual/sessions/synthetic-session/matches" &&
+      request.method() === "GET"
+    ) {
       if (matchingMode === "error") status = 503;
-      value = { status: matchingMode === "saved" ? "READY" : matchingMode === "pending" ? "RUNNING" : "NOT_REQUESTED", result: matchingMode === "saved" ? recoveredMatch : null };
+      value = {
+        status:
+          matchingMode === "saved"
+            ? "READY"
+            : matchingMode === "pending"
+              ? "RUNNING"
+              : "NOT_REQUESTED",
+        result: matchingMode === "saved" ? recoveredMatch : null,
+      };
     } else if (endpoint === "/mvp/v1/catalog/recovered-business") {
-      value = { id: "recovered-business", name: "Recovered salon", isVerified: false, staff: [], locations: [], services: [
-        { id: "unrelated-extensions", name: "Extensions", price: "20000", currency: "TRY", durationMinutes: 120 },
-        ...(matchingMode === "removed" ? [] : [{ id: "recovered-haircut", name: "Recommended cut", price: "100", currency: "TRY", durationMinutes: 30 }]),
-      ] };
+      value = {
+        id: "recovered-business",
+        name: "Recovered salon",
+        isVerified: false,
+        staff: [],
+        locations: [],
+        services: [
+          {
+            id: "unrelated-extensions",
+            name: "Extensions",
+            price: "20000",
+            currency: "TRY",
+            durationMinutes: 120,
+          },
+          ...(matchingMode === "removed"
+            ? []
+            : [
+                {
+                  id: "recovered-haircut",
+                  name: "Recommended cut",
+                  price: "100",
+                  currency: "TRY",
+                  durationMinutes: 30,
+                },
+              ]),
+        ],
+      };
     } else if (endpoint === "/mvp/v1/capabilities")
       value = {
         enabled: true,
@@ -202,19 +246,37 @@ async function journey(browser, origin, output, engine) {
   await expect(savedPlan).toBeVisible();
   matchingMode = "saved";
   await button("1. danışmanlığı aç").click();
-  await expect(page.getByText("Recovered salon · Recommended cut", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Recovered salon · Recommended cut", { exact: true }),
+  ).toBeVisible();
   await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
   await button("Recommended cut için hizmetleri gör").click();
-  await expect(button("Recommended cut hizmetini seç")).toHaveAttribute("aria-selected", "true");
-  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute("aria-selected", "true");
+  await expect(button("Recommended cut hizmetini seç")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await button("Aramaya dön").click();
   await button("Fotoğraflı danışmanlık").click();
   await recover();
-  await expect(page.getByText("Recovered salon · Recommended cut", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Recovered salon · Recommended cut", { exact: true }),
+  ).toBeVisible();
   matchingMode = "removed";
   await button("Recommended cut için hizmetleri gör").click();
-  await expect(page.getByText("Önerilen hizmet artık rezervasyona açık değil. Devam etmek için güncel hizmetlerden birini seç.", { exact: true })).toBeVisible();
-  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByText(
+      "Önerilen hizmet artık rezervasyona açık değil. Devam etmek için güncel hizmetlerden birini seç.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await button("Aramaya dön").click();
   await button("Fotoğraflı danışmanlık").click();
   matchingMode = "error";
@@ -228,6 +290,18 @@ async function journey(browser, origin, output, engine) {
   matchingMode = "empty";
   await button("Kayıtlı arama durumunu yenile").click();
   await expect(button("Plana göre profesyonel ara")).toBeVisible();
+  restoreMode = "expired";
+  await button("1. danışmanlığı aç").click();
+  await expect(
+    page.getByText(
+      "Danışmanlığın süresi doldu. Kayıtlı analiz ve öneriler artık gösterilmiyor.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(savedPlan).toHaveCount(0);
+  await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  restoreMode = "plan";
+  await recover();
   restoreMode = "questions";
   await button("1. danışmanlığı aç").click();
   await expect(

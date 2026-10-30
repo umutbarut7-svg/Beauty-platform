@@ -7,7 +7,10 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { SemanticMatches, VisualMatchingStatus } from "@beauty-platform/types";
+import type {
+  SemanticMatches,
+  VisualMatchingStatus,
+} from "@beauty-platform/types";
 import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { PRISMA_SERVICE } from "../database/database.tokens.js";
 import type { PrismaService } from "../database/prisma.service.js";
@@ -54,7 +57,10 @@ export class VisualMatchesService {
     }) as Promise<T>;
   }
 
-  private async project(tx: PrismaService, input: unknown): Promise<SemanticMatches> {
+  private async project(
+    tx: PrismaService,
+    input: unknown,
+  ): Promise<SemanticMatches> {
     if (
       !Array.isArray(input) ||
       input.length > 20 ||
@@ -100,13 +106,15 @@ export class VisualMatchesService {
           item.business.updatedAt.toISOString() === reference.businessUpdatedAt,
       );
       return service
-        ? [{
-            businessId: reference.businessId,
-            serviceId: reference.serviceId,
-            similarity: reference.similarity,
-            businessName: service.business.name,
-            serviceName: service.name,
-          }]
+        ? [
+            {
+              businessId: reference.businessId,
+              serviceId: reference.serviceId,
+              similarity: reference.similarity,
+              businessName: service.business.name,
+              serviceName: service.name,
+            },
+          ]
         : [];
     });
     return {
@@ -127,7 +135,10 @@ export class VisualMatchesService {
         throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
       return {
         status,
-        result: status === "READY" ? await this.project(tx, row.matchingOutput) : null,
+        result:
+          status === "READY"
+            ? await this.project(tx, row.matchingOutput)
+            : null,
       };
     });
   }
@@ -145,10 +156,22 @@ export class VisualMatchesService {
         throw new ConflictException("VISUAL_MATCH_RUNNING");
       if (row.matchingStatus !== null && row.matchingStatus !== "FAILED")
         throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
-      await tx.mvpPhotoAnalysis.update({
-        where: { id },
-        data: { matchingStatus: "RUNNING", matchingRequestId: requestId, matchingOutput: null },
+      const claimed = await tx.mvpPhotoAnalysis.updateMany({
+        where: {
+          id,
+          ownerId: user.id,
+          status: "PLAN",
+          expiresAt: { gt: new Date() },
+          matchingStatus: row.matchingStatus,
+        },
+        data: {
+          matchingStatus: "RUNNING",
+          matchingRequestId: requestId,
+          matchingOutput: null,
+        },
       });
+      if (claimed.count !== 1)
+        throw new ConflictException("VISUAL_SESSION_CHANGED");
       return { result: null, query };
     });
     if (claim.result) return claim.result;
@@ -165,16 +188,37 @@ export class VisualMatchesService {
       return await this.locked(user, id, async (tx) => {
         const projected = await this.project(tx, references);
         const saved = await tx.mvpPhotoAnalysis.updateMany({
-          where: { id, ownerId: user.id, matchingStatus: "RUNNING", matchingRequestId: requestId },
-          data: { matchingStatus: "READY", matchingOutput: references, matchingRequestId: null },
+          where: {
+            id,
+            ownerId: user.id,
+            status: "PLAN",
+            expiresAt: { gt: new Date() },
+            matchingStatus: "RUNNING",
+            matchingRequestId: requestId,
+          },
+          data: {
+            matchingStatus: "READY",
+            matchingOutput: references,
+            matchingRequestId: null,
+          },
         });
-        if (saved.count !== 1) throw new ConflictException("VISUAL_SESSION_CHANGED");
+        if (saved.count !== 1)
+          throw new ConflictException("VISUAL_SESSION_CHANGED");
         return projected;
       });
     } catch (error) {
       await this.db.mvpPhotoAnalysis.updateMany({
-        where: { id, ownerId: user.id, matchingStatus: "RUNNING", matchingRequestId: requestId },
-        data: { matchingStatus: "FAILED", matchingRequestId: null, matchingOutput: null },
+        where: {
+          id,
+          ownerId: user.id,
+          matchingStatus: "RUNNING",
+          matchingRequestId: requestId,
+        },
+        data: {
+          matchingStatus: "FAILED",
+          matchingRequestId: null,
+          matchingOutput: null,
+        },
       });
       throw error;
     }

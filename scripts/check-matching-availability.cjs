@@ -53,8 +53,7 @@ async function journey(browser, origin, output, engine) {
     else if (endpoint === "/mvp/v1/photos/consents") {
       savedResult = null;
       value = { id: "synthetic-consent" };
-    }
-    else if (endpoint === "/mvp/v1/photos/upload/synthetic-consent")
+    } else if (endpoint === "/mvp/v1/photos/upload/synthetic-consent")
       value = { id: "synthetic-photo" };
     else if (endpoint === "/mvp/v1/visual/sessions")
       value = { id: "synthetic-session", status: "CREATED", attempts: 0 };
@@ -83,7 +82,10 @@ async function journey(browser, origin, output, engine) {
         matching: { semanticVectorAvailable: capability === "open" },
       };
     } else if (endpoint.endsWith("/matches") && request.method() === "GET") {
-      value = { status: savedResult ? "READY" : "NOT_REQUESTED", result: savedResult };
+      value = {
+        status: savedResult ? "READY" : "NOT_REQUESTED",
+        result: savedResult,
+      };
     } else if (endpoint.endsWith("/matches")) {
       const response = match;
       if (response === "late")

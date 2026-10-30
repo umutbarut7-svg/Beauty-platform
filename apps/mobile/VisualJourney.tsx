@@ -36,11 +36,14 @@ export function VisualJourney({
   restoreContext: (intent: string, target: string) => void;
   run: (action: () => Promise<void>) => Promise<void>;
   report: (error: unknown) => void;
-  choose: (business: {
-    id: string;
-    name: string;
-    isVerified: boolean;
-  }, serviceId?: string) => Promise<void>;
+  choose: (
+    business: {
+      id: string;
+      name: string;
+      isVerified: boolean;
+    },
+    serviceId?: string,
+  ) => Promise<void>;
 }) {
   const [capability, setCapability] = useState<PhotoCapability | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -51,8 +54,11 @@ export function VisualJourney({
     MvpVisualSessionSummary[] | null
   >(null);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
-  const [savedMatching, setSavedMatching] = useState<VisualMatchingStatus["status"]>("NOT_REQUESTED");
-  const [matchRead, setMatchRead] = useState<"ready" | "loading" | "error">("ready");
+  const [savedMatching, setSavedMatching] =
+    useState<VisualMatchingStatus["status"]>("NOT_REQUESTED");
+  const [matchRead, setMatchRead] = useState<"ready" | "loading" | "error">(
+    "ready",
+  );
   const [matchingState, setMatchingState] = useState<
     "checking" | "available" | "unavailable" | "error"
   >("checking");
@@ -80,6 +86,24 @@ export function VisualJourney({
     },
     [],
   );
+  useEffect(() => {
+    if (!session) return;
+    const expiry = Date.parse(session.expiresAt);
+    if (!Number.isFinite(expiry)) return;
+    const timer = setTimeout(() => {
+      generation.current++;
+      setSession(null);
+      setAnswers([]);
+      clearMatches();
+      setConsultations(
+        (current) => current?.filter((item) => item.id !== session.id) ?? null,
+      );
+      setMessage(
+        "Danışmanlığın süresi doldu. Kayıtlı analiz ve öneriler artık gösterilmiyor.",
+      );
+    }, Math.max(0, expiry - Date.now()));
+    return () => clearTimeout(timer);
+  }, [session?.id, session?.expiresAt, clearMatches]);
   const reportCapabilityError = useEffectEvent((error: unknown) => {
     if (error instanceof ApiError && error.status === 401) report(error);
   });
@@ -213,7 +237,8 @@ export function VisualJourney({
             setAccepted(false);
             setUploadMessage("");
             setMessage("Kaydedilmiş danışmanlık açıldı.");
-            if (restored.status === "PLAN") await restoreMatches(restored.id, epoch);
+            if (restored.status === "PLAN")
+              await restoreMatches(restored.id, epoch);
           })}
         </View>
       ))}
@@ -479,15 +504,25 @@ export function VisualJourney({
                   {i + 1}. {line}
                 </Text>
               ))}
-              {matchRead === "loading" && <Text>Kayıtlı arama sonucu yükleniyor…</Text>}
+              {matchRead === "loading" && (
+                <Text>Kayıtlı arama sonucu yükleniyor…</Text>
+              )}
               {matchRead === "error" && (
-                <Text accessibilityRole="alert">Kayıtlı arama durumu yüklenemedi. Yeni arama başlatmadan durumu yenileyebilirsin.</Text>
+                <Text accessibilityRole="alert">
+                  Kayıtlı arama durumu yüklenemedi. Yeni arama başlatmadan
+                  durumu yenileyebilirsin.
+                </Text>
               )}
               {savedMatching === "RUNNING" && (
-                <Text accessibilityLiveRegion="polite">Arama isteği işleniyor. Sonucu kontrol etmek için kayıtlı arama durumunu yenileyebilirsin.</Text>
+                <Text accessibilityLiveRegion="polite">
+                  Arama isteği işleniyor. Sonucu kontrol etmek için kayıtlı
+                  arama durumunu yenileyebilirsin.
+                </Text>
               )}
               {(matchRead === "error" || savedMatching === "RUNNING") &&
-                button("Kayıtlı arama durumunu yenile", () => restoreMatches(session.id, generation.current))}
+                button("Kayıtlı arama durumunu yenile", () =>
+                  restoreMatches(session.id, generation.current),
+                )}
               {matchingState === "checking" && (
                 <Text accessibilityLiveRegion="polite">
                   Eşleştirme durumu kontrol ediliyor…
@@ -586,11 +621,14 @@ export function VisualJourney({
                     Hizmetin uygunluğu ve müsaitliği ayrıca kontrol edilir.
                   </Text>
                   {button(`${match.serviceName} için hizmetleri gör`, () =>
-                    choose({
-                      id: match.businessId,
-                      name: match.businessName,
-                      isVerified: false,
-                    }, match.serviceId),
+                    choose(
+                      {
+                        id: match.businessId,
+                        name: match.businessName,
+                        isVerified: false,
+                      },
+                      match.serviceId,
+                    ),
                   )}
                 </View>
               ))}
