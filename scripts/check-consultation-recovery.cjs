@@ -250,15 +250,13 @@ async function journey(browser, origin, output, engine) {
     page.getByText("Recovered salon · Recommended cut", { exact: true }),
   ).toBeVisible();
   await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(output, "consultation-restored-matches-" + engine + ".png"),
+    fullPage: true,
+  });
   await button("Recommended cut için hizmetleri gör").click();
-  await expect(button("Recommended cut hizmetini seç")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(button("Recommended cut hizmetini seç")).toContainText("✓");
+  await expect(button("Extensions hizmetini seç")).not.toContainText("✓");
   await button("Aramaya dön").click();
   await button("Fotoğraflı danışmanlık").click();
   await recover();
@@ -273,10 +271,7 @@ async function journey(browser, origin, output, engine) {
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(button("Extensions hizmetini seç")).not.toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(button("Extensions hizmetini seç")).not.toContainText("✓");
   await button("Aramaya dön").click();
   await button("Fotoğraflı danışmanlık").click();
   matchingMode = "error";
