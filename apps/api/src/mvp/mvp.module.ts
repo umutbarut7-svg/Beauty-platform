@@ -8,6 +8,7 @@ import { PassportWorker } from "./passport-worker.service.js";
 import { VisualController } from "./visual.controller.js";
 import { MvpExternalGuard, VisualService } from "./visual.service.js";
 import { SemanticService } from "./semantic.service.js";
+import { VisualMatchesService } from "./visual-matches.service.js";
 import { VerificationService } from "./verification.service.js";
 import { PrivatePhotoStore } from "./providers/private-photo-store.js";
 import { OpenAiBeautyProvider } from "./providers/openai-beauty.provider.js";
@@ -23,6 +24,7 @@ import { AISafetyEngine } from "../ai/ai-safety.service.js";
     VisualService,
     MvpExternalGuard,
     SemanticService,
+    VisualMatchesService,
     VerificationService,
     PrivatePhotoStore,
     OpenAiBeautyProvider,

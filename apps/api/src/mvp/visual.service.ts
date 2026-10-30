@@ -364,9 +364,9 @@ export class VisualService {
       })),
     };
   }
-  async get(user: AuthenticatedUser, id: string) {
+  async get(user: AuthenticatedUser, id: string, db = this.db) {
     assertMvpEnabled();
-    const row = await this.db.mvpPhotoAnalysis.findFirst({
+    const row = await db.mvpPhotoAnalysis.findFirst({
       where: {
         id,
         ownerId: user.id,
@@ -516,6 +516,9 @@ export class VisualService {
             intent: "",
             target: "",
             answers: [],
+            matchingStatus: null,
+            matchingRequestId: null,
+            matchingOutput: null,
           },
         });
         await this.event(

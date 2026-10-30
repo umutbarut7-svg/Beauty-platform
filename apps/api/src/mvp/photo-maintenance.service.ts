@@ -23,6 +23,9 @@ export class PhotoMaintenanceService {
         target: "",
         answers: [],
         output: null,
+        matchingStatus: null,
+        matchingRequestId: null,
+        matchingOutput: null,
       },
     });
     await this.db.mvpPhotoAnalysis.updateMany({

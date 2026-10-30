@@ -189,7 +189,7 @@ export class SemanticService implements OnModuleInit {
     const embedding = JSON.stringify(validateEmbedding(vector));
     try {
       const items = await this.db.$queryRawUnsafe(
-        `SELECT v."businessId",v."serviceId",b.name AS "businessName",s.name AS "serviceName",1-(v.embedding <=> $1::vector) AS similarity
+        `SELECT v."businessId",v."serviceId",v."sourceUpdatedAt",v."businessUpdatedAt",b.name AS "businessName",s.name AS "serviceName",1-(v.embedding <=> $1::vector) AS similarity
         FROM "MvpCatalogVector" v JOIN "Service" s ON s.id=v."serviceId" AND s."businessId"=v."businessId" JOIN "Business" b ON b.id=v."businessId"
         WHERE v.model=$2 AND b."isPublic" AND b.status='ACTIVE' AND s."isActive" AND s."isBookable" AND s."updatedAt"=v."sourceUpdatedAt" AND b."updatedAt"=v."businessUpdatedAt"
         ORDER BY v.embedding <=> $1::vector,v."serviceId" LIMIT 20`,

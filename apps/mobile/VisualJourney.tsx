@@ -16,6 +16,7 @@ import type {
   MvpVisualSessionSummary,
   PhotoCapability,
   SemanticMatches,
+  VisualMatchingStatus,
 } from "@beauty-platform/types";
 
 export function VisualJourney({
@@ -39,7 +40,7 @@ export function VisualJourney({
     id: string;
     name: string;
     isVerified: boolean;
-  }) => Promise<void>;
+  }, serviceId?: string) => Promise<void>;
 }) {
   const [capability, setCapability] = useState<PhotoCapability | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -50,6 +51,8 @@ export function VisualJourney({
     MvpVisualSessionSummary[] | null
   >(null);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
+  const [savedMatching, setSavedMatching] = useState<VisualMatchingStatus["status"]>("NOT_REQUESTED");
+  const [matchRead, setMatchRead] = useState<"ready" | "loading" | "error">("ready");
   const [matchingState, setMatchingState] = useState<
     "checking" | "available" | "unavailable" | "error"
   >("checking");
@@ -68,6 +71,8 @@ export function VisualJourney({
   const clearMatches = useCallback(() => {
     matchingRequest.current = null;
     setMatches(null);
+    setSavedMatching("NOT_REQUESTED");
+    setMatchRead("ready");
   }, []);
   useEffect(
     () => () => {
@@ -95,12 +100,10 @@ export function VisualJourney({
       (available) => {
         if (!active) return;
         setMatchingState(available ? "available" : "unavailable");
-        if (!available) clearMatches();
       },
       (error: unknown) => {
         if (!active) return;
         setMatchingState("error");
-        clearMatches();
         reportCapabilityError(error);
       },
     );
@@ -115,6 +118,28 @@ export function VisualJourney({
     session?.status,
     matchingRefresh,
   ]);
+  async function restoreMatches(id: string, epoch: number) {
+    setMatchRead("loading");
+    try {
+      const value = await api.request<VisualMatchingStatus>(
+        `/mvp/v1/visual/sessions/${id}/matches`,
+      );
+      if (epoch !== generation.current) return;
+      setMatches(value.result);
+      setSavedMatching(value.status);
+      setMatchRead("ready");
+    } catch (error) {
+      if (epoch !== generation.current) return;
+      setMatches(null);
+      if (error instanceof ApiError && [403, 404].includes(error.status)) {
+        clearMatches();
+        setSession(null);
+        setAnswers([]);
+      }
+      setMatchRead("error");
+      throw error;
+    }
+  }
   const button = (label: string, action: () => Promise<void>) => (
     <Pressable
       accessibilityRole="button"
@@ -188,6 +213,7 @@ export function VisualJourney({
             setAccepted(false);
             setUploadMessage("");
             setMessage("Kaydedilmiş danışmanlık açıldı.");
+            if (restored.status === "PLAN") await restoreMatches(restored.id, epoch);
           })}
         </View>
       ))}
@@ -412,6 +438,7 @@ export function VisualJourney({
             if (epoch === generation.current) {
               setSession(next);
               setAnswers([]);
+              if (next.status === "PLAN") await restoreMatches(next.id, epoch);
             }
           })}
           {["CREATED", "FAILED"].includes(session.status) &&
@@ -452,6 +479,15 @@ export function VisualJourney({
                   {i + 1}. {line}
                 </Text>
               ))}
+              {matchRead === "loading" && <Text>Kayıtlı arama sonucu yükleniyor…</Text>}
+              {matchRead === "error" && (
+                <Text accessibilityRole="alert">Kayıtlı arama durumu yüklenemedi. Yeni arama başlatmadan durumu yenileyebilirsin.</Text>
+              )}
+              {savedMatching === "RUNNING" && (
+                <Text accessibilityLiveRegion="polite">Arama isteği işleniyor. Sonucu kontrol etmek için kayıtlı arama durumunu yenileyebilirsin.</Text>
+              )}
+              {(matchRead === "error" || savedMatching === "RUNNING") &&
+                button("Kayıtlı arama durumunu yenile", () => restoreMatches(session.id, generation.current))}
               {matchingState === "checking" && (
                 <Text accessibilityLiveRegion="polite">
                   Eşleştirme durumu kontrol ediliyor…
@@ -474,6 +510,8 @@ export function VisualJourney({
                   setMatchingRefresh((value) => value + 1);
                 })}
               {matchingState === "available" &&
+                matchRead === "ready" &&
+                savedMatching !== "RUNNING" &&
                 !matches &&
                 button("Plana göre profesyonel ara", async () => {
                   const epoch = generation.current;
@@ -504,11 +542,16 @@ export function VisualJourney({
                     ) {
                       request.completed = true;
                       setMatches(result);
+                      setSavedMatching("READY");
                     }
                   } catch (error) {
                     if (epoch !== generation.current) return;
                     if (error instanceof ApiError && error.status === 401)
                       throw error;
+                    if (error instanceof ApiError && error.status === 409) {
+                      await restoreMatches(session.id, epoch);
+                      return;
+                    }
                     if (!capabilityChecked) {
                       setMatchingState("error");
                       return;
@@ -547,7 +590,7 @@ export function VisualJourney({
                       id: match.businessId,
                       name: match.businessName,
                       isVerified: false,
-                    }),
+                    }, match.serviceId),
                   )}
                 </View>
               ))}
