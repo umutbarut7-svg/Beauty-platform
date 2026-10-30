@@ -1,6 +1,12 @@
 # Explain the physical-phone matching rate limit
 
-## Latest checkpoint — 30 October 2026 (Istanbul)
+## Latest workflow acceptance status — 30 October 2026
+
+Tester feedback reports that the photo-consultation and professional-selection route reached the pending-booking screen in a physical-device test. Record this as reported workflow progress. Independently verified recommendation relevance, source-photo fidelity and installed-build attribution remain open. Inspect the existing analysis and professional-recommendation output to continue quality acceptance without repeating provider work. Existing booking, approval and cancellation acceptance is not reopened. No additional paid request was authorized or performed by this documentation update. Full Stage 33 and the remaining device, result-write, policy and operations gates remain open.
+
+[PR #70](https://github.com/umutbarut7-svg/Beauty-platform/pull/70) clarifies the care-history date with “Sonucun kaydedildiği tarih”. Its final source `781f2ce8f1e46ca7a9d5de87051cd6fdf2549bed` passed application review 41035203145, repository/API/HTTP/PostgreSQL/worker validation 41035203217, Android/iOS compilation 41035203239 and synthetic native-photo runtime 41035203175. It merged as `01c9ae6a5f0a7836af655ad0f17f978ab8fbed8b`; the merged App.tsx blob matches the tested source. The label is prepared for the next internal binary. TestFlight 1101 remains the last verified uploaded build. No application runtime, quota, provider configuration or binary upload is changed here.
+
+## Earlier internal-delivery checkpoint — 30 October 2026 (Istanbul)
 
 Reviewed source `36bf4a29ef21427a995a01ea28a3a7604b1588ba` passed all four final-head gates:
 
