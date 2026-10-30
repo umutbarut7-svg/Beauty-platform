@@ -1074,6 +1074,7 @@ export default function App() {
                 {passport.map((item) => (
                   <View key={item.id} style={styles.card}>
                     <Text style={styles.small}>
+                      Sonucun kaydedildiği tarih:{" "}
                       {new Date(item.createdAt).toLocaleDateString("tr-TR", {
                         day: "numeric",
                         month: "long",
