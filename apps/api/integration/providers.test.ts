@@ -631,9 +631,13 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
         return session;
       },
     };
-    const matches = new VisualMatchesService(db as never, visual as never, {
-      search,
-    } as never);
+    const matches = new VisualMatchesService(
+      db as never,
+      visual as never,
+      {
+        search,
+      } as never,
+    );
     await expect(matches.create(f.user, f.session.id)).rejects.toThrow(
       "VISUAL_SESSION_CHANGED",
     );

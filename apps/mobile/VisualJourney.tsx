@@ -90,18 +90,22 @@ export function VisualJourney({
     if (!session) return;
     const expiry = Date.parse(session.expiresAt);
     if (!Number.isFinite(expiry)) return;
-    const timer = setTimeout(() => {
-      generation.current++;
-      setSession(null);
-      setAnswers([]);
-      clearMatches();
-      setConsultations(
-        (current) => current?.filter((item) => item.id !== session.id) ?? null,
-      );
-      setMessage(
-        "Danışmanlığın süresi doldu. Kayıtlı analiz ve öneriler artık gösterilmiyor.",
-      );
-    }, Math.max(0, expiry - Date.now()));
+    const timer = setTimeout(
+      () => {
+        generation.current++;
+        setSession(null);
+        setAnswers([]);
+        clearMatches();
+        setConsultations(
+          (current) =>
+            current?.filter((item) => item.id !== session.id) ?? null,
+        );
+        setMessage(
+          "Danışmanlığın süresi doldu. Kayıtlı analiz ve öneriler artık gösterilmiyor.",
+        );
+      },
+      Math.max(0, expiry - Date.now()),
+    );
     return () => clearTimeout(timer);
   }, [session?.id, session?.expiresAt, clearMatches]);
   const reportCapabilityError = useEffectEvent((error: unknown) => {
