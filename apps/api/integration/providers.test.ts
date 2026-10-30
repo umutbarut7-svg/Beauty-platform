@@ -614,6 +614,43 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
     );
     expect(search).toHaveBeenCalledTimes(1);
   });
+  it("scrubs quarantined matching data once", async () => {
+    const f = await fixture();
+    await db.mvpPhotoConsent.update({
+      where: { id: f.consent.id },
+      data: { revokedAt: new Date() },
+    });
+    await db.mvpPhotoAnalysis.update({
+      where: { id: f.session.id },
+      data: { status: "REVOKED", matchingStatus: "READY", matchingOutput: [] },
+    });
+    const search = vi.fn();
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
+    await expect(matches.get(f.user, f.session.id)).rejects.toThrow(
+      "UNAVAILABLE",
+    );
+    const maintenance = new PhotoMaintenanceService(db as never, store);
+    await maintenance.sweep();
+    const scrubbed = await db.mvpPhotoAnalysis.findUniqueOrThrow({
+      where: { id: f.session.id },
+    });
+    expect(scrubbed).toMatchObject({
+      status: "REVOKED",
+      matchingStatus: null,
+      matchingRequestId: null,
+      matchingOutput: null,
+      expiresAt: f.session.expiresAt,
+    });
+    await maintenance.sweep();
+    expect(
+      (await db.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: f.session.id },
+      })).updatedAt,
+    ).toEqual(scrubbed.updatedAt);
+    expect(search).not.toHaveBeenCalled();
+  });
   it("does not start provider work if expiry changes the plan after the authorized read", async () => {
     const f = await fixture();
     const search = vi.fn();

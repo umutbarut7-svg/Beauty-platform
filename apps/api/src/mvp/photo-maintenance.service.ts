@@ -35,6 +35,19 @@ export class PhotoMaintenanceService {
       },
       data: { status: "FAILED" },
     });
+    // An offline restore can already have quarantined the analysis status.
+    // Scrub new derived fields even when the older quarantine did not know them.
+    await this.db.mvpPhotoAnalysis.updateMany({
+      where: {
+        status: { in: ["EXPIRED", "REVOKED"] },
+        matchingStatus: { not: null },
+      },
+      data: {
+        matchingStatus: null,
+        matchingRequestId: null,
+        matchingOutput: null,
+      },
+    });
     const photos = await this.db.mvpPhoto.findMany({
       where: {
         deletedAt: null,

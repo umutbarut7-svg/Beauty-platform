@@ -22,6 +22,8 @@ and consent and existing expiry. It also revalidates public, active, bookable
 catalog entries and their exact source revisions; changed/private services are
 excluded and current public names are projected. The expiry is not extended.
 Consent withdrawal and the existing expiry worker scrub the matching fields.
+The worker also clears matching fields on already quarantined/expired rows,
+without changing their revocation state or repeatedly rewriting scrubbed rows.
 Private reads and matching responses use Cache-Control: no-store.
 
 The selected recommendation's service ID now travels into the authoritative
@@ -30,8 +32,9 @@ recommendation produces an explicit notice and no replacement selection. The
 user can deliberately choose another current service. This corrects the handoff;
 it does not establish that the AI's original recommendation was appropriate.
 
-An additive migration adds three nullable analysis fields. Existing analyses
-have no saved match; this cannot reconstruct earlier responses that were never
+An additive migration adds three nullable analysis fields. Deploy the reviewed
+API and privacy worker together before client delivery. Older analyses have no
+saved match; this cannot reconstruct earlier responses that were never
 stored. A process interruption can leave RUNNING until the consultation expires;
 reads never reclaim it or launch another potentially paid request. Provider
 failures are recorded as FAILED; only a later explicit POST can try again.
