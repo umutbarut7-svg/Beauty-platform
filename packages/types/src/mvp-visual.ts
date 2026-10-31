@@ -31,6 +31,7 @@ export interface MvpVisualSessionSummary {
 export interface SemanticMatches {
   provider: "OPENAI_PGVECTOR";
   status: "MATCHED" | "NO_MATCH";
+  reason?: "CONSULTATION_UNCLEAR";
   items: Array<{
     businessId: string;
     serviceId: string;
@@ -58,3 +59,4 @@ export interface MvpVerificationRequest {
   status: string;
   reviewNote: string | null;
 }
+

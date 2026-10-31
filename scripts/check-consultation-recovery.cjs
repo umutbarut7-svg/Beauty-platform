@@ -129,12 +129,22 @@ async function journey(browser, origin, output, engine) {
       if (matchingMode === "error") status = 503;
       value = {
         status:
-          matchingMode === "saved"
+          ["saved", "unclear"].includes(matchingMode)
             ? "READY"
             : matchingMode === "pending"
               ? "RUNNING"
               : "NOT_REQUESTED",
-        result: matchingMode === "saved" ? recoveredMatch : null,
+        result:
+          matchingMode === "saved"
+            ? recoveredMatch
+            : matchingMode === "unclear"
+              ? {
+                  provider: "OPENAI_PGVECTOR",
+                  status: "NO_MATCH",
+                  reason: "CONSULTATION_UNCLEAR",
+                  items: [],
+                }
+              : null,
       };
     } else if (endpoint === "/mvp/v1/catalog/recovered-business") {
       value = {
@@ -285,6 +295,16 @@ async function journey(browser, origin, output, engine) {
   matchingMode = "empty";
   await button("Kayıtlı arama durumunu yenile").click();
   await expect(button("Plana göre profesyonel ara")).toBeVisible();
+  matchingMode = "unclear";
+  await button("1. danışmanlığı aç").click();
+  await expect(
+    page.getByText(
+      "Bu danışmanlıkta aranacak hizmet türü net değil. Hedefini netleştirerek yeni danışmanlık başlatabilir veya Keşfet’ten hizmet seçebilirsin.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(button("Plana göre profesyonel ara")).toHaveCount(0);
+  await expect(button("Recommended cut için hizmetleri gör")).toHaveCount(0);
   restoreMode = "expired";
   await button("1. danışmanlığı aç").click();
   await expect(
@@ -351,3 +371,4 @@ main(async (browser, origin, output) => {
   console.error(error);
   process.exitCode = 1;
 });
+

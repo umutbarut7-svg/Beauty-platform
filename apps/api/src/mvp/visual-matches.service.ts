@@ -16,6 +16,13 @@ import { PRISMA_SERVICE } from "../database/database.tokens.js";
 import type { PrismaService } from "../database/prisma.service.js";
 import { SemanticService } from "./semantic.service.js";
 import { VisualService } from "./visual.service.js";
+import {
+  compatibleVisualService,
+  resolveVisualServiceKind,
+} from "./visual-service-compatibility.js";
+import type { HairServiceKind } from "./visual-service-compatibility.js";
+
+type MatchingContext = { query: string; kind: HairServiceKind | null };
 
 type MatchReference = {
   businessId: string;
@@ -43,7 +50,7 @@ export class VisualMatchesService {
   private async locked<T>(
     user: AuthenticatedUser,
     id: string,
-    action: (tx: PrismaService, query: string) => Promise<T>,
+    action: (tx: PrismaService, context: MatchingContext) => Promise<T>,
   ) {
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
@@ -53,13 +60,28 @@ export class VisualMatchesService {
       const session = await this.visual.get(user, id, tx);
       if (session.status !== "PLAN")
         throw new BadRequestException("VISUAL_PLAN_REQUIRED");
-      return action(tx, session.output.searchQuery);
+      const request = await tx.mvpPhotoAnalysis.findFirst({
+        where: {
+          id,
+          ownerId: user.id,
+          status: "PLAN",
+          expiresAt: { gt: new Date() },
+        },
+        select: { intent: true, target: true },
+      });
+      if (!request) throw new ConflictException("VISUAL_SESSION_CHANGED");
+      const query = session.output.searchQuery;
+      return action(tx, {
+        query,
+        kind: resolveVisualServiceKind(request.intent, request.target, query),
+      });
     }) as Promise<T>;
   }
 
   private async project(
     tx: PrismaService,
     input: unknown,
+    kind: HairServiceKind | null,
   ): Promise<SemanticMatches> {
     if (
       !Array.isArray(input) ||
@@ -77,6 +99,13 @@ export class VisualMatchesService {
     )
       throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
     const references = input as MatchReference[];
+    if (!kind)
+      return {
+        provider: "OPENAI_PGVECTOR",
+        status: "NO_MATCH",
+        reason: "CONSULTATION_UNCLEAR",
+        items: [],
+      };
     const current: PublicService[] = references.length
       ? await tx.service.findMany({
           where: {
@@ -105,7 +134,7 @@ export class VisualMatchesService {
           item.updatedAt.toISOString() === reference.sourceUpdatedAt &&
           item.business.updatedAt.toISOString() === reference.businessUpdatedAt,
       );
-      return service
+      return service && compatibleVisualService(kind, service.name)
         ? [
             {
               businessId: reference.businessId,
@@ -125,7 +154,7 @@ export class VisualMatchesService {
   }
 
   get(user: AuthenticatedUser, id: string): Promise<VisualMatchingStatus> {
-    return this.locked(user, id, async (tx) => {
+    return this.locked(user, id, async (tx, context) => {
       const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
         where: { id },
         select: { matchingStatus: true, matchingOutput: true },
@@ -137,7 +166,7 @@ export class VisualMatchesService {
         status,
         result:
           status === "READY"
-            ? await this.project(tx, row.matchingOutput)
+            ? await this.project(tx, row.matchingOutput, context.kind)
             : null,
       };
     });
@@ -145,17 +174,37 @@ export class VisualMatchesService {
 
   async create(user: AuthenticatedUser, id: string): Promise<SemanticMatches> {
     const requestId = randomUUID();
-    const claim = await this.locked(user, id, async (tx, query) => {
+    const claim = await this.locked(user, id, async (tx, context) => {
+      const { query, kind } = context;
       const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
         where: { id },
         select: { matchingStatus: true, matchingOutput: true },
       });
       if (row.matchingStatus === "READY")
-        return { result: await this.project(tx, row.matchingOutput), query };
+        return { result: await this.project(tx, row.matchingOutput, kind), query };
       if (row.matchingStatus === "RUNNING")
         throw new ConflictException("VISUAL_MATCH_RUNNING");
       if (row.matchingStatus !== null && row.matchingStatus !== "FAILED")
         throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
+      if (!kind) {
+        const completed = await tx.mvpPhotoAnalysis.updateMany({
+          where: {
+            id,
+            ownerId: user.id,
+            status: "PLAN",
+            expiresAt: { gt: new Date() },
+            matchingStatus: row.matchingStatus,
+          },
+          data: {
+            matchingStatus: "READY",
+            matchingOutput: [],
+            matchingRequestId: null,
+          },
+        });
+        if (completed.count !== 1)
+          throw new ConflictException("VISUAL_SESSION_CHANGED");
+        return { result: await this.project(tx, [], kind), query };
+      }
       const claimed = await tx.mvpPhotoAnalysis.updateMany({
         where: {
           id,
@@ -185,8 +234,15 @@ export class VisualMatchesService {
         sourceUpdatedAt: new Date(item.sourceUpdatedAt).toISOString(),
         businessUpdatedAt: new Date(item.businessUpdatedAt).toISOString(),
       }));
-      return await this.locked(user, id, async (tx) => {
-        const projected = await this.project(tx, references);
+      return await this.locked(user, id, async (tx, context) => {
+        const projected = await this.project(tx, references, context.kind);
+        const accepted = references.filter((reference) =>
+          projected.items.some(
+            (item) =>
+              item.serviceId === reference.serviceId &&
+              item.businessId === reference.businessId,
+          ),
+        );
         const saved = await tx.mvpPhotoAnalysis.updateMany({
           where: {
             id,
@@ -198,7 +254,7 @@ export class VisualMatchesService {
           },
           data: {
             matchingStatus: "READY",
-            matchingOutput: references,
+            matchingOutput: accepted,
             matchingRequestId: null,
           },
         });
@@ -224,3 +280,4 @@ export class VisualMatchesService {
     }
   }
 }
+

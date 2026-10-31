@@ -404,7 +404,7 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
       data: {
         businessId: business.id,
         categoryId: category.id,
-        name: "Saved service",
+        name: "Saç bakımı",
         slug: randomUUID(),
         durationMinutes: 30,
         price: "100",
@@ -484,6 +484,133 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
     await expect(restarted.get(f.user, f.session.id)).rejects.toThrow(
       "UNAVAILABLE",
     );
+  });
+  it("retains a conflicting request as NO_MATCH without consuming provider work", async () => {
+    const f = await fixture();
+    await db.mvpPhotoAnalysis.update({
+      where: { id: f.session.id },
+      data: {
+        intent: "saç kesimi",
+        target: "kaynak",
+        output: { ...plan, searchQuery: "saç kesimi" },
+      },
+    });
+    const search = vi.fn();
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
+    const result = {
+      provider: "OPENAI_PGVECTOR",
+      status: "NO_MATCH",
+      reason: "CONSULTATION_UNCLEAR",
+      items: [],
+    };
+    expect(await matches.create(f.user, f.session.id)).toEqual(result);
+    const restarted = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
+    expect(await restarted.get(f.user, f.session.id)).toEqual({
+      status: "READY",
+      result,
+    });
+    expect(await restarted.create(f.user, f.session.id)).toEqual(result);
+    expect(search).not.toHaveBeenCalled();
+    expect(
+      await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } }),
+    ).toMatchObject({
+      matchingStatus: "READY",
+      matchingOutput: [],
+      matchingRequestId: null,
+      expiresAt: f.session.expiresAt,
+    });
+  });
+  it("rejects unrelated neighbors and rechecks old saved results without another search", async () => {
+    const f = await fixture();
+    await db.mvpPhotoAnalysis.update({
+      where: { id: f.session.id },
+      data: {
+        intent: "saç kesimi",
+        target: "günlük kullanımı kolay saç",
+        output: { ...plan, searchQuery: "saç kesimi" },
+      },
+    });
+    const business = await db.business.create({
+      data: { name: "Synthetic hair salon", slug: randomUUID(), isPublic: true },
+    });
+    const category = await db.serviceCategory.create({
+      data: { businessId: business.id, name: "Hair", slug: randomUUID() },
+    });
+    const references = [];
+    for (const name of ["Kaynak", "Saç kesimi"]) {
+      const catalog = await db.service.create({
+        data: {
+          businessId: business.id,
+          categoryId: category.id,
+          name,
+          slug: randomUUID(),
+          durationMinutes: 30,
+          price: "100",
+        },
+      });
+      references.push({
+        businessId: business.id,
+        serviceId: catalog.id,
+        similarity: name === "Kaynak" ? 0.99 : 0.4,
+        sourceUpdatedAt: catalog.updatedAt.toISOString(),
+        businessUpdatedAt: business.updatedAt.toISOString(),
+      });
+    }
+    const search = vi.fn().mockResolvedValue({ items: references });
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
+    expect((await matches.create(f.user, f.session.id)).items).toEqual([
+      expect.objectContaining({ serviceName: "Saç kesimi" }),
+    ]);
+    expect(
+      (
+        await db.mvpPhotoAnalysis.findUniqueOrThrow({
+          where: { id: f.session.id },
+        })
+      ).matchingOutput,
+    ).toEqual([references[1]]);
+    // A legacy snapshot cannot bypass the new projection rule.
+    await db.mvpPhotoAnalysis.update({
+      where: { id: f.session.id },
+      data: { matchingOutput: references },
+    });
+    expect((await matches.get(f.user, f.session.id)).result?.items).toEqual([
+      expect.objectContaining({ serviceName: "Saç kesimi" }),
+    ]);
+    await db.mvpPhotoAnalysis.update({
+      where: { id: f.session.id },
+      data: { matchingOutput: [references[0]!] },
+    });
+    expect((await matches.get(f.user, f.session.id)).result).toMatchObject({
+      status: "NO_MATCH",
+      items: [],
+    });
+    await matches.create(f.user, f.session.id);
+    expect(search).toHaveBeenCalledTimes(1);
+    const only = await fixture();
+    await db.mvpPhotoAnalysis.update({
+      where: { id: only.session.id },
+      data: {
+        intent: "saç kesimi",
+        target: "kolay saç",
+        output: { ...plan, searchQuery: "saç kesimi" },
+      },
+    });
+    search.mockResolvedValue({ items: [references[0]!] });
+    expect(await matches.create(only.user, only.session.id)).toMatchObject({
+      status: "NO_MATCH",
+      items: [],
+    });
+    expect((await matches.get(only.user, only.session.id)).result).toMatchObject({
+      status: "NO_MATCH",
+      items: [],
+    });
+    expect(search).toHaveBeenCalledTimes(2);
   });
   it("serializes concurrent requests and retains NO_MATCH without another embedding", async () => {
     const f = await fixture();
@@ -878,3 +1005,4 @@ describe("real pgvector index scope, freshness and cosine query (synthetic vecto
     ).toEqual([]);
   });
 });
+
