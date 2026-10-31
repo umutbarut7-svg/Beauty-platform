@@ -1,0 +1,22 @@
+name: Saved matching publication safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-saved-matching.py
+      - infra/operations/dispatch-saved-matching-release.py
+      - infra/operations/test_saved_matching_publication.py
+      - .github/operations/saved-matching-release.json
+      - .github/workflows/publish-saved-matching.yml
+      - .github/workflows/saved-matching-publication-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test artifact integrity, drift rejection and staged privacy rollback without cloud credentials
+        run: python3 -m unittest discover -s infra/operations -p test_saved_matching_publication.py -v
