@@ -5,7 +5,7 @@ on:
     paths: [.github/workflows/orzell-testflight-access.yml]
 permissions: {}
 concurrency:
-  group: orzell-testflight-access-1101
+  group: orzell-testflight-access-1111
   cancel-in-progress: false
 jobs:
   enable:
@@ -48,13 +48,13 @@ jobs:
             if(!group) throw new Error("Expected existing owner internal test group.");
             let build;
             for(let attempt=1;attempt<=24;attempt++){
-              const result=await api("GET","builds?filter[app]="+encodeURIComponent(app)+"&filter[version]=1101&include=preReleaseVersion,buildBetaDetail&limit=5");
+              const result=await api("GET","builds?filter[app]="+encodeURIComponent(app)+"&filter[version]=1111&include=preReleaseVersion,buildBetaDetail&limit=5");
               if(result.data.length>1) throw new Error("Ambiguous build number.");
               build=result.data[0];
               if(build){
                 const version=result.included?.find(i=>i.type==="preReleaseVersions" && i.id===build.relationships.preReleaseVersion.data.id);
                 if(version?.attributes.version!=="1.0.0" || version?.attributes.platform!=="IOS") throw new Error("Unexpected prerelease version.");
-                console.log("Build 1.0.0 (1101): "+build.attributes.processingState);
+                console.log("Build 1.0.0 (1111): "+build.attributes.processingState);
                 if(build.attributes.processingState==="VALID") break;
                 if(["FAILED","INVALID"].includes(build.attributes.processingState)) throw new Error("Apple processing rejected the build.");
               }else console.log("Waiting for Apple build processing ("+attempt+"/24).");
@@ -62,16 +62,17 @@ jobs:
               await new Promise(r=>setTimeout(r,20000));
             }
             if(build.attributes.expired || build.attributes.usesNonExemptEncryption===true) throw new Error("Build requires separate review before enabling tests.");
-            // Reviewed matching-retention source: 36bf4a29ef21427a995a01ea28a3a7604b1588ba; merge 52ee6c0216ce77bd1b0599b6857049a3fccadb90.
-            // Signed release source: 9f0062a681ed62a1af19b714cf41a49404e09c37; only the upload workflow's introductory comment differs from the tested tree.
-            // Relative to build 1091, only UI action/consent state, result rendering, intercepted tests, documentation and that comment changed.
-            // Compare 602e740bc3551d3c0b3d2150477a1bfe98c2f3ee...9f0062a681ed62a1af19b714cf41a49404e09c37 verifies unchanged dependency, lockfile, network and encryption inventory.
-            // No global fetch/Blob replacement, dependency update or new cryptography implementation is introduced.
-            // Existing Apple operating-system-only encryption exemption:
+            // Reviewed saved-matching source: b6fbde63c07ebc477f1d721342a29c743c8e8b9b; application merge 4fdfbe61405633ce85764c0b2a13e157bc9e5833.
+            // Signed release source: 23fd58c43308721900454da45c3eafddfb7a548d; only the upload workflow introductory comment differs from the tested tree.
+            // Server migration/API/privacy-worker publication 41183306801 completed before this internal binary delivery.
+            // Relative to build 1101, only saved-result recovery, exact service handoff, intercepted tests and documentation changed in the mobile inventory.
+            // Compare 9f0062a681ed62a1af19b714cf41a49404e09c37...23fd58c43308721900454da45c3eafddfb7a548d verifies unchanged dependency, lockfile, network and encryption inventory.
+            // No new dependency, custom cryptography or global fetch/Blob replacement is introduced.
+            // Reuse the reviewed Apple operating-system HTTPS-only encryption exemption for the unchanged inventory.
             // https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption
             if(build.attributes.usesNonExemptEncryption==null){
               await api("PATCH","builds/"+encodeURIComponent(build.id),{data:{type:"builds",id:build.id,attributes:{usesNonExemptEncryption:false}}});
-              console.log("Platform HTTPS-only encryption exemption recorded for reviewed build 1101.");
+              console.log("Platform HTTPS-only encryption exemption recorded for reviewed build 1111.");
             }
             const before=await api("GET","builds/"+encodeURIComponent(build.id)+"/buildBetaDetail");
             console.log("Internal state before group assignment: "+before.data.attributes.internalBuildState);
@@ -88,9 +89,9 @@ jobs:
             const detail=await api("GET","builds/"+encodeURIComponent(build.id)+"/buildBetaDetail");
             const state=detail.data.attributes.internalBuildState;
             console.log("Internal testing state: "+state);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"## ORZELL internal TestFlight\n\nApple processed ORZELL 1.0.0 (1101) successfully. Reviewed platform HTTPS-only encryption exemption recorded if needed. Build association with existing ORZELL iç test group verified. Internal testing state: "+state+". No external testing, App Review or public release requested.\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"## ORZELL internal TestFlight\n\nApple processed ORZELL 1.0.0 (1111) successfully. Reviewed platform HTTPS-only encryption exemption recorded if needed. Build association with existing ORZELL iç test group verified. Internal testing state: "+state+". No external testing, App Review or public release requested.\n");
             if(!["IN_BETA_TESTING","READY_FOR_BETA_TESTING"].includes(state)) throw new Error("Group association exists, but internal testing is not yet ready: "+state);
-            console.log("ORZELL 1.0.0 (1101) is available to the existing internal test group.");
+            console.log("ORZELL 1.0.0 (1111) is available to the existing internal test group.");
           }
           main().catch(e=>{console.error("::error::"+e.message);process.exitCode=1;});
 
