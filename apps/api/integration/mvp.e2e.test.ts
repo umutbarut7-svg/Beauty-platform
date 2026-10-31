@@ -417,11 +417,21 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       });
       expect((await request(savedMatchPath, customerToken)).body).toEqual({
         status: "READY",
-        result: { provider: "OPENAI_PGVECTOR", status: "NO_MATCH", items: [] },
+        result: {
+          provider: "OPENAI_PGVECTOR",
+          status: "NO_MATCH",
+          reason: "CONSULTATION_UNCLEAR",
+          items: [],
+        },
       });
       expect(
         (await request(savedMatchPath, customerToken, "POST")).body,
-      ).toEqual({ provider: "OPENAI_PGVECTOR", status: "NO_MATCH", items: [] });
+      ).toEqual({
+        provider: "OPENAI_PGVECTOR",
+        status: "NO_MATCH",
+        reason: "CONSULTATION_UNCLEAR",
+        items: [],
+      });
       const savedMatchResponse = await fetch(base + savedMatchPath, {
         headers: { authorization: `Bearer ${customerToken}` },
       });

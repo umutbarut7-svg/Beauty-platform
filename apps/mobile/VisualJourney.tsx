@@ -614,7 +614,11 @@ export function VisualJourney({
                 </Text>
               )}
               {matches?.status === "NO_MATCH" && (
-                <Text>Uygun, güncel arama kaydı bulunamadı.</Text>
+                <Text>
+                  {matches.reason === "CONSULTATION_UNCLEAR"
+                    ? "Bu danışmanlıkta aranacak hizmet türü net değil. Hedefini netleştirerek yeni danışmanlık başlatabilir veya Keşfet’ten hizmet seçebilirsin."
+                    : "Uygun, güncel arama kaydı bulunamadı."}
+                </Text>
               )}
               {matches?.items.map((match) => (
                 <View key={`${match.businessId}-${match.serviceId}`}>
