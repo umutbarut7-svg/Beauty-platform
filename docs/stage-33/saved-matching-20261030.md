@@ -41,12 +41,44 @@ failures are recorded as FAILED; only a later explicit POST can try again.
 This is completed-result replay and concurrency protection, not a guarantee of
 exactly-once upstream billing through network failures.
 
-Validation is prepared in the existing real PostgreSQL/HTTP/provider-double and
-intercepted Chromium/WebKit gates: restart replay, NO_MATCH, concurrent claim,
-owner/policy/expiry/revocation checks, in-flight withdrawal, scrub, current
-catalog revisions, no automatic retries, recovery failures and exact service
-handoff. No live provider request, quota change, policy activation, catalog
-reindex, production migration or binary upload has been performed for this
-candidate. TestFlight 1101 remains the last verified delivered build. Full Stage
-33 remains open pending actual candidate gates and remaining physical-device,
-result-write, provider-quality, policy and operational acceptance.
+Validation passed on reviewed head `b6fbde63c07ebc477f1d721342a29c743c8e8b9b`:
+441 API tests and 23 real PostgreSQL/HTTP/worker/provider-double integration tests,
+39 client tests, intercepted Chromium/WebKit journeys, Android/iOS native
+compilation and the synthetic native photo runtime. Merge
+`4fdfbe61405633ce85764c0b2a13e157bc9e5833` has the identical reviewed tree.
+
+## Verified preview and internal delivery, 31 October 2026
+
+The owner approved the three-column migration, coordinated API/privacy-worker
+update and subsequent internal TestFlight delivery. The first preparation stopped
+before service changes because the host Python 3.9 lacks `hashlib.file_digest`.
+Read-only inspection verified the original healthy services, untouched schema
+and exact complete archives. Portable hashing and bounded verified preparation
+recovery passed 15 offline behavior tests under both the runner and Python 3.9.
+
+[Publication 41183306801](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41183306801)
+completed successfully at 11:09 Istanbul. SSM
+`ca9f4b14-5cc3-4b9e-ade4-a53dc7ae1f1c` verified the additive migration, identical
+API/privacy-worker image
+`sha256:8d47e73a44a5e2d1ec7df3a54c8feaeb315271c819a8e3217237745d62206225`,
+generated fields/module fingerprints, preserved configuration, health/CORS,
+authentication rejection and unrelated-service isolation. No rollback was needed.
+
+[Signed upload 41183547067](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41183547067)
+delivered ORZELL 1.0.0 (1111), source
+`23fd58c43308721900454da45c3eafddfb7a548d`. Only the upload workflow's introductory
+comment differs from the reviewed application. Apple accepted the binary at
+11:19 Istanbul; temporary signing credentials were removed.
+
+[Existing internal access 41184287109](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41184287109),
+source `2da1f98380d23cbd0625d50ca7d082f7763d8501`, verified `VALID` and
+`IN_BETA_TESTING` for the existing `ORZELL iç test` group at 11:22 Istanbul.
+The unchanged dependency/HTTPS/encryption inventory was compared with build 1101
+before reusing the reviewed operating-system-only exemption. No tester/group,
+external testing, App Review or public release was added.
+
+This delivery did not request a new paid analysis/match, quota/key change or
+catalog reindex. Prior unstored recommendations cannot be reconstructed.
+Physical installation and remaining result-write/photo-quality/policy/operational
+acceptance remain open. Existing booking/approval/cancellation evidence is
+preserved; full Stage 33 is not marked PASS.
