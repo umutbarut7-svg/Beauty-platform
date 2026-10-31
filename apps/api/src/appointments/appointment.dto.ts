@@ -45,6 +45,7 @@ export class CreateAppointmentDto {
   @IsDateString({ strict: true })
   @Matches(/(?:Z|[+-]\d{2}:\d{2})$/)
   startsAt!: string;
+  @IsOptional() @IsBoolean() bookForSelf?: boolean;
   @IsOptional() @IsString() @Matches(ID) customerId?: string;
   @IsOptional() @IsString() @MaxLength(1000) customerNote?: string;
   @IsOptional() @IsString() @MaxLength(1000) internalNote?: string;

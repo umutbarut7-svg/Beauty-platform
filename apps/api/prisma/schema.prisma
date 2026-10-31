@@ -345,10 +345,16 @@ model User {
   preferredLocale              String?
   preferredCurrency            String?                    @db.Char(3)
   preferredTimezone            String?
+  mvpPhotoConsents             MvpPhotoConsent[]
+  mvpPhotos                    MvpPhoto[]
+  mvpAnalyses                  MvpPhotoAnalysis[]
+  mvpPrivacyEvents             MvpPrivacyEvent[]
 }
 
 model Business {
   id                               String                            @id @default(cuid())
+  mvpCatalogVectors                MvpCatalogVector[]
+  mvpVerificationRequests          MvpVerificationRequest[]
   name                             String
   slug                             String                            @unique
   description                      String?
@@ -1189,6 +1195,7 @@ model Staff {
 
 model Service {
   id                    String                       @id @default(cuid())
+  mvpCatalogVectors     MvpCatalogVector[]
   businessId            String
   categoryId            String
   name                  String
@@ -1328,6 +1335,7 @@ model StaffTimeOff {
 }
 
 model Appointment {
+  beautyJobResult       BeautyJobResult?
   id                    String                     @id @default(cuid())
   businessId            String
   customerId            String
@@ -4141,4 +4149,143 @@ model GovernanceEvent {
 
   @@index([businessId, type, createdAt])
   @@index([marketId, type, createdAt])
+}
+
+model BeautyJobResult {
+  passportPublishedAt DateTime?
+  id                  String                 @id @default(cuid())
+  businessId          String
+  appointmentId       String
+  summary             String                 @db.VarChar(2000)
+  recordedById        String
+  idempotencyKey      String                 @db.VarChar(100)
+  createdAt           DateTime               @default(now())
+  appointment         Appointment            @relation(fields: [businessId, appointmentId], references: [businessId, id], onDelete: Restrict)
+  satisfaction        BeautyJobSatisfaction?
+
+  @@unique([businessId, appointmentId])
+  @@unique([businessId, id])
+  @@unique([businessId, idempotencyKey])
+  @@index([createdAt, id])
+}
+
+model BeautyJobSatisfaction {
+  id             String          @id @default(cuid())
+  businessId     String
+  resultId       String
+  customerUserId String
+  outcome        String          @db.VarChar(20)
+  idempotencyKey String          @db.VarChar(100)
+  createdAt      DateTime        @default(now())
+  result         BeautyJobResult @relation(fields: [businessId, resultId], references: [businessId, id], onDelete: Restrict)
+
+  @@unique([businessId, resultId])
+  @@unique([businessId, idempotencyKey])
+}
+
+// Platform-owned pretenant media. Never invent a businessId for customer consent.
+model MvpPhotoConsent {
+  id             String     @id @default(uuid())
+  ownerId        String
+  policyVersion  String     @db.VarChar(100)
+  noticeHash     String     @db.VarChar(64)
+  expiresAt      DateTime
+  auditExpiresAt DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  owner          User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  photos         MvpPhoto[]
+
+  @@unique([ownerId, id])
+  @@index([ownerId, expiresAt])
+}
+
+model MvpPhoto {
+  id              String             @id @default(uuid())
+  ownerId         String
+  consentId       String
+  objectKey       String             @unique
+  mime            String
+  bytes           Int
+  uploadExpiresAt DateTime
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  owner           User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  consent         MvpPhotoConsent    @relation(fields: [ownerId, consentId], references: [ownerId, id], onDelete: Restrict)
+  analyses        MvpPhotoAnalysis[]
+
+  @@unique([ownerId, id])
+  @@index([expiresAt, deletedAt])
+}
+
+model MvpPhotoAnalysis {
+  id        String   @id @default(uuid())
+  ownerId   String
+  photoId   String
+  intent    String   @db.VarChar(1000)
+  target    String   @db.VarChar(1000)
+  answers   Json
+  status    String   @default("CREATED")
+  output    Json?
+  provider  String?
+  model     String?
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  photo     MvpPhoto @relation(fields: [ownerId, photoId], references: [ownerId, id], onDelete: Restrict)
+
+  @@index([ownerId, expiresAt])
+}
+
+model MvpPrivacyEvent {
+  id            String   @id @default(uuid())
+  ownerId       String
+  resourceId    String
+  action        String
+  correlationId String
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model MvpCatalogVector {
+  serviceId         String
+  businessId        String
+  model             String
+  embedding         Unsupported("vector(1536)")
+  sourceUpdatedAt   DateTime
+  businessUpdatedAt DateTime
+  indexedAt         DateTime                    @default(now())
+  service           Service                     @relation(fields: [businessId, serviceId], references: [businessId, id], onDelete: Cascade)
+  business          Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, model])
+  @@index([businessId])
+}
+
+model MvpVerificationRequest {
+  id                String    @id @default(uuid())
+  businessId        String
+  requesterId       String
+  policyVersion     String    @db.VarChar(100)
+  answers           Json
+  status            String    @default("SUBMITTED")
+  reviewerId        String?
+  reviewedAt        DateTime?
+  reviewNote        String?   @db.VarChar(1000)
+  createdAt         DateTime  @default(now())
+  evidenceExpiresAt DateTime
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([status, createdAt])
+  @@index([evidenceExpiresAt])
 }

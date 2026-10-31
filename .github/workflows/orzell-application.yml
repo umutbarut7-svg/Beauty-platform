@@ -1,0 +1,42 @@
+name: ORZELL application review
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orzell-application-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @beauty-platform/types build
+      - run: pnpm --filter @beauty-platform/mobile typecheck
+      - run: pnpm exec vitest run apps/mobile/src packages/types/src/mvp-client.test.ts
+      - run: pnpm --filter @beauty-platform/mobile exec expo export --platform web --output-dir dist --max-workers 2
+      - run: pnpm exec playwright install chromium --with-deps
+      - name: Exercise isolated customer and business screens
+        run: node scripts/check-orzell-application.cjs apps/mobile/dist /tmp/orzell-application-review
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: orzell-application-screens
+          path: /tmp/orzell-application-review
+          retention-days: 7
+          if-no-files-found: error

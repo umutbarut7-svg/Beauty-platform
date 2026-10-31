@@ -81,6 +81,23 @@ function fixture() {
   };
 }
 describe("MonetizationService", () => {
+  it("serializes ledger amounts as exact decimal minor-unit strings for HTTP", async () => {
+    const { service, db } = fixture();
+    (
+      db.financialLedgerEntry as { findMany: ReturnType<typeof vi.fn> }
+    ).findMany.mockResolvedValueOnce([
+      { type: "CHARGE", amountMinor: 900719925474099300n, currency: "TRY" },
+    ]);
+    const summary = await service.summary(user, "a");
+    expect(summary).toMatchObject({
+      status: "AVAILABLE",
+      grossRevenueMinor: "900719925474099300",
+      currency: "TRY",
+    });
+    expect(JSON.parse(JSON.stringify(summary)).grossRevenueMinor).toBe(
+      "900719925474099300",
+    );
+  });
   it("binds reads to server-side tenant authorization", async () => {
     const { service, permissions } = fixture();
     await service.summary(user, "a");

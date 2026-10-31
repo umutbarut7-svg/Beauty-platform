@@ -5,7 +5,7 @@ import { Public } from "./auth/auth.decorators.js";
 @Controller()
 export class AppController {
   @Public()
-  @Get("health")
+  @Get()
   getHealth(): HealthStatus {
     return createHealthStatus("api");
   }
