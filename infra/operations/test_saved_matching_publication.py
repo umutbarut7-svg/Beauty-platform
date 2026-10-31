@@ -23,6 +23,19 @@ dispatch = load('dispatch_under_test', 'dispatch-saved-matching-release.py')
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_resume_requires_pre_service_failure_and_unchanged_schema(self):
+        commands = {'api': ['original-api'], 'worker': ['original-worker']}
+        record = {'status': 'PREPARATION_FAILED', 'source': pub.SOURCE, 'previous': pub.PREVIOUS, 'image': pub.API_IMAGE, 'rollback': commands}
+        state = {'columns': [], 'migrations': [{'name': 'historical', 'finished': True}]}
+        pub.validate_preparation_resume(record, commands, state)
+        for status in ['MIGRATING', 'UPGRADING_WORKER', 'UPGRADING_API', 'COMPLETED', 'ROLLBACK_NEEDS_REVIEW']:
+            with self.assertRaises(pub.Stop):
+                pub.validate_preparation_resume({**record, 'status': status}, commands, state)
+        with self.assertRaises(pub.Stop):
+            pub.validate_preparation_resume(record, commands, {'columns': pub.FIELDS, 'migrations': state['migrations']})
+        with self.assertRaises(pub.Stop):
+            pub.validate_preparation_resume(record, {'api': ['drift'], 'worker': ['original-worker']}, state)
+
     def test_only_selected_image_can_change(self):
         before = {'services': {'api': {'image': 'old', 'environment': {'QUOTA': '5'}}, 'worker': {'image': 'old-worker'}}}
         after = copy.deepcopy(before)
@@ -127,6 +140,15 @@ class ArtifactTests(unittest.TestCase):
         for url in ['http://test.blob.core.windows.net/file', 'https://attacker.example/file', 'https://user:secret@test.blob.core.windows.net/file']:
             with self.assertRaises(pub.Stop):
                 pub.download_package(url)
+
+    def test_portable_hash_and_verified_existing_package_need_no_redownload(self):
+        tar, data, evidence = self.package()
+        def run(args, **kwargs):
+            return json.dumps([{'Id': args[-1]}]) if args[:3] == ['docker', 'image', 'inspect'] else ''
+        with tempfile.TemporaryDirectory() as folder, patch.object(pub, 'WORK', Path(folder)), patch.object(pub, 'ZIP_SIZE', len(data)), patch.object(pub, 'ZIP_SHA', hashlib.sha256(data).hexdigest()), patch.object(pub, 'TAR_SIZE', len(tar)), patch.object(pub, 'TAR_SHA', hashlib.sha256(tar).hexdigest()), patch.object(pub.urllib.request, 'urlopen', return_value=io.BytesIO(data)) as download, patch.object(pub, 'run', side_effect=run), patch.object(hashlib, 'file_digest', None, create=True):
+            self.assertEqual(pub.download_package('https://test.blob.core.windows.net/file'), evidence)
+            self.assertEqual(pub.download_package('https://test.blob.core.windows.net/file'), evidence)
+            self.assertEqual(download.call_count, 1)
 
 
 class DispatchTests(unittest.TestCase):

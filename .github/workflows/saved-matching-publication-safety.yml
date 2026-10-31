@@ -20,3 +20,5 @@ jobs:
           persist-credentials: false
       - name: Test artifact integrity, drift rejection and staged privacy rollback without cloud credentials
         run: python3 -m unittest discover -s infra/operations -p test_saved_matching_publication.py -v
+      - name: Repeat behavior tests on the observed host Python 3.9 runtime
+        run: docker run --rm --network none -v "$PWD:/src:ro" -w /src python:3.9-slim python -m unittest discover -s infra/operations -p test_saved_matching_publication.py -v

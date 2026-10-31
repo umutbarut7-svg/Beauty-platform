@@ -39,6 +39,15 @@ def require(condition, message):
         raise Stop(message)
 
 
+def file_sha256(path):
+    # The preview host may use Python before 3.11; do not require file_digest.
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(4 * 1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def run(args, timeout=30, limit=1000000):
     try:
         reply = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
@@ -193,28 +202,36 @@ def download_package(url):
     parsed = urllib.parse.urlsplit(url)
     require(parsed.scheme == 'https' and parsed.hostname and parsed.hostname.endswith('.blob.core.windows.net') and not parsed.username and not parsed.password, 'Unexpected artifact transfer destination')
     archive = WORK / 'artifact.zip'
-    digest = hashlib.sha256()
-    total = 0
-    with urllib.request.urlopen(url, timeout=30) as response, open(archive, 'xb') as output:
-        while True:
-            chunk = response.read(4 * 1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            require(total <= ZIP_SIZE, 'Artifact size exceeded')
-            digest.update(chunk)
-            output.write(chunk)
-    require(total == ZIP_SIZE and digest.hexdigest() == ZIP_SHA, 'Artifact ZIP integrity mismatch')
+    if archive.exists():
+        require(archive.is_file() and not archive.is_symlink(), 'Existing artifact path requires review')
+    else:
+        total = 0
+        with urllib.request.urlopen(url, timeout=30) as response, open(archive, 'xb') as output:
+            while True:
+                chunk = response.read(4 * 1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                require(total <= ZIP_SIZE, 'Artifact size exceeded')
+                output.write(chunk)
+    require(archive.stat().st_size == ZIP_SIZE and file_sha256(archive) == ZIP_SHA, 'Artifact ZIP integrity mismatch')
     allowed = {'images.tar.gz': TAR_SIZE, 'release.json': 10000, 'api-evidence.json': 20000, 'worker-evidence.json': 20000}
     with zipfile.ZipFile(archive) as source:
         require(len(source.infolist()) == len(allowed) and set(source.namelist()) == set(allowed), 'Unexpected artifact inventory')
         for item in source.infolist():
             require(item.file_size <= allowed[item.filename], 'Artifact entry size exceeded')
-            with source.open(item) as data, open(WORK / item.filename, 'xb') as output:
-                shutil.copyfileobj(data, output, 1024 * 1024)
+            target = WORK / item.filename
+            if target.exists():
+                require(target.is_file() and not target.is_symlink() and target.stat().st_size == item.file_size, 'Existing artifact entry requires review')
+                if item.filename == 'images.tar.gz':
+                    require(file_sha256(target) == TAR_SHA, 'Existing image archive integrity mismatch')
+                else:
+                    require(target.read_bytes() == source.read(item), 'Existing metadata differs from the pinned ZIP')
+            else:
+                with source.open(item) as data, open(target, 'xb') as output:
+                    shutil.copyfileobj(data, output, 1024 * 1024)
     tar = WORK / 'images.tar.gz'
-    with tar.open('rb') as stream:
-        require(tar.stat().st_size == TAR_SIZE and hashlib.file_digest(stream, 'sha256').hexdigest() == TAR_SHA, 'Image archive integrity mismatch')
+    require(tar.stat().st_size == TAR_SIZE and file_sha256(tar) == TAR_SHA, 'Image archive integrity mismatch')
     manifest = json.loads((WORK / 'release.json').read_text())
     require(manifest == {'source': SOURCE, 'images': {'api': API_IMAGE, 'migrate': MIGRATE_IMAGE}, 'archive': {'name': 'images.tar.gz', 'bytes': TAR_SIZE, 'sha256': TAR_SHA}, 'rehearsal': 'PASS', 'liveDeployment': False, 'providerRequests': 0}, 'Release manifest mismatch')
     evidence = json.loads((WORK / 'api-evidence.json').read_text())
@@ -264,8 +281,20 @@ def rollback(commands, before, candidate_api_attempted):
     return 'API_ROLLED_BACK_NEW_PRIVACY_WORKER_RETAINED' if candidate_api_attempted else 'ROLLED_BACK'
 
 
+def validate_preparation_resume(record, commands, state):
+    require(record.get('status') == 'PREPARATION_FAILED', 'Only an inspected pre-service preparation can resume')
+    require(record.get('source') == SOURCE and record.get('previous') == PREVIOUS and record.get('image') == API_IMAGE and record.get('rollback') == commands, 'Preparation source or original Compose inputs differ')
+    require(state['columns'] == [] and all(row.get('finished') is True and row['name'] != MIGRATION for row in state['migrations']), 'Schema changed since failed preparation; no resume')
+
+
 def publish(url):
-    require(not WORK.exists() and not WORK.is_symlink(), 'Existing publication state; inspect before replay')
+    require(not WORK.is_symlink(), 'Operation directory cannot be a symlink')
+    previous_record = None
+    if WORK.exists():
+        marker = WORK / 'result.json'
+        require(WORK.is_dir() and marker.is_file() and not marker.is_symlink() and marker.stat().st_size <= 60000, 'Existing publication state requires review')
+        previous_record = json.loads(marker.read_text())
+        require(previous_record.get('status') == 'PREPARATION_FAILED', 'Existing publication phase cannot be replayed')
     require(shutil.disk_usage(ROOT).free >= 8 * 1024**3, 'Insufficient safe preparation disk space')
     before = snapshot()
     ready()
@@ -282,8 +311,13 @@ def publish(url):
         require(expected_hash == before[service]['Config']['Labels'].get('com.docker.compose.config-hash'), 'Compose input drift')
         current_image = baselines[service]['services'][service]['image']
         require(json.loads(run(['docker', 'image', 'inspect', current_image]))[0]['Id'] == PREVIOUS[service], 'Compose image drift')
-    WORK.mkdir(mode=0o700)
-    record = {'status': 'PREPARING', 'source': SOURCE, 'previous': PREVIOUS, 'image': API_IMAGE, 'rollback': commands, 'providerRequestsStartedByVerification': 0}
+    if previous_record is not None:
+        validate_preparation_resume(previous_record, commands, schema_state())
+        allowed = {'artifact.zip', 'images.tar.gz', 'release.json', 'api-evidence.json', 'worker-evidence.json', 'result.json', 'result.pending', 'api-image.json', 'worker-image.json', 'migrate-image.json'}
+        require(all(path.name in allowed and path.is_file() and not path.is_symlink() for path in WORK.iterdir()), 'Unexpected inspected preparation inventory')
+    else:
+        WORK.mkdir(mode=0o700)
+    record = {'status': 'PREPARING', 'source': SOURCE, 'previous': PREVIOUS, 'image': API_IMAGE, 'rollback': commands, 'providerRequestsStartedByVerification': 0, 'resumedVerifiedPreparation': previous_record is not None}
     write_record(record)
     stopped = False
     candidate_api_attempted = False
@@ -325,7 +359,7 @@ def publish(url):
         print('SOURCE ' + SOURCE)
         print('API_WORKER_IMAGE ' + API_IMAGE)
         print('No paid-provider request, quota/key/retention change, customer-content inspection or unrelated-service update was requested')
-    except Exception:
+    except Exception as error:
         record['status'] = 'PREPARATION_FAILED'
         if stopped:
             try:
@@ -334,6 +368,7 @@ def publish(url):
                 record['status'] = 'ROLLBACK_NEEDS_REVIEW'
         write_record(record)
         print('Publication stopped; state: ' + record['status'] + '; inspect before any retry')
+        print('Preparation diagnostic: ' + (str(error) if isinstance(error, Stop) else type(error).__name__))
         raise Stop('Publication did not complete; private diagnostics withheld') from None
 
 

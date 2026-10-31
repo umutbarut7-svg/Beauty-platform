@@ -41,3 +41,29 @@ digests, migration/config drift, no blind replay, unrelated service changes,
 artifact expiry/source, the private envelope and privacy-preserving rollback.
 The exact final PR head must pass these tests and repository regression gates
 before merging to activate the fixed publication request.
+
+## Inspected preparation failure and bounded recovery
+
+The first approved publication, run `41182299660`, SSM command
+`48f28489-d4cb-49a0-978e-2debf63343ed`, stopped in `PREPARATION_FAILED`.
+The source used `hashlib.file_digest`, unavailable on the observed Python 3.9.25
+host. The subsequent read-only #75 inspection, run `41182894441`, SSM command
+`eb9aa3e9-363e-4e11-811c-21cf79e049e9`, verified both complete archive hashes,
+no loaded candidate images, original healthy API/PostgreSQL and running worker
+with zero restarts, no new matching columns and no failed migration. No service
+transition or schema application occurred.
+
+Use portable streaming SHA-256. Resume only this inspected pre-service failure
+when source, previous images, exact original Compose commands and unchanged
+schema all agree; refuse migration/service/rollback phases. Revalidate the exact
+ZIP, image archive, manifest and evidence before reusing existing files. No
+partial file is overwritten and no uncertain migration is replayed. The fixed
+follow-up request is `orzell-saved-matching-publication-20261031-2`, retaining the
+same operation journal, application source, artifact and images.
+
+Fifteen behavioral tests include absence of `file_digest`, verified package reuse
+without redownload and rejection of unsafe resume phases/schema/Compose drift.
+CI repeats the tests under both the runner Python and a network-isolated Python
+3.9 container matching the observed host's language version. Existing publication
+guards and staged rollback are retained. Error reporting now exposes only the
+controlled Stop reason or exception class, never raw private error bodies.
