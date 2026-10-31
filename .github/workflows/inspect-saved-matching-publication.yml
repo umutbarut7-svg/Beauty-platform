@@ -1,0 +1,48 @@
+name: Inspect approved saved matching preparation
+on:
+  pull_request:
+    paths:
+      - infra/operations/inspect-saved-matching-publication.py
+      - infra/operations/dispatch-saved-matching-inspection.py
+      - .github/operations/saved-matching-inspection.json
+      - .github/workflows/inspect-saved-matching-publication.yml
+  push:
+    branches: [main]
+    paths: [.github/operations/saved-matching-inspection.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  syntax:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 -m py_compile infra/operations/inspect-saved-matching-publication.py infra/operations/dispatch-saved-matching-inspection.py
+  inspect:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: preview-inspect-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - run: python3 infra/operations/dispatch-saved-matching-inspection.py
