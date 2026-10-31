@@ -1,0 +1,39 @@
+name: Publish approved saved matching preview release
+on:
+  push:
+    branches: [main]
+    paths: [.github/operations/saved-matching-release.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout exact trusted publication
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Obtain existing temporary preview operations identity
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: preview-release-${{ github.run_id }}
+          role-duration-seconds: 1800
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Publish pinned rehearsed images with privacy-preserving rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_PAGER: ""
+        run: python3 infra/operations/dispatch-saved-matching-release.py
