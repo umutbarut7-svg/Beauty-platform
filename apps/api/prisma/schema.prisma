@@ -4221,22 +4221,25 @@ model MvpPhoto {
 }
 
 model MvpPhotoAnalysis {
-  id        String   @id @default(uuid())
-  ownerId   String
-  photoId   String
-  intent    String   @db.VarChar(1000)
-  target    String   @db.VarChar(1000)
-  answers   Json
-  status    String   @default("CREATED")
-  output    Json?
-  provider  String?
-  model     String?
-  attempts  Int      @default(0)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  photo     MvpPhoto @relation(fields: [ownerId, photoId], references: [ownerId, id], onDelete: Restrict)
+  id                String   @id @default(uuid())
+  ownerId           String
+  photoId           String
+  intent            String   @db.VarChar(1000)
+  target            String   @db.VarChar(1000)
+  answers           Json
+  status            String   @default("CREATED")
+  output            Json?
+  provider          String?
+  model             String?
+  attempts          Int      @default(0)
+  matchingStatus    String?
+  matchingRequestId String?
+  matchingOutput    Json?
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  owner             User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  photo             MvpPhoto @relation(fields: [ownerId, photoId], references: [ownerId, id], onDelete: Restrict)
 
   @@index([ownerId, expiresAt])
 }

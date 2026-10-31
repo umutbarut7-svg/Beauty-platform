@@ -39,6 +39,10 @@ export interface SemanticMatches {
     similarity: number;
   }>;
 }
+export interface VisualMatchingStatus {
+  status: "NOT_REQUESTED" | "RUNNING" | "READY" | "FAILED";
+  result: SemanticMatches | null;
+}
 export interface MvpVerificationPolicy {
   automatic: false;
   policy: null | {

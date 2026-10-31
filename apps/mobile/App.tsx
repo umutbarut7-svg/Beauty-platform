@@ -363,7 +363,7 @@ export default function App() {
     setMatches(response.items);
     setSearched(true);
   }
-  async function choose(b: Business) {
+  async function choose(b: Business, recommendedServiceId?: string) {
     setCatalog(null);
     setAvailabilityNotice("");
     setSlots([]);
@@ -373,6 +373,16 @@ export default function App() {
     setLocationId("");
     const value = await api.request<MvpCatalog>(`/mvp/v1/catalog/${b.id}`);
     setCatalog(value);
+    if (recommendedServiceId) {
+      const recommended = value.services.find(
+        (service) => service.id === recommendedServiceId,
+      );
+      if (recommended) setServiceId(recommended.id);
+      else
+        setNotice(
+          "Önerilen hizmet artık rezervasyona açık değil. Devam etmek için güncel hizmetlerden birini seç.",
+        );
+    }
     setScreen("discover");
     if (value.locations.length === 1 && value.locations[0])
       setLocationId(value.locations[0].id);

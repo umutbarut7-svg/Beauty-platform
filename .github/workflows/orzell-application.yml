@@ -29,7 +29,7 @@ jobs:
       - run: pnpm --filter @beauty-platform/types build
       - name: Check photo source formatting
         run: |
-          files="apps/mobile/VisualJourney.tsx apps/mobile/App.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs scripts/check-consultation-recovery.cjs apps/api/src/mvp/visual.service.ts apps/api/src/mvp/visual.controller.ts apps/api/integration/mvp.e2e.test.ts packages/types/src/mvp-visual.ts"
+          files="apps/mobile/VisualJourney.tsx apps/mobile/App.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs scripts/check-consultation-recovery.cjs scripts/check-matching-availability.cjs apps/api/src/mvp/visual.service.ts apps/api/src/mvp/visual.controller.ts apps/api/src/mvp/visual-matches.service.ts apps/api/src/mvp/semantic.service.ts apps/api/src/mvp/photo-maintenance.service.ts apps/api/integration/providers.test.ts apps/api/integration/mvp.e2e.test.ts packages/types/src/mvp-visual.ts"
           if ! pnpm exec prettier --check $files; then
             pnpm exec prettier --write $files
             git diff --no-ext-diff -- $files

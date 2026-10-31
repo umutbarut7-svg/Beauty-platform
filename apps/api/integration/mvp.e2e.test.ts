@@ -404,6 +404,29 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         attempts: 1,
         output: { steps: ["Synthetic saved plan"] },
       });
+      const savedMatchPath = endpoint + "/" + own.id + "/matches";
+      expect((await request(savedMatchPath, "")).status).toBe(401);
+      expect((await request(savedMatchPath, strangerToken)).status).toBe(404);
+      expect((await request(savedMatchPath, customerToken)).body).toEqual({
+        status: "NOT_REQUESTED",
+        result: null,
+      });
+      await db.mvpPhotoAnalysis.update({
+        where: { id: own.id },
+        data: { matchingStatus: "READY", matchingOutput: [] },
+      });
+      expect((await request(savedMatchPath, customerToken)).body).toEqual({
+        status: "READY",
+        result: { provider: "OPENAI_PGVECTOR", status: "NO_MATCH", items: [] },
+      });
+      expect(
+        (await request(savedMatchPath, customerToken, "POST")).body,
+      ).toEqual({ provider: "OPENAI_PGVECTOR", status: "NO_MATCH", items: [] });
+      const savedMatchResponse = await fetch(base + savedMatchPath, {
+        headers: { authorization: `Bearer ${customerToken}` },
+      });
+      expect(savedMatchResponse.headers.get("cache-control")).toBe("no-store");
+      await savedMatchResponse.arrayBuffer();
       const cache = await fetch(base + endpoint, {
         headers: { authorization: `Bearer ${customerToken}` },
       });
@@ -454,6 +477,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         ).status,
       ).toBe(201);
       expect((await request(endpoint, customerToken)).body.items).toEqual([]);
+      expect((await request(savedMatchPath, customerToken)).status).toBe(404);
       expect(
         (await request(endpoint + "/" + own.id, customerToken)).status,
       ).toBe(404);

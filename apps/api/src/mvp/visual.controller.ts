@@ -16,6 +16,7 @@ import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { ResourceIdPipe } from "../businesses/resource-id.pipe.js";
 import { VisualService } from "./visual.service.js";
 import { SemanticService } from "./semantic.service.js";
+import { VisualMatchesService } from "./visual-matches.service.js";
 import { VerificationService } from "./verification.service.js";
 import {
   IndexCatalogDto,
@@ -33,6 +34,7 @@ export class VisualController {
     private readonly visual: VisualService,
     private readonly semantic: SemanticService,
     private readonly verification: VerificationService,
+    private readonly visualMatches: VisualMatchesService,
   ) {}
   @Get("photos/policy") policy() {
     return this.visual.capability();
@@ -89,7 +91,9 @@ export class VisualController {
   list(@CurrentUser() user: AuthenticatedUser) {
     return this.visual.list(user);
   }
-  @Get("visual/sessions/:sessionId") get(
+  @Get("visual/sessions/:sessionId")
+  @Header("Cache-Control", "no-store")
+  get(
     @CurrentUser() user: AuthenticatedUser,
     @Param("sessionId", ResourceIdPipe) id: string,
   ) {
@@ -102,14 +106,21 @@ export class VisualController {
   ) {
     return this.visual.analyze(user, id, dto.answers, dto.expectedAttempt);
   }
-  @Post("visual/sessions/:sessionId/matches") async matches(
+  @Get("visual/sessions/:sessionId/matches")
+  @Header("Cache-Control", "no-store")
+  savedMatches(
     @CurrentUser() user: AuthenticatedUser,
     @Param("sessionId", ResourceIdPipe) id: string,
   ) {
-    const session = await this.visual.get(user, id);
-    if (session.status !== "PLAN")
-      throw new BadRequestException("VISUAL_PLAN_REQUIRED");
-    return this.semantic.search(user, session.output.searchQuery);
+    return this.visualMatches.get(user, id);
+  }
+  @Post("visual/sessions/:sessionId/matches")
+  @Header("Cache-Control", "no-store")
+  matches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("sessionId", ResourceIdPipe) id: string,
+  ) {
+    return this.visualMatches.create(user, id);
   }
   @Post("businesses/:businessId/services/:serviceId/semantic-index") index(
     @CurrentUser() user: AuthenticatedUser,
