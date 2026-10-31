@@ -59,4 +59,3 @@ export interface MvpVerificationRequest {
   status: string;
   reviewNote: string | null;
 }
-

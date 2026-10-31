@@ -30,7 +30,7 @@ describe("conservative hair-only consultation compatibility", () => {
     },
   );
 
-  it("does not accept the only neighbor merely because it has a high score", () => {
+  it("rejects an unrelated or unclassified catalog title", () => {
     expect(compatibleVisualService("CUT", "Kaynak")).toBe(false);
     expect(compatibleVisualService("CUT", "Saç kesimi")).toBe(true);
     expect(compatibleVisualService("CUT", "Kesim ve boya")).toBe(false);

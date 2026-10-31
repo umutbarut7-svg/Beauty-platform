@@ -181,7 +181,10 @@ export class VisualMatchesService {
         select: { matchingStatus: true, matchingOutput: true },
       });
       if (row.matchingStatus === "READY")
-        return { result: await this.project(tx, row.matchingOutput, kind), query };
+        return {
+          result: await this.project(tx, row.matchingOutput, kind),
+          query,
+        };
       if (row.matchingStatus === "RUNNING")
         throw new ConflictException("VISUAL_MATCH_RUNNING");
       if (row.matchingStatus !== null && row.matchingStatus !== "FAILED")
@@ -227,13 +230,15 @@ export class VisualMatchesService {
     try {
       // Provider work happens outside the transaction and only after an explicit POST.
       const result = await this.semantic.search(user, claim.query);
-      const references = result.items.map((item: MatchReference) => ({
-        businessId: item.businessId,
-        serviceId: item.serviceId,
-        similarity: item.similarity,
-        sourceUpdatedAt: new Date(item.sourceUpdatedAt).toISOString(),
-        businessUpdatedAt: new Date(item.businessUpdatedAt).toISOString(),
-      }));
+      const references: MatchReference[] = result.items.map(
+        (item: MatchReference) => ({
+          businessId: item.businessId,
+          serviceId: item.serviceId,
+          similarity: item.similarity,
+          sourceUpdatedAt: new Date(item.sourceUpdatedAt).toISOString(),
+          businessUpdatedAt: new Date(item.businessUpdatedAt).toISOString(),
+        }),
+      );
       return await this.locked(user, id, async (tx, context) => {
         const projected = await this.project(tx, references, context.kind);
         const accepted = references.filter((reference) =>
@@ -280,4 +285,3 @@ export class VisualMatchesService {
     }
   }
 }
-

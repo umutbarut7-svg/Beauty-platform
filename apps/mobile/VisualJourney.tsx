@@ -674,4 +674,3 @@ const styles = StyleSheet.create({
     color: palette.text,
   },
 });
-

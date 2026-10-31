@@ -516,7 +516,9 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
     expect(await restarted.create(f.user, f.session.id)).toEqual(result);
     expect(search).not.toHaveBeenCalled();
     expect(
-      await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } }),
+      await db.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: f.session.id },
+      }),
     ).toMatchObject({
       matchingStatus: "READY",
       matchingOutput: [],
@@ -535,7 +537,11 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
       },
     });
     const business = await db.business.create({
-      data: { name: "Synthetic hair salon", slug: randomUUID(), isPublic: true },
+      data: {
+        name: "Synthetic hair salon",
+        slug: randomUUID(),
+        isPublic: true,
+      },
     });
     const category = await db.serviceCategory.create({
       data: { businessId: business.id, name: "Hair", slug: randomUUID() },
@@ -606,7 +612,9 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
       status: "NO_MATCH",
       items: [],
     });
-    expect((await matches.get(only.user, only.session.id)).result).toMatchObject({
+    expect(
+      (await matches.get(only.user, only.session.id)).result,
+    ).toMatchObject({
       status: "NO_MATCH",
       items: [],
     });
@@ -1005,4 +1013,3 @@ describe("real pgvector index scope, freshness and cosine query (synthetic vecto
     ).toEqual([]);
   });
 });
-

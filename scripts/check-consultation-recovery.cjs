@@ -128,12 +128,11 @@ async function journey(browser, origin, output, engine) {
     ) {
       if (matchingMode === "error") status = 503;
       value = {
-        status:
-          ["saved", "unclear"].includes(matchingMode)
-            ? "READY"
-            : matchingMode === "pending"
-              ? "RUNNING"
-              : "NOT_REQUESTED",
+        status: ["saved", "unclear"].includes(matchingMode)
+          ? "READY"
+          : matchingMode === "pending"
+            ? "RUNNING"
+            : "NOT_REQUESTED",
         result:
           matchingMode === "saved"
             ? recoveredMatch
@@ -371,4 +370,3 @@ main(async (browser, origin, output) => {
   console.error(error);
   process.exitCode = 1;
 });
-
