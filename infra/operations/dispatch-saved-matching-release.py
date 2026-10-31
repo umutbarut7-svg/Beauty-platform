@@ -16,7 +16,7 @@ ARTIFACT = 13034118862
 RUN = 41179806354
 HEAD = 'd28f7903a54fa33d58baa7a6ca2c896f01c4d6c8'
 DIGEST = 'sha256:1cc1bfc11fc8aef672f0e9ff5abf04beceb0c21c70a769b8a53f6a17981780f0'
-REQUEST = {'request_id': 'orzell-saved-matching-publication-20261031-1', 'source': '4fdfbe61405633ce85764c0b2a13e157bc9e5833', 'artifact_id': ARTIFACT, 'mode': 'approved-maintenance'}
+REQUEST = {'request_id': 'orzell-saved-matching-publication-20261031-2', 'source': '4fdfbe61405633ce85764c0b2a13e157bc9e5833', 'artifact_id': ARTIFACT, 'mode': 'approved-maintenance'}
 
 
 class Stop(Exception):
