@@ -1,0 +1,37 @@
+name: Saved matching API and privacy worker release rehearsal
+on:
+  pull_request:
+    paths:
+      - .github/workflows/saved-matching-container-preparation.yml
+      - infra/operations/rehearse-saved-matching-release.sh
+      - infra/operations/verify-saved-matching-image.cjs
+      - docs/stage-33/saved-matching-deployment-20261031.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout release harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Checkout exact reviewed application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 4fdfbe61405633ce85764c0b2a13e157bc9e5833
+          path: application
+          persist-credentials: false
+      - name: Build API and migration images and rehearse in an isolated database
+        run: bash harness/infra/operations/rehearse-saved-matching-release.sh
+      - name: Preserve only release images, checksums and synthetic evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: saved-matching-release-${{ github.run_id }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
