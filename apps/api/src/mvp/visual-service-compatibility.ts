@@ -1,11 +1,7 @@
 // Conservative vocabulary for the hair-only visual MVP, not a general semantic
 // relevance score. Unknown, negated and mixed requests require clarification.
 export type HairServiceKind =
-  | "CUT"
-  | "COLOR"
-  | "EXTENSIONS"
-  | "CARE"
-  | "STYLING";
+  "CUT" | "COLOR" | "EXTENSIONS" | "CARE" | "STYLING";
 
 const operations: ReadonlyArray<readonly [HairServiceKind, RegExp]> = [
   ["CUT", /\b(?:kesim|kesimi|kesimini|kesimine|haircuts?)\b|\bhair cuts?\b/],
