@@ -1,0 +1,77 @@
+name: Saved matching read-only preview preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/operations/saved-matching-preflight-request.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  operations:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact trusted main revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Obtain temporary preview operations identity
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: preview-ops-${{ github.run_id }}
+          role-duration-seconds: 1800
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Verify identity and execute checked-in operation
+        shell: bash
+        env:
+          AWS_PAGER: ""
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, time
+          def aws(*args):
+              process = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if process.returncode:
+                  # Never echo raw provider errors that might contain request data.
+                  raise SystemExit('AWS operation failed: ' + ' '.join(args[:2]))
+              return json.loads(process.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected account or role; execution blocked')
+          request = json.loads(pathlib.Path('.github/operations/saved-matching-preflight-request.json').read_text())
+          if request != {'request_id': 'orzell-saved-matching-readonly-preflight-20261031-1', 'mode': 'inspect'}:
+              raise SystemExit('Unsupported operation request')
+          script = pathlib.Path('.github/operations/saved-matching-preflight.sh').read_text()
+          if not script.startswith('#!/bin/bash\nset -euo pipefail\n') or len(script) > 12000:
+              raise SystemExit('Invalid checked-in operation script')
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': ['bash -se <<\'EPIFIZ_OPS_SCRIPT\'\n' + script + '\nEPIFIZ_OPS_SCRIPT'], 'executionTimeout': ['900']}), '--comment', 'Reviewed GitHub main operation ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          result = None
+          for _ in range(100):
+              time.sleep(10)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Monitoring deadline reached; command may still run. Do not resend without checking.')
+          print('Status:', result['Status'])
+          # The checked-in script must produce only non-secret diagnostics.
+          print(result.get('StandardOutputContent', ''))
+          if result.get('StandardErrorContent'):
+              print(result['StandardErrorContent'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Preview operations\n\nCommand: `' + command_id + '`\n\nStatus: **' + result['Status'] + '**\n')
+          if result['Status'] != 'Success':
+              raise SystemExit(1)
+          PY

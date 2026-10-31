@@ -1,0 +1,23 @@
+name: Saved matching deployment preflight safety
+on:
+  pull_request:
+    paths:
+      - .github/operations/saved-matching-preflight.sh
+      - .github/operations/saved-matching-preflight-request.json
+      - .github/workflows/preview-saved-matching-preflight.yml
+      - infra/operations/test_saved_matching_preflight.py
+      - .github/workflows/preview-saved-matching-safety.yml
+permissions:
+  contents: read
+jobs:
+  readonly-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify bounded read-only metadata and redaction behavior
+        run: |
+          bash -n .github/operations/saved-matching-preflight.sh
+          python3 -m unittest discover -s infra/operations -p test_saved_matching_preflight.py -v
