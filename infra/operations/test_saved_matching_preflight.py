@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / '.github/operations/preview-commands.sh'
+SCRIPT = ROOT / '.github/operations/saved-matching-preflight.sh'
 REAL_RUN = subprocess.run
 
 
