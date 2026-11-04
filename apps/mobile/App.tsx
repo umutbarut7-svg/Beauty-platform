@@ -24,6 +24,7 @@ import {
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
+import { ServiceChoice } from "./ServiceChoice";
 import { BusinessDemand } from "./BusinessDemand";
 import { VisualJourney } from "./VisualJourney";
 import { BusinessIntelligenceSetup } from "./BusinessIntelligenceSetup";
@@ -739,13 +740,11 @@ export default function App() {
                         </Text>
                       )}
                       {catalog.services.map((service) => (
-                        <Pressable
+                        <ServiceChoice
                           key={service.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${service.name} hizmetini seç`}
-                          accessibilityState={{
-                            selected: serviceId === service.id,
-                          }}
+                          service={service}
+                          label={`${service.name} hizmetini seç`}
+                          selected={serviceId === service.id}
                           disabled={busy}
                           onPress={() => {
                             setServiceId(service.id);
@@ -754,24 +753,7 @@ export default function App() {
                             setSlots([]);
                             setPendingSlot(null);
                           }}
-                          style={[
-                            styles.choice,
-                            serviceId === service.id && styles.choiceSelected,
-                          ]}
-                        >
-                          <View style={styles.grow}>
-                            <Text style={styles.fieldLabel}>
-                              {service.name}
-                            </Text>
-                            <Text style={styles.small}>
-                              {service.durationMinutes} dakika
-                            </Text>
-                          </View>
-                          <Text style={styles.price}>
-                            {formatPrice(service.price, service.currency)}{" "}
-                            {serviceId === service.id ? "✓" : ""}
-                          </Text>
-                        </Pressable>
+                        />
                       ))}
                     </View>
                     {serviceId && (
