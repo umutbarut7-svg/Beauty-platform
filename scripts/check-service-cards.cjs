@@ -119,7 +119,7 @@ async function journey(browser, origin, output, engine) {
         await expect(card).toContainText(`${service.durationMinutes} dakika`);
       else await expect(card).not.toContainText("dakika");
       await card.click();
-      await expect(card).toHaveAttribute("aria-selected", "true");
+      await expect(card).toHaveAttribute("aria-pressed", "true");
       assert.equal(
         await page.getByRole("button").filter({ hasText: "✓" }).count(),
         1,
@@ -137,7 +137,7 @@ async function journey(browser, origin, output, engine) {
     }
     await button("Saç kesimi hizmetini seç").click();
     await expect(button("Özel uygulama hizmetini seç")).toHaveAttribute(
-      "aria-selected",
+      "aria-pressed",
       "false",
     );
     assert.equal(
@@ -166,7 +166,7 @@ async function journey(browser, origin, output, engine) {
     );
     await expect(
       button(`${service.name} · ${service.price} TRY ✓`),
-    ).toHaveAttribute("aria-selected", "true");
+    ).toHaveAttribute("aria-pressed", "true");
   }
   for (const width of [320, 390, 768]) {
     await page.setViewportSize({ width, height: 844 });

@@ -89,6 +89,7 @@ export function ServiceChoice({
       accessibilityLabel={label}
       accessibilityHint={[duration, price].filter(Boolean).join(" · ")}
       accessibilityState={{ selected, disabled }}
+      aria-pressed={selected}
       disabled={disabled}
       onPress={onPress}
       style={[
