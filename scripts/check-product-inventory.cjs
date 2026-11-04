@@ -92,6 +92,8 @@ async function journey(browser, origin, output, engine) {
           value = {};
         } else {
           p.stockQuantity = String(next);
+          // A concurrent metadata edit must appear after the stock read refresh.
+          if (failMovement) p.price = "2100.00";
           p.revision++;
           const movement = {
             id: `movement-${movements.length}`,
@@ -239,6 +241,9 @@ async function journey(browser, origin, output, engine) {
     movementAttempts[1].idempotencyKey,
   );
   assert.equal(products[0].stockQuantity, "3");
+  await expect(page.getByLabel("Ürün fiyatı", { exact: true })).toHaveValue(
+    "2100.00",
+  );
   await page.getByLabel("Miktar (adet)", { exact: true }).fill("3");
   await page.getByLabel("Stok hareketi açıklaması").fill("Açılış sayımı");
   await button("Stok hareketini kaydet").click();

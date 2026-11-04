@@ -9,6 +9,7 @@ import type {
 } from "@beauty-platform/types";
 import { AppText as Text, formatPrice, palette } from "./ui";
 import { parseProductRows } from "./product-import";
+import { ApiError } from "@beauty-platform/types";
 export const unitLabel = { UNIT: "adet", ML: "ml", G: "g" };
 
 export function ProductInventory({
@@ -88,7 +89,13 @@ export function ProductInventory({
     setCursor(page.nextCursor);
     setLoaded(true);
     if (selected) {
-      setSelected(values.find((p) => p.id === selected.id) ?? null);
+      const current = values.find((p) => p.id === selected.id) ?? null;
+      setSelected(current);
+      if (current) {
+        setEditName(current.name);
+        setEditPrice(current.price);
+        setEditThreshold(current.lowStockThreshold);
+      }
       setHistory([]);
     }
   }
@@ -229,12 +236,27 @@ export function ProductInventory({
                   direction,
                   reason: reason.trim(),
                 };
-                await api.request(`${base}/${selected.id}/movements`, "POST", {
-                  quantity: amount,
-                  direction,
-                  reason: reason.trim(),
-                  idempotencyKey: key(payload),
-                });
+                try {
+                  await api.request(
+                    `${base}/${selected.id}/movements`,
+                    "POST",
+                    {
+                      quantity: amount,
+                      direction,
+                      reason: reason.trim(),
+                      idempotencyKey: key(payload),
+                    },
+                  );
+                } catch (error) {
+                  if (error instanceof ApiError && error.status === 409) {
+                    await load();
+                    setMessage(
+                      "Stok değişmiş veya çıkış miktarı yetersiz olabilir. Güncel stok miktarını kontrol et.",
+                    );
+                    return;
+                  }
+                  throw error;
+                }
                 keys.current.delete(JSON.stringify(payload));
                 setQuantity("");
                 setReason("");
