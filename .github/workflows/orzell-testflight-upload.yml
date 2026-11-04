@@ -1,5 +1,5 @@
-# Release trigger: PR #82 same-plan matching refresh; signed source follows verified API delivery 41814426154 (SSM e4fc6700-7201-42ad-a6e8-7151b386bef1).
-# Reviewed application f712d06427092211d11c28d862365283d79f26e1; merge tree 415b4d2fb684e21e55e8cbaebb23e01aecc7f54d.
+# Release trigger: shared service cards, batch inventory and B2B; follows pinned preview delivery 41904954994.
+# Reviewed application 2e0c52f705d4ec26f161720a97914aa56965e0c2; merge tree e91ceb5de9cb395b33064e0e5a9f240dc44609f8.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -40,6 +40,20 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Verify pinned combined preview delivery succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          async function main(){
+            const r=await fetch("https://api.github.com/repos/umutbarut7-svg/Beauty-platform/actions/runs/41904954994",{headers:{Authorization:"Bearer "+process.env.GH_TOKEN,Accept:"application/vnd.github+json"},redirect:"error",signal:AbortSignal.timeout(30000)});
+            if(!r.ok) throw new Error("Pinned preview delivery lookup returned HTTP "+r.status);
+            const run=await r.json();
+            if(run.id!==41904954994 || run.head_sha!=="95cf0e14d919222e4fc855d6c1eba37219861306" || run.status!=="completed" || run.conclusion!=="success") throw new Error("Pinned combined preview delivery is not successful; no signing or upload.");
+            console.log("Verified shared catalog/inventory/B2B preview delivery 41904954994.");
+          }
+          main().catch(e=>{console.error(e.message);process.exitCode=1;});
+          NODE
       - name: Install pinned dependencies and shared types
         run: |
           pnpm install --frozen-lockfile
