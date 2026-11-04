@@ -2,7 +2,7 @@
 
 PR #82 application source: `f712d06427092211d11c28d862365283d79f26e1`.
 Application review 41811840820 and full API/HTTP/PostgreSQL/worker regression
-41811840991 passed. Physical-phone and final native gates are separate.
+41811840991 passed. Android/iOS native builds 41811841113 and native iOS photo-runtime acceptance 41811840729 passed. Physical-phone acceptance remains separate.
 The previously completed consultation remains a saved NO_MATCH until the owner
 explicitly requests a fresh search after deployment.
 
@@ -36,12 +36,23 @@ POST. Preserve unrelated container identities and restart counts.
 Rollback keeps the verified new cleaner after a candidate API start attempt.
 Existing one-time operation directories cannot be replayed.
 
-Nineteen local offline tests passed. They cover corruption, source/expiry,
+The initial nineteen local offline tests passed. They cover corruption, source/expiry,
 schema immutability, configuration drift, sequencing, unauthenticated probes,
 preparation failure and rollback. CI repeats on the runner and Python 3.9.
-Actual publication is pending until exact candidate gates and this PR's checks pass.
+The initial publisher's inventory-name error was detected before live service mutation; see PR #85 and the preparation-repair evidence below.
 
 No paid provider request, catalog indexing, key/model/quota/retention change,
 customer-content inspection, new tester or store submission occurs here.
 The existing web gateway/admin remain on their own sources; the new mobile UI
 requires its subsequent internal TestFlight build. Full Stage 33 remains NOT PASS.
+
+
+## Completed code-only publication, 4 November 2026
+
+Application PR #82 merged as 3be7eebba0792d3d015a72fbec8d05259ea93946 with tree 415b4d2fb684e21e55e8cbaebb23e01aecc7f54d, identical to tested f712d064 source. All four exact-source application/API/native/photo gates passed. PR #83 merged as c422d95f8acf6f4a5e522e1d50526733cd15ac9f.
+
+Initial publication 41813561525 / SSM c6c514cb-68cd-4b59-b143-e81f26fb82f1 stopped PREPARATION_FAILED before image loading/service mutation because the expected compatibility-module name was incorrect. PR #85 corrects the expected inventory without altering application or package, makes regression fixtures read the independent rehearsal verifier, and requires the pinned prior pre-mutation failure record before a new bounded request. Safety 41814090663 (21 checks on runner and Python 3.9) and repository gate 41814090798 passed. Merge: 0b347b25a4b7b744002734b1ea53fa391f93538e.
+
+Publication 41814426154 / SSM e4fc6700-7201-42ad-a6e8-7151b386bef1 completed Success / COMPLETED at 13:32 Istanbul. API and worker run the pinned 6370a6ed... image and exact f712d064 source. Eight compiled module hashes, Prisma fields, worker stability, original environments/security settings, unchanged schema, health/CORS, unauthenticated private-read and refresh-POST rejection, and unrelated-service preservation passed. No rollback was needed; no migration or provider call ran.
+
+Only after server verification, signed iOS upload 41814987209 was started from 12c7d33d29510ddb86ab81826fd474e4310a7784. The sole difference from the application merge is two release-provenance comments. Apple processing, internal test access, device install and live refreshed matching remain separately tracked. Do not repeat photo analysis or assume additional paid-operation authorization. Full Stage 33 is NOT PASS.
