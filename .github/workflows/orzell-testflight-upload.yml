@@ -1,5 +1,5 @@
-# Release trigger: PR #77 visual-service compatibility merged; build TestFlight candidate (2026-11-02).
-# Internal release: deliver approved PR #71 saved matching after verified API/privacy-worker publication 41183306801 (31 October 2026).
+# Release trigger: PR #82 same-plan matching refresh; signed source follows verified API delivery 41814426154 (SSM e4fc6700-7201-42ad-a6e8-7151b386bef1).
+# Reviewed application f712d06427092211d11c28d862365283d79f26e1; merge tree 415b4d2fb684e21e55e8cbaebb23e01aecc7f54d.
 name: ORZELL signed iOS TestFlight upload
 
 on:
