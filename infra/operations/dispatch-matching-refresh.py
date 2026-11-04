@@ -17,7 +17,7 @@ RUN = 41811884318
 HEAD = 'bb3f1e26b8616ce0c86633867674cef5c62f4bac'
 DIGEST = 'sha256:2b9a4b008973dc0809c93dd6fb6943d1309330d7d10ec02316bb764da8eb291c'
 ZIP_SIZE = 771732268
-REQUEST = {'request_id': 'orzell-matching-refresh-publication-20261104-1', 'source': 'f712d06427092211d11c28d862365283d79f26e1', 'artifact_id': ARTIFACT, 'mode': 'code-only-preview'}
+REQUEST = {'request_id': 'orzell-matching-refresh-publication-20261104-2', 'source': 'f712d06427092211d11c28d862365283d79f26e1', 'artifact_id': ARTIFACT, 'mode': 'code-only-preview'}
 
 
 class Stop(Exception):
