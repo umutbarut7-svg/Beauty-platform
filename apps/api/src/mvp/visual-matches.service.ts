@@ -32,7 +32,14 @@ type SavedMatching = {
 
 function refreshRevision(id: string, row: SavedMatching) {
   return createHash("sha256")
-    .update(JSON.stringify([id, row.matchingStatus, row.matchingRequestId, row.matchingOutput]))
+    .update(
+      JSON.stringify([
+        id,
+        row.matchingStatus,
+        row.matchingRequestId,
+        row.matchingOutput,
+      ]),
+    )
     .digest("hex");
 }
 
@@ -169,14 +176,20 @@ export class VisualMatchesService {
     return this.locked(user, id, async (tx, context) => {
       const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
         where: { id },
-        select: { matchingStatus: true, matchingOutput: true, matchingRequestId: true },
+        select: {
+          matchingStatus: true,
+          matchingOutput: true,
+          matchingRequestId: true,
+        },
       });
       const status = row.matchingStatus ?? "NOT_REQUESTED";
       if (!["NOT_REQUESTED", "RUNNING", "READY", "FAILED"].includes(status))
         throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
-      const result = status === "READY" || (status === "FAILED" && Array.isArray(row.matchingOutput))
-        ? await this.project(tx, row.matchingOutput, context.kind)
-        : null;
+      const result =
+        status === "READY" ||
+        (status === "FAILED" && Array.isArray(row.matchingOutput))
+          ? await this.project(tx, row.matchingOutput, context.kind)
+          : null;
       return {
         status,
         result,
@@ -195,7 +208,10 @@ export class VisualMatchesService {
         where: { id },
         select: { matchingStatus: true, matchingOutput: true },
       });
-      if (row.matchingStatus === "READY" || (row.matchingStatus === "FAILED" && Array.isArray(row.matchingOutput)))
+      if (
+        row.matchingStatus === "READY" ||
+        (row.matchingStatus === "FAILED" && Array.isArray(row.matchingOutput))
+      )
         return {
           result: await this.project(tx, row.matchingOutput, kind),
           query,
@@ -253,7 +269,11 @@ export class VisualMatchesService {
     const claim = await this.locked(user, id, async (tx, context) => {
       const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
         where: { id },
-        select: { matchingStatus: true, matchingOutput: true, matchingRequestId: true },
+        select: {
+          matchingStatus: true,
+          matchingOutput: true,
+          matchingRequestId: true,
+        },
       });
       if (row.matchingStatus === "RUNNING")
         throw new ConflictException("VISUAL_MATCH_RUNNING");
@@ -264,7 +284,11 @@ export class VisualMatchesService {
       }
       if (refreshRevision(id, row) !== dto.expectedRevision)
         throw new ConflictException("VISUAL_MATCH_CHANGED");
-      if (!["READY", "FAILED"].includes(row.matchingStatus ?? "") || !Array.isArray(row.matchingOutput) || !context.kind)
+      if (
+        !["READY", "FAILED"].includes(row.matchingStatus ?? "") ||
+        !Array.isArray(row.matchingOutput) ||
+        !context.kind
+      )
         throw new BadRequestException("VISUAL_MATCH_REFRESH_UNAVAILABLE");
       const previous = await this.project(tx, row.matchingOutput, context.kind);
       if (previous.status !== "NO_MATCH")

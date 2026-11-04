@@ -419,28 +419,49 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
       },
     });
     const search = vi.fn().mockResolvedValue({
-      items: [{
-        businessId: business.id,
-        serviceId: catalog.id,
-        similarity: 0.9,
-        sourceUpdatedAt: catalog.updatedAt.toISOString(),
-        businessUpdatedAt: business.updatedAt.toISOString(),
-      }],
+      items: [
+        {
+          businessId: business.id,
+          serviceId: catalog.id,
+          similarity: 0.9,
+          sourceUpdatedAt: catalog.updatedAt.toISOString(),
+          businessUpdatedAt: business.updatedAt.toISOString(),
+        },
+      ],
     });
     const analyze = vi.spyOn(f.visual, "analyze");
-    const matches = new VisualMatchesService(db as never, f.visual, { search } as never);
-    const before = await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } });
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
+    const before = await db.mvpPhotoAnalysis.findUniqueOrThrow({
+      where: { id: f.session.id },
+    });
     const saved = await matches.get(f.user, f.session.id);
     expect(saved.refreshRevision).toMatch(/^[a-f0-9]{64}$/);
     expect(search).not.toHaveBeenCalled();
-    const request = { requestId: randomUUID(), expectedRevision: saved.refreshRevision! };
+    const request = {
+      requestId: randomUUID(),
+      expectedRevision: saved.refreshRevision!,
+    };
     const result = await matches.refresh(f.user, f.session.id, request);
-    expect(result.result?.items).toEqual([expect.objectContaining({ serviceName: "Saç bakımı" })]);
+    expect(result.result?.items).toEqual([
+      expect.objectContaining({ serviceName: "Saç bakımı" }),
+    ]);
     expect(result.refreshRevision).toBeUndefined();
     expect(search).toHaveBeenCalledExactlyOnceWith(f.user, plan.searchQuery);
     expect(analyze).not.toHaveBeenCalled();
-    const after = await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } });
-    for (const key of ["photoId", "intent", "target", "answers", "attempts", "output", "expiresAt"] as const)
+    const after = await db.mvpPhotoAnalysis.findUniqueOrThrow({
+      where: { id: f.session.id },
+    });
+    for (const key of [
+      "photoId",
+      "intent",
+      "target",
+      "answers",
+      "attempts",
+      "output",
+      "expiresAt",
+    ] as const)
       expect(after[key]).toEqual(before[key]);
     await matches.refresh(f.user, f.session.id, request);
     await matches.create(f.user, f.session.id);
@@ -451,77 +472,150 @@ describe("saved matching with real owner-scoped PostgreSQL state and no live pro
     const f = await emptySnapshot();
     let entered!: () => void;
     let release!: (value: { items: [] }) => void;
-    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const search = vi.fn().mockImplementation(() => {
       entered();
-      return new Promise((resolve) => { release = resolve; });
+      return new Promise((resolve) => {
+        release = resolve;
+      });
     });
-    const matches = new VisualMatchesService(db as never, f.visual, { search } as never);
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
     const saved = await matches.get(f.user, f.session.id);
-    const request = { requestId: randomUUID(), expectedRevision: saved.refreshRevision! };
+    const request = {
+      requestId: randomUUID(),
+      expectedRevision: saved.refreshRevision!,
+    };
     const first = matches.refresh(f.user, f.session.id, request);
     await started;
-    await expect(matches.refresh(f.user, f.session.id, request)).rejects.toThrow("VISUAL_MATCH_RUNNING");
+    await expect(
+      matches.refresh(f.user, f.session.id, request),
+    ).rejects.toThrow("VISUAL_MATCH_RUNNING");
     release({ items: [] });
     const completed = await first;
     expect(completed.result?.status).toBe("NO_MATCH");
     expect(completed.refreshRevision).not.toBe(saved.refreshRevision);
-    const restarted = new VisualMatchesService(db as never, f.visual, { search } as never);
+    const restarted = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
     await restarted.refresh(f.user, f.session.id, request);
-    await expect(restarted.refresh(f.user, f.session.id, { ...request, requestId: randomUUID() })).rejects.toThrow("VISUAL_MATCH_CHANGED");
+    await expect(
+      restarted.refresh(f.user, f.session.id, {
+        ...request,
+        requestId: randomUUID(),
+      }),
+    ).rejects.toThrow("VISUAL_MATCH_CHANGED");
     await restarted.get(f.user, f.session.id);
     await restarted.create(f.user, f.session.id);
     expect(search).toHaveBeenCalledTimes(1);
   });
   it("keeps the saved result on refresh failure without replaying paid work", async () => {
     const f = await emptySnapshot();
-    const search = vi.fn().mockRejectedValue(new Error("Synthetic refresh failure"));
-    const matches = new VisualMatchesService(db as never, f.visual, { search } as never);
+    const search = vi
+      .fn()
+      .mockRejectedValue(new Error("Synthetic refresh failure"));
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
     const saved = await matches.get(f.user, f.session.id);
-    const request = { requestId: randomUUID(), expectedRevision: saved.refreshRevision! };
-    await expect(matches.refresh(f.user, f.session.id, request)).rejects.toThrow("Synthetic refresh failure");
+    const request = {
+      requestId: randomUUID(),
+      expectedRevision: saved.refreshRevision!,
+    };
+    await expect(
+      matches.refresh(f.user, f.session.id, request),
+    ).rejects.toThrow("Synthetic refresh failure");
     const failed = await matches.get(f.user, f.session.id);
     expect(failed.status).toBe("FAILED");
     expect(failed.result?.status).toBe("NO_MATCH");
     expect(failed.refreshRevision).not.toBe(saved.refreshRevision);
-    await expect(matches.refresh(f.user, f.session.id, request)).rejects.toThrow("VISUAL_MATCH_REFRESH_FAILED");
+    await expect(
+      matches.refresh(f.user, f.session.id, request),
+    ).rejects.toThrow("VISUAL_MATCH_REFRESH_FAILED");
     await matches.create(f.user, f.session.id);
     expect(search).toHaveBeenCalledTimes(1);
-    expect(await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } })).toMatchObject({ status: "PLAN", output: plan, matchingOutput: [], expiresAt: f.session.expiresAt });
+    expect(
+      await db.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: f.session.id },
+      }),
+    ).toMatchObject({
+      status: "PLAN",
+      output: plan,
+      matchingOutput: [],
+      expiresAt: f.session.expiresAt,
+    });
   });
   it("denies foreign, expired and withdrawn refreshes before provider work", async () => {
     const f = await emptySnapshot();
     const search = vi.fn();
-    const matches = new VisualMatchesService(db as never, f.visual, { search } as never);
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
     const saved = await matches.get(f.user, f.session.id);
-    const request = { requestId: randomUUID(), expectedRevision: saved.refreshRevision! };
-    await expect(matches.refresh(await owner(), f.session.id, request)).rejects.toThrow("UNAVAILABLE");
+    const request = {
+      requestId: randomUUID(),
+      expectedRevision: saved.refreshRevision!,
+    };
+    await expect(
+      matches.refresh(await owner(), f.session.id, request),
+    ).rejects.toThrow("UNAVAILABLE");
     await f.visual.withdraw(f.user, f.consent.id);
-    await expect(matches.refresh(f.user, f.session.id, request)).rejects.toThrow("UNAVAILABLE");
+    await expect(
+      matches.refresh(f.user, f.session.id, request),
+    ).rejects.toThrow("UNAVAILABLE");
     const expired = await emptySnapshot();
-    const revision = (await matches.get(expired.user, expired.session.id)).refreshRevision!;
-    await db.mvpPhotoAnalysis.update({ where: { id: expired.session.id }, data: { expiresAt: new Date(0) } });
-    await expect(matches.refresh(expired.user, expired.session.id, { requestId: randomUUID(), expectedRevision: revision })).rejects.toThrow("UNAVAILABLE");
+    const revision = (await matches.get(expired.user, expired.session.id))
+      .refreshRevision!;
+    await db.mvpPhotoAnalysis.update({
+      where: { id: expired.session.id },
+      data: { expiresAt: new Date(0) },
+    });
+    await expect(
+      matches.refresh(expired.user, expired.session.id, {
+        requestId: randomUUID(),
+        expectedRevision: revision,
+      }),
+    ).rejects.toThrow("UNAVAILABLE");
     expect(search).not.toHaveBeenCalled();
   });
   it("discards a pending refresh after consent withdrawal", async () => {
     const f = await emptySnapshot();
     let entered!: () => void;
     let release!: (value: { items: [] }) => void;
-    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const search = vi.fn().mockImplementation(() => {
       entered();
-      return new Promise((resolve) => { release = resolve; });
+      return new Promise((resolve) => {
+        release = resolve;
+      });
     });
-    const matches = new VisualMatchesService(db as never, f.visual, { search } as never);
+    const matches = new VisualMatchesService(db as never, f.visual, {
+      search,
+    } as never);
     const saved = await matches.get(f.user, f.session.id);
-    const pending = matches.refresh(f.user, f.session.id, { requestId: randomUUID(), expectedRevision: saved.refreshRevision! });
+    const pending = matches.refresh(f.user, f.session.id, {
+      requestId: randomUUID(),
+      expectedRevision: saved.refreshRevision!,
+    });
     const settled = pending.catch((error: unknown) => error);
     await started;
     await f.visual.withdraw(f.user, f.consent.id);
     release({ items: [] });
     expect(await settled).toBeInstanceOf(Error);
-    expect(await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: f.session.id } })).toMatchObject({ matchingStatus: null, matchingOutput: null, matchingRequestId: null });
+    expect(
+      await db.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: f.session.id },
+      }),
+    ).toMatchObject({
+      matchingStatus: null,
+      matchingOutput: null,
+      matchingRequestId: null,
+    });
     expect(search).toHaveBeenCalledTimes(1);
   });
   it("restores a completed search after a service restart and revalidates public bookability", async () => {
