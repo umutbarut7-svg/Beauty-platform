@@ -40,6 +40,7 @@ const environment = {
   NODE_ENV: "test",
   DATABASE_URL: url,
   STAGE33_MVP_ENABLED: "true",
+  MVP_INVENTORY_ENABLED: "true",
   MVP_REDIS_ENABLED: "true",
   MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
@@ -1803,4 +1804,295 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       await browser.close();
     }
   }, 120000);
+});
+
+describe("Shared product catalog and inventory HTTP/DB acceptance", () => {
+  let productId = "",
+    measuredId = "";
+  const prefix = `inventory-${key}`;
+  const importKey = `${prefix}-import`;
+  const rows = [
+    {
+      sku: "SKU-A",
+      name: "Synthetic packaged product",
+      brand: "Fixture",
+      price: "2000.00",
+      currency: "TRY",
+      unit: "UNIT",
+      lowStockThreshold: "2",
+    },
+    {
+      sku: "SKU-B",
+      name: "Synthetic measured product",
+      price: "750.50",
+      currency: "TRY",
+      unit: "ML",
+      lowStockThreshold: "0.1",
+    },
+  ];
+  it("imports one batch atomically and replays the same receipt without creating duplicates", async () => {
+    const path = `/businesses/${businessId}/products/import`;
+    const payload = { products: rows, idempotencyKey: importKey };
+    const [a, b] = await Promise.all([
+      request(path, ownerToken, "POST", payload),
+      request(path, ownerToken, "POST", payload),
+    ]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(a.body).toEqual(b.body);
+    [productId, measuredId] = a.body.ids;
+    expect(await db.catalogProduct.count({ where: { businessId } })).toBe(2);
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: productId } })
+      ).stockQuantity.toString(),
+    ).toBe("0");
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...payload,
+          products: [{ ...rows[0], price: "1.00" }],
+        })
+      ).status,
+    ).toBe(409);
+  });
+  it("denies cross-tenant/customer/staff access and validates whole batches", async () => {
+    const path = `/businesses/${businessId}/products`;
+    for (const token of [customerToken, strangerToken, professionalToken])
+      expect((await request(path, token)).status).toBe(403);
+    expect((await request(path, "")).status).toBe(401);
+    const before = await db.catalogProduct.count({ where: { businessId } });
+    expect(
+      (
+        await request(`${path}/import`, ownerToken, "POST", {
+          idempotencyKey: `${prefix}-duplicate`,
+          products: [{ ...rows[0], sku: "NEW" }, rows[0]],
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await request(`${path}/import`, ownerToken, "POST", {
+          idempotencyKey: `${prefix}-case`,
+          products: [
+            { ...rows[0], sku: "dupe" },
+            { ...rows[0], sku: "DUPE" },
+          ],
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(`${path}/import`, ownerToken, "POST", {
+          idempotencyKey: `${prefix}-fraction`,
+          products: [{ ...rows[0], sku: "FRACTION", lowStockThreshold: "0.5" }],
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(`${path}/import`, ownerToken, "POST", {
+          idempotencyKey: `${prefix}-quantity`,
+          products: [{ ...rows[0], sku: "FORGED", stockQuantity: "999" }],
+        })
+      ).status,
+    ).toBe(400);
+    expect(await db.catalogProduct.count({ where: { businessId } })).toBe(
+      before,
+    );
+    expect(
+      (
+        await request(
+          `/businesses/${otherBusinessId}/products/${productId}/movements`,
+          ownerToken,
+          "POST",
+          {
+            idempotencyKey: `${prefix}-cross`,
+            direction: "IN",
+            quantity: "1",
+            reason: "Cross business",
+          },
+        )
+      ).status,
+    ).toBe(404);
+  });
+  it("deduplicates concurrent stock writes and prevents concurrent overselling", async () => {
+    const path = `/businesses/${businessId}/products/${productId}/movements`;
+    const data = {
+      idempotencyKey: `${prefix}-stock`,
+      direction: "IN",
+      quantity: "5",
+      reason: "Opening count",
+    };
+    const [a, b] = await Promise.all([
+      request(path, ownerToken, "POST", data),
+      request(path, ownerToken, "POST", data),
+    ]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(a.body).toEqual(b.body);
+    expect(a.body.quantityAfter).toBe("5");
+    const outs = await Promise.all(
+      ["one", "two"].map((s) =>
+        request(path, ownerToken, "POST", {
+          idempotencyKey: `${prefix}-out-${s}`,
+          direction: "OUT",
+          quantity: "4",
+          reason: "Synthetic consumption",
+        }),
+      ),
+    );
+    expect(outs.map((x) => x.status).sort()).toEqual([201, 409]);
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: productId } })
+      ).stockQuantity.toString(),
+    ).toBe("1");
+    expect(
+      await db.inventoryMovement.count({ where: { businessId, productId } }),
+    ).toBe(2);
+    expect(
+      (await request(path, ownerToken, "POST", { ...data, quantity: "6" }))
+        .status,
+    ).toBe(409);
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...data,
+          idempotencyKey: `prefix-zero`,
+          quantity: "0",
+        })
+      ).status,
+    ).toBe(400);
+  });
+  it("keeps exact measured quantities, optimistic edit conflicts and an immutable history", async () => {
+    const path = `/businesses/${businessId}/products/${measuredId}`;
+    const before = await db.catalogProduct.findUniqueOrThrow({
+      where: { id: measuredId },
+    });
+    const movement = await request(`${path}/movements`, ownerToken, "POST", {
+      idempotencyKey: `${prefix}-measured`,
+      direction: "IN",
+      quantity: "0.125",
+      reason: "Measured opening",
+    });
+    expect(movement.status).toBe(201);
+    expect(movement.body.quantityAfter).toBe("0.125");
+    expect(
+      (
+        await request(path, ownerToken, "PATCH", {
+          expectedRevision: before.revision,
+          price: "900.00",
+        })
+      ).status,
+    ).toBe(409);
+    const current = await db.catalogProduct.findUniqueOrThrow({
+      where: { id: measuredId },
+    });
+    expect(
+      (
+        await request(path, ownerToken, "PATCH", {
+          expectedRevision: current.revision,
+          price: "900.00",
+          isPublic: true,
+        })
+      ).status,
+    ).toBe(200);
+    expect((await request(`${path}/movements`, ownerToken)).body).toMatchObject(
+      [
+        {
+          quantity: "0.125",
+          quantityAfter: "0.125",
+          reason: "Measured opening",
+        },
+      ],
+    );
+    await expect(
+      db.catalogProduct.update({
+        where: { id: productId },
+        data: { stockQuantity: -1 },
+      }),
+    ).rejects.toThrow();
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: productId } })
+      ).stockQuantity.toString(),
+    ).toBe("1");
+  });
+  it("exposes only active, explicitly public products and hides internal inventory metadata", async () => {
+    const path = `/mvp/v1/catalog/${businessId}/products`;
+    const response = await request(path, customerToken);
+    expect(response.status).toBe(200);
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0]).toMatchObject({
+      id: measuredId,
+      price: "900",
+      availability: "IN_STOCK",
+    });
+    for (const field of [
+      "stockQuantity",
+      "lowStockThreshold",
+      "businessId",
+      "revision",
+      "actorId",
+      "keyHash",
+    ])
+      expect(response.body.items[0]).not.toHaveProperty(field);
+    const row = await db.catalogProduct.findUniqueOrThrow({
+      where: { id: measuredId },
+    });
+    await request(
+      `/businesses/${businessId}/products/${measuredId}`,
+      ownerToken,
+      "PATCH",
+      { expectedRevision: row.revision, isActive: false },
+    );
+    expect((await request(path, customerToken)).body.items).toHaveLength(0);
+    await db.business.update({
+      where: { id: businessId },
+      data: { isPublic: false },
+    });
+    try {
+      expect((await request(path, customerToken)).status).toBe(404);
+    } finally {
+      await db.business.update({
+        where: { id: businessId },
+        data: { isPublic: true },
+      });
+    }
+  });
+  it("paginates a representative batch without row-specific tests", async () => {
+    const products = Array.from({ length: 50 }, (_, i) => ({
+      ...rows[0],
+      sku: `BATCH-${i}`,
+      name: `Shared fixture ${i}`,
+    }));
+    expect(
+      (
+        await request(
+          `/businesses/${businessId}/products/import`,
+          ownerToken,
+          "POST",
+          { idempotencyKey: `${prefix}-fifty`, products },
+        )
+      ).status,
+    ).toBe(201);
+    const first = await request(
+      `/businesses/${businessId}/products`,
+      ownerToken,
+    );
+    expect(first.body.items).toHaveLength(50);
+    expect(first.body.nextCursor).toBeTruthy();
+    const next = await request(
+      `/businesses/${businessId}/products?after=${first.body.nextCursor}`,
+      ownerToken,
+    );
+    expect(next.body.items).toHaveLength(2);
+    expect(next.body.nextCursor).toBeNull();
+    expect(
+      new Set(
+        [...first.body.items, ...next.body.items].map(
+          (p: { id: string }) => p.id,
+        ),
+      ).size,
+    ).toBe(52);
+  });
 });

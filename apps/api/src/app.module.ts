@@ -27,6 +27,7 @@ import { MonetizationModule } from "./monetization/monetization.module.js";
 import { GrowthModule } from "./growth/growth.module.js";
 import { GovernanceModule } from "./governance/governance.module.js";
 import { MvpModule } from "./mvp/mvp.module.js";
+import { InventoryModule } from "./inventory/inventory.module.js";
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { MvpModule } from "./mvp/mvp.module.js";
     GrowthModule,
     GovernanceModule,
     MvpModule,
+    InventoryModule,
     ThrottlerModule.forRootAsync({
       imports: [],
       useFactory: () => {

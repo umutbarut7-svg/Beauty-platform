@@ -8,6 +8,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { inventoryEnabled } from "../inventory/inventory-policy.js";
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { PermissionsService } from "../auth/permissions.service.js";
@@ -124,7 +125,7 @@ export class MvpService {
       },
     });
     if (!business) throw new NotFoundException("Public business not found");
-    return business;
+    return { ...business, inventoryAvailable: inventoryEnabled() };
   }
   async bookings(user: AuthenticatedUser) {
     this.enabled();

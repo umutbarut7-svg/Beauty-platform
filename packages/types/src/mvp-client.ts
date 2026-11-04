@@ -113,6 +113,7 @@ export class MvpApiClient {
 }
 
 export interface MvpCatalog {
+  inventoryAvailable?: boolean;
   id: string;
   name: string;
   isVerified: boolean;
