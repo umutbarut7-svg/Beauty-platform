@@ -58,7 +58,29 @@ customer-content inspection or new binary upload is included.
 Eighteen offline behavior tests cover artifact corruption/inventory/source,
 schema drift/no pending migrations, service isolation, publication ordering,
 pre-service failure and both rollback stages. CI repeats on Python 3.9.
-Actual publication evidence is pending and must be recorded after the main workflow.
+Actual publication succeeded; evidence is recorded below.
+
+## Actual publication — successful
+
+PR #80 merged as `dbb947d937bb6abe7c2769e9839f69fb258f7dfd`.
+[Publication 41800719630](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41800719630)
+completed successfully on 4 November 2026 at 11:40 Istanbul.
+SSM command `cf81aa70-6648-46ea-bdd2-541ae0783097` returned Success and
+`COMPLETED: code-only API and privacy worker verified; health/CORS/authentication PASS`.
+
+The exact candidate source and pinned API/worker image above were verified in both
+processes. Generated Prisma fields, seven compiled module hashes, worker survival,
+service-specific environments and security settings, readiness/CORS, unauthorized
+private-read rejection, unchanged migration/schema inventory and unrelated service
+identities/restarts passed. No rollback was needed. The publisher never ran a
+migration, paid provider request, catalog indexing, quota/key/retention change or
+new binary upload.
+
+The publication head's safety gate 41800333944 passed all 18 tests both on the
+runner and Python 3.9; repository gate 41800333563 also passed.
+The signed 1121 binary's API behavior is now delivered to the preview server.
+This closes the pending code delivery, not real-photo recommendation quality or
+the remaining physical-device/product/policy/operations gates.
 
 Existing iPhone consultation recovery and earlier booking/cancellation acceptances
 remain valid. Photo/recommendation quality, distinct result/Beauty Passport write,
