@@ -1,5 +1,6 @@
 export * from "./mvp-visual.js";
 export * from "./mvp-inventory.js";
+export * from "./mvp-b2b.js";
 /** A lightweight response shared by platform health checks. */
 export * from "./mvp-client.js";
 export interface HealthStatus {

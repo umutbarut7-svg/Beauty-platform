@@ -1,5 +1,6 @@
 export type InventoryUnit = "UNIT" | "ML" | "G";
 export interface CatalogProduct {
+  b2bAvailable?: boolean;
   id: string;
   sku: string;
   name: string;

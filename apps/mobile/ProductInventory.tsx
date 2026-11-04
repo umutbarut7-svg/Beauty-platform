@@ -305,6 +305,22 @@ export function ProductInventory({
               ))}
             </View>
           )}
+          {selected &&
+            button(
+              selected.b2bAvailable
+                ? "Ürünü B2B kataloğundan kaldır"
+                : "Ürünü B2B kataloğuna ekle",
+              async () => {
+                await api.request(`${base}/${selected.id}`, "PATCH", {
+                  expectedRevision: selected.revision,
+                  b2bAvailable: !selected.b2bAvailable,
+                });
+                await load();
+                setMessage(
+                  "B2B ürün görünürlüğü kaydedildi. Tedarikçi profilin açık olduğunda diğer işletmeler görebilir.",
+                );
+              },
+            )}
           <Text style={styles.heading}>Toplu ürün ekle</Text>
           <Text style={styles.body}>
             Tablodan 7 sütunu bu sırayla kopyala: Ürün kodu, ürün adı, marka,

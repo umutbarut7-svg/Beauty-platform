@@ -11,6 +11,8 @@ const { PrismaClient } = PrismaPackage as unknown as {
     refreshSession: any;
     businessMember: any;
     business: any;
+    supplierProfile: PrismaPackage.PrismaClient["supplierProfile"];
+    b2BQuoteRequest: PrismaPackage.PrismaClient["b2BQuoteRequest"];
     catalogProduct: PrismaPackage.PrismaClient["catalogProduct"];
     inventoryOperation: PrismaPackage.PrismaClient["inventoryOperation"];
     inventoryMovement: PrismaPackage.PrismaClient["inventoryMovement"];

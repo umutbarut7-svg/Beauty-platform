@@ -5,6 +5,8 @@ import { PRISMA_SERVICE } from "../database/database.tokens.js";
 import type { AuthenticatedUser } from "./auth.types.js";
 
 export type Permission =
+  | "b2b:read"
+  | "b2b:manage"
   | "inventory:read"
   | "inventory:manage"
   | "business:read"
@@ -87,6 +89,8 @@ const MANAGEMENT_PERMISSIONS: readonly Permission[] = [
   "staff:read",
   "staff:update",
   "staff:delete",
+  "b2b:read",
+  "b2b:manage",
   "inventory:read",
   "inventory:manage",
   "service:create",
@@ -123,6 +127,8 @@ const MANAGEMENT_PERMISSIONS: readonly Permission[] = [
 ];
 const PERMISSIONS: Record<PermissionRole, readonly Permission[]> = {
   SUPER_ADMIN: [
+    "b2b:read",
+    "b2b:manage",
     "inventory:read",
     "inventory:manage",
     "business:create",
@@ -184,6 +190,8 @@ const PERMISSIONS: Record<PermissionRole, readonly Permission[]> = {
   ],
   BUSINESS_OWNER: ["business:create", ...MANAGEMENT_PERMISSIONS],
   BUSINESS_ADMIN: [
+    "b2b:read",
+    "b2b:manage",
     "inventory:read",
     "inventory:manage",
     "business:update",
@@ -243,6 +251,8 @@ const PERMISSIONS: Record<PermissionRole, readonly Permission[]> = {
     "working_hours:update",
   ],
   MANAGER: [
+    "b2b:read",
+    "b2b:manage",
     "inventory:read",
     "inventory:manage",
     "business:read",

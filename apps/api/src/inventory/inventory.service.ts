@@ -219,6 +219,8 @@ export class InventoryService {
     dto: UpdateProductDto,
   ) {
     await this.access(user, businessId, true);
+    if (Object.values(dto).some((value) => value === null))
+      throw new BadRequestException("Product fields cannot be null");
     const product = await this.db.catalogProduct.findFirst({
       where: { id: productId, businessId },
     });
