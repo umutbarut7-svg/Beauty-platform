@@ -55,4 +55,13 @@ Initial publication 41813561525 / SSM c6c514cb-68cd-4b59-b143-e81f26fb82f1 stopp
 
 Publication 41814426154 / SSM e4fc6700-7201-42ad-a6e8-7151b386bef1 completed Success / COMPLETED at 13:32 Istanbul. API and worker run the pinned 6370a6ed... image and exact f712d064 source. Eight compiled module hashes, Prisma fields, worker stability, original environments/security settings, unchanged schema, health/CORS, unauthenticated private-read and refresh-POST rejection, and unrelated-service preservation passed. No rollback was needed; no migration or provider call ran.
 
-Only after server verification, signed iOS upload 41814987209 was started from 12c7d33d29510ddb86ab81826fd474e4310a7784. The sole difference from the application merge is two release-provenance comments. Apple processing, internal test access, device install and live refreshed matching remain separately tracked. Do not repeat photo analysis or assume additional paid-operation authorization. Full Stage 33 is NOT PASS.
+Only after server verification, signed iOS upload 41814987209 completed successfully from 12c7d33d29510ddb86ab81826fd474e4310a7784. The sole difference from the application merge is two release-provenance comments. Apple acceptance is recorded below; device install and live refreshed matching remain separately tracked. Do not repeat photo analysis or assume additional paid-operation authorization. Full Stage 33 is NOT PASS.
+
+
+## Internal TestFlight acceptance
+
+Upload 41814987209 / job 126523361296 identified ORZELL 1.0.0 (1131), validated and uploaded its signed IPA, and removed temporary signing credentials. Signed source: 12c7d33d29510ddb86ab81826fd474e4310a7784. Existing original logo, bundle com.orzell.app, Apple team and signing path retained.
+
+Access workflow source a9950a633a2ec54cbf021bfbd83e60c441fbcf55, run 41815838988 / job 126526233793: success at 13:43 Istanbul. Actual Apple processingState VALID; existing internal group association verified, internalBuildState IN_BETA_TESTING. Unchanged dependency/lockfile/app identity/HTTPS/OS encryption inventory was compared with build 1121; the existing HTTPS-only exemption was recorded. No external testing, new tester/group or store release.
+
+Pending: user installs 1131 and opens the same active saved haircut consultation. A single live refresh requires new explicit paid-search approval because prior analysis/search/indexing authorizations are consumed. Do not repeat photo analysis, silently retry a paid request, raise quotas or bypass retention. Source-photo fidelity, successful current-catalog recommendation, other Stage 33 policy/device/result/backup gates remain open. This release does not implement service icons, product inventory or B2B roadmap items.
