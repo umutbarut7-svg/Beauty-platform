@@ -36,6 +36,26 @@ jobs:
           PY
       - name: Test artifact drift, bounded activation and rollback without cloud credentials
         run: python3 -m unittest discover -s infra/operations -p test_catalog_b2b_publication.py -v
+      - name: Validate both flag overlays with real Compose rendering
+        run: |
+          python3 - <<'PY'
+          import importlib.util,json,pathlib,subprocess,tempfile
+          spec=importlib.util.spec_from_file_location('release','infra/operations/publish-catalog-b2b.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          for has_flags in [False,True]:
+              with tempfile.TemporaryDirectory(prefix='catalog-ci-') as folder:
+                  root=pathlib.Path(folder)
+                  environment={'UNCHANGED_FIXTURE':'5'}
+                  if has_flags:
+                      environment.update({flag:'false' for flag in module.FLAGS})
+                  before={'services':{'api':{'image':'fixture-api:old','environment':environment,'entrypoint':None},'worker':{'image':'fixture-worker:old','environment':{'OWN_SOURCE':'kept'}}}}
+                  (root/'base.json').write_text(json.dumps(before))
+                  (root/'flags.json').write_text(json.dumps({'services':{'api':{'image':module.API_IMAGE,'environment':{flag:'true' for flag in module.FLAGS}}}}))
+                  command=['docker','compose','-p','catalog-fixture','-f',str(root/'base.json')]
+                  baseline=json.loads(subprocess.check_output(command+['config','--format','json'],text=True))
+                  candidate=json.loads(subprocess.check_output(command+['-f',str(root/'flags.json'),'config','--format','json'],text=True))
+                  module.validate_delta(baseline,candidate,'api',module.API_IMAGE,activate=True)
+          PY
       - name: Exercise actual read-only schema inspection on disposable PostgreSQL
         run: |
           set -euo pipefail
