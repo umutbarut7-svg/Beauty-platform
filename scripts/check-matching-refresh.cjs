@@ -187,6 +187,15 @@ async function scenario(browser, origin, output, engine, mode) {
     await expect(refresh).toBeEnabled();
     await expect(existingPlan).toBeVisible();
     await expect(
+      page.getByText("Önceki arama sonucu", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Yeni arama tamamlanamadı. Önceki sonuç ve planın korundu.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
       page.getByText("Uygun, güncel arama kaydı bulunamadı.", { exact: true }),
     ).toBeVisible();
   } else if (mode === "closed") {

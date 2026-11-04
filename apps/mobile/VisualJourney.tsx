@@ -659,7 +659,14 @@ export function VisualJourney({
                 })}
               {matches && (
                 <Text style={styles.heading} accessibilityLiveRegion="polite">
-                  Arama tamamlandı
+                  {savedMatching === "FAILED"
+                    ? "Önceki arama sonucu"
+                    : "Arama tamamlandı"}
+                </Text>
+              )}
+              {matches && savedMatching === "FAILED" && (
+                <Text accessibilityRole="alert">
+                  Yeni arama tamamlanamadı. Önceki sonuç ve planın korundu.
                 </Text>
               )}
               {matches?.status === "NO_MATCH" && (

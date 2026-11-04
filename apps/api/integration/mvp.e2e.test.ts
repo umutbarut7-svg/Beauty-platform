@@ -437,7 +437,9 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       });
       expect(savedMatchResponse.headers.get("cache-control")).toBe("no-store");
       await savedMatchResponse.arrayBuffer();
-      const refreshable = await fixture(customerId);
+      const refreshOwner = strangerToken;
+      const refreshOther = customerToken;
+      const refreshable = await fixture(stranger.id);
       const completedRequest = randomUUID();
       await db.mvpPhotoAnalysis.update({
         where: { id: refreshable.id },
@@ -460,7 +462,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       const refreshPath = endpoint + "/" + refreshable.id + "/matches/refresh";
       const snapshot = await request(
         endpoint + "/" + refreshable.id + "/matches",
-        customerToken,
+        refreshOwner,
       );
       expect(snapshot.body.refreshRevision).toMatch(/^[a-f0-9]{64}$/);
       const refreshBody = {
@@ -471,11 +473,11 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         401,
       );
       expect(
-        (await request(refreshPath, strangerToken, "POST", refreshBody)).status,
+        (await request(refreshPath, refreshOther, "POST", refreshBody)).status,
       ).toBe(404);
       expect(
         (
-          await request(refreshPath, customerToken, "POST", {
+          await request(refreshPath, refreshOwner, "POST", {
             expectedRevision: "invalid",
             requestId: "short",
           })
@@ -483,7 +485,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       ).toBe(400);
       expect(
         (
-          await request(refreshPath, customerToken, "POST", {
+          await request(refreshPath, refreshOwner, "POST", {
             expectedRevision: "0".repeat(64),
             requestId: randomUUID(),
           })
@@ -491,7 +493,7 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       ).toBe(409);
       const replay = await request(
         refreshPath,
-        customerToken,
+        refreshOwner,
         "POST",
         refreshBody,
       );
