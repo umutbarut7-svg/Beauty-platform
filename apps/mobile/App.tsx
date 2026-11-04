@@ -25,6 +25,8 @@ import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
 import { ServiceChoice } from "./ServiceChoice";
+import { ProductInventory } from "./ProductInventory";
+import { PublicProducts } from "./PublicProducts";
 import { BusinessDemand } from "./BusinessDemand";
 import { VisualJourney } from "./VisualJourney";
 import { BusinessIntelligenceSetup } from "./BusinessIntelligenceSetup";
@@ -58,6 +60,7 @@ type Screen =
   | "account"
   | "workspace"
   | "setup"
+  | "inventory"
   | "insights";
 const transitions: Record<string, string[]> = {
   PENDING: ["CONFIRMED", "CHECKED_IN", "CANCELLED", "NO_SHOW"],
@@ -481,7 +484,7 @@ export default function App() {
   const activeTab =
     screen === "consultation"
       ? "discover"
-      : screen === "setup"
+      : screen === "setup" || screen === "inventory"
         ? "workspace"
         : screen;
   return (
@@ -756,6 +759,17 @@ export default function App() {
                         />
                       ))}
                     </View>
+                    {catalog.inventoryAvailable && (
+                      <View style={styles.card}>
+                        <PublicProducts
+                          key={catalog.id}
+                          api={api}
+                          businessId={catalog.id}
+                          busy={busy}
+                          run={run}
+                        />
+                      </View>
+                    )}
                     {serviceId && (
                       <View style={styles.card}>
                         <Text style={styles.step}>
@@ -1138,6 +1152,9 @@ export default function App() {
                       {button("İşletme ayarları", async () => {
                         setScreen("setup");
                       })}
+                      {button("Ürünler ve stok", async () => {
+                        setScreen("inventory");
+                      })}
                       {button(
                         "İşletme randevularını gör",
                         async () => {
@@ -1175,6 +1192,25 @@ export default function App() {
                     })}
                   </View>
                 )}
+              </>
+            )}
+            {mode === "business" && screen === "inventory" && business && (
+              <>
+                {button(
+                  "İşletmeme dön",
+                  async () => setScreen("workspace"),
+                  true,
+                )}
+                <Text style={styles.title}>{business.name}</Text>
+                <View style={styles.card}>
+                  <ProductInventory
+                    key={business.id}
+                    api={api}
+                    businessId={business.id}
+                    busy={busy}
+                    run={run}
+                  />
+                </View>
               </>
             )}
             {mode === "business" && screen === "setup" && business && (
