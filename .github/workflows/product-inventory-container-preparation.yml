@@ -21,7 +21,7 @@ jobs:
       - name: Checkout pinned product catalog application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 113abadd7f2776953baf9c3e89046b08388bf647
+          ref: 2e0c52f705d4ec26f161720a97914aa56965e0c2
           path: application
           persist-credentials: false
       - name: Build and exercise API, migration and worker in an isolated database

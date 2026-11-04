@@ -14,9 +14,16 @@ async function main() {
     "MVP_SEMANTIC_ENABLED",
     "MVP_S3_ENABLED",
     "MVP_INVENTORY_ENABLED",
+    "MVP_B2B_ENABLED",
   ])
     assert.equal(process.env[flag], "false");
-  const models = ["CatalogProduct", "InventoryMovement", "InventoryOperation"];
+  const models = [
+    "CatalogProduct",
+    "InventoryMovement",
+    "InventoryOperation",
+    "SupplierProfile",
+    "B2BQuoteRequest",
+  ];
   for (const name of models)
     assert(Prisma.dmmf.datamodel.models.some((m) => m.name === name));
   const modules = {};
@@ -30,6 +37,10 @@ async function main() {
     "inventory/inventory.controller",
     "inventory/inventory.dto",
     "inventory/inventory.service",
+    "b2b/b2b.module",
+    "b2b/b2b.controller",
+    "b2b/b2b.dto",
+    "b2b/b2b.service",
     "mvp/visual.service",
     "mvp/visual-matches.service",
     "mvp/photo-maintenance.service",
@@ -58,6 +69,7 @@ async function main() {
     role: "BUSINESS_OWNER",
   };
   const businessId = "inventory-release-fixture-business";
+  const supplierId = "inventory-release-fixture-supplier";
   try {
     const migration = await db.$queryRawUnsafe(
       "SELECT migration_name FROM \"_prisma_migrations\" WHERE migration_name='20261104000000_product_inventory' AND finished_at IS NOT NULL AND rolled_back_at IS NULL",
@@ -159,24 +171,103 @@ async function main() {
       await db.inventoryMovement.count({ where: { businessId } }),
       1,
     );
+    const { B2BService } = require("/application/dist/b2b/b2b.service.js");
+    const bridge = new B2BService(db, new PermissionsService(db));
+    await assert.rejects(
+      bridge.profile(user, businessId),
+      (e) => e.getStatus() === 503,
+    );
+    const b2bMigration = await db.$queryRawUnsafe(
+      "SELECT migration_name FROM \"_prisma_migrations\" WHERE migration_name='20261104010000_b2b_supplier_bridge' AND finished_at IS NOT NULL AND rolled_back_at IS NULL",
+    );
+    assert.equal(b2bMigration.length, 1);
+    await db.business.create({
+      data: {
+        id: supplierId,
+        name: "Synthetic supplier release",
+        slug: "synthetic-supplier-release",
+        isPublic: true,
+        memberships: { create: { userId: user.id, role: "BUSINESS_OWNER" } },
+      },
+    });
+    process.env.MVP_B2B_ENABLED = "true";
+    await bridge.saveProfile(user, supplierId, {
+      kind: "MANUFACTURER",
+      description: "Synthetic supplier only",
+      isListed: true,
+    });
+    const vendorProduct = (
+      await service.importProducts(user, supplierId, payload)
+    ).ids[0];
+    await service.update(user, supplierId, vendorProduct, {
+      expectedRevision: 0,
+      b2bAvailable: true,
+    });
+    const productPage = await bridge.products(user, businessId, supplierId, {});
+    assert.equal(productPage.items.length, 1);
+    assert.equal("stockQuantity" in productPage.items[0], false);
+    const demand = {
+      supplierBusinessId: supplierId,
+      productId: vendorProduct,
+      quantity: "2",
+      note: "Synthetic quote",
+      idempotencyKey: "combined-b2b-quote-1",
+    };
+    const requested = await bridge.requestQuote(user, businessId, demand);
+    assert.deepEqual(
+      await bridge.requestQuote(user, businessId, demand),
+      requested,
+    );
+    await bridge.reply(user, supplierId, requested.id, {
+      expectedRevision: 0,
+      action: "QUOTE",
+      unitPrice: "10.50",
+      currency: "TRY",
+      note: "Synthetic reply",
+    });
+    const quoted = (await bridge.quotes(user, businessId, { side: "BUYER" }))
+      .items[0];
+    assert.equal(quoted.status, "QUOTED");
+    assert.equal(quoted.quotedUnitPrice.toString(), "10.5");
+    await bridge.cancel(user, businessId, requested.id, 1);
+    assert.equal(
+      (await bridge.quotes(user, businessId, { side: "BUYER" })).items[0]
+        .status,
+      "CANCELLED",
+    );
+    assert.equal(
+      await db.inventoryMovement.count({ where: { businessId: supplierId } }),
+      0,
+    );
   } finally {
     process.env.MVP_INVENTORY_ENABLED = "false";
-    await db.inventoryMovement.deleteMany({ where: { businessId } });
-    await db.inventoryOperation.deleteMany({ where: { businessId } });
-    await db.catalogProduct.deleteMany({ where: { businessId } });
-    await db.businessMember.deleteMany({ where: { businessId } });
-    await db.business.deleteMany({ where: { id: businessId } });
+    process.env.MVP_B2B_ENABLED = "false";
+    await db.b2BQuoteRequest.deleteMany({
+      where: { buyerBusinessId: businessId },
+    });
+    await db.supplierProfile.deleteMany({ where: { businessId: supplierId } });
+    const businesses = { in: [businessId, supplierId] };
+    await db.inventoryMovement.deleteMany({
+      where: { businessId: businesses },
+    });
+    await db.inventoryOperation.deleteMany({
+      where: { businessId: businesses },
+    });
+    await db.catalogProduct.deleteMany({ where: { businessId: businesses } });
+    await db.businessMember.deleteMany({ where: { businessId: businesses } });
+    await db.business.deleteMany({ where: { id: businesses } });
     await db.user.deleteMany({ where: { id: user.id } });
     await db.$disconnect();
   }
   console.log(
     JSON.stringify({
-      source: "113abadd7f2776953baf9c3e89046b08388bf647",
+      source: "2e0c52f705d4ec26f161720a97914aa56965e0c2",
       prismaVersion: Prisma.prismaVersion.client,
       models,
       modules,
       isolatedDatabase: "PASS",
       compiledInventoryAssertions: 10,
+      compiledB2BAssertions: 8,
       providerRequests: 0,
       liveDeployment: false,
     }),

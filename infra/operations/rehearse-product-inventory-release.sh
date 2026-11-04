@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-release_source=113abadd7f2776953baf9c3e89046b08388bf647
-api_image=orzell-product-inventory-api:113abadd7f27
-migrate_image=orzell-product-inventory-migrate:113abadd7f27
+release_source=2e0c52f705d4ec26f161720a97914aa56965e0c2
+api_image=orzell-product-inventory-api:2e0c52f705d4
+migrate_image=orzell-product-inventory-migrate:2e0c52f705d4
 test_network=orzell-product-inventory-isolated
 test_postgres=orzell-product-inventory-postgres
 test_api=orzell-product-inventory-api
@@ -35,7 +35,7 @@ for attempt in $(seq 1 30); do
 done
 runtime_env=(-e NODE_ENV=test -e PREVIEW_CI_FIXTURE=true -e AWS_REGION=eu-north-1 \
   -e DB_HOST=postgres -e STAGE33_MVP_ENABLED=false -e MVP_AI_ENABLED=false \
-  -e MVP_INVENTORY_ENABLED=false -e MVP_SEMANTIC_ENABLED=false -e MVP_S3_ENABLED=false -e MVP_REDIS_ENABLED=false \
+  -e MVP_B2B_ENABLED=false -e MVP_INVENTORY_ENABLED=false -e MVP_SEMANTIC_ENABLED=false -e MVP_S3_ENABLED=false -e MVP_REDIS_ENABLED=false \
   -e CORS_ORIGINS=https://fixture.example.test -e PORT=3001)
 docker run --rm --network "$test_network" "${runtime_env[@]}" "$migrate_image" migrate
 docker run -d --name "$test_worker" --network "$test_network" "${runtime_env[@]}" "$api_image" worker
@@ -63,7 +63,7 @@ if archive.stat().st_size>2_000_000_000:
 digest=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
 def image_id(name):
     return subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',name],text=True).strip()
-manifest={'source':'113abadd7f2776953baf9c3e89046b08388bf647','images':{'api':image_id('orzell-product-inventory-api:113abadd7f27'),'migrate':image_id('orzell-product-inventory-migrate:113abadd7f27')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
+manifest={'source':'2e0c52f705d4ec26f161720a97914aa56965e0c2','images':{'api':image_id('orzell-product-inventory-api:2e0c52f705d4'),'migrate':image_id('orzell-product-inventory-migrate:2e0c52f705d4')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
 (root/'release.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print(json.dumps(manifest))
 PY
