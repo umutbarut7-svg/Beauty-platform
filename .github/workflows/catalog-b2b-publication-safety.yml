@@ -1,0 +1,66 @@
+name: Catalog and B2B publication safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-catalog-b2b.py
+      - infra/operations/dispatch-catalog-b2b.py
+      - infra/operations/test_catalog_b2b_publication.py
+      - .github/operations/catalog-b2b-release.json
+      - .github/workflows/publish-catalog-b2b.yml
+      - .github/workflows/catalog-b2b-publication-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 2e0c52f705d4ec26f161720a97914aa56965e0c2
+          path: reviewed-application
+          persist-credentials: false
+      - name: Check pinned source and both reviewed migration digests
+        run: |
+          python3 - <<'PY'
+          import hashlib,importlib.util,pathlib,subprocess
+          spec=importlib.util.spec_from_file_location('release','infra/operations/publish-catalog-b2b.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          assert subprocess.check_output(['git','-C','reviewed-application','rev-parse','HEAD'],text=True).strip()==module.SOURCE
+          for name,digest in module.MIGRATIONS.items():
+              path=pathlib.Path('reviewed-application/apps/api/prisma/migrations')/name/'migration.sql'
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==digest
+          PY
+      - name: Test artifact drift, bounded activation and rollback without cloud credentials
+        run: python3 -m unittest discover -s infra/operations -p test_catalog_b2b_publication.py -v
+      - name: Exercise actual read-only schema inspection on disposable PostgreSQL
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f beauty-preview-postgres-1 >/dev/null 2>&1 || true' EXIT
+          docker run -d --name beauty-preview-postgres-1 --network none -e POSTGRES_USER=beauty -e POSTGRES_DB=beauty_preview -e POSTGRES_PASSWORD=synthetic-ci-only pgvector/pgvector:0.8.7-pg17-trixie
+          for attempt in $(seq 1 30); do
+            if docker exec beauty-preview-postgres-1 pg_isready -U beauty -d beauty_preview; then break; fi
+            test "$attempt" -lt 30
+            sleep 1
+          done
+          docker exec beauty-preview-postgres-1 psql -X -v ON_ERROR_STOP=1 -U beauty -d beauty_preview -c 'CREATE TABLE "MvpPhotoAnalysis" ("matchingStatus" text, "matchingRequestId" text, "matchingOutput" text); CREATE TABLE "_prisma_migrations" (migration_name text, checksum text, finished_at timestamptz, rolled_back_at timestamptz);'
+          python3 - <<'PY'
+          import importlib.util,subprocess
+          spec=importlib.util.spec_from_file_location('release','infra/operations/publish-catalog-b2b.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          subprocess.run(['docker','exec','beauty-preview-postgres-1','psql','-X','-v','ON_ERROR_STOP=1','-U','beauty','-d','beauty_preview','-c',"INSERT INTO \"_prisma_migrations\" VALUES ('old','old-hash',now(),NULL)"],check=True,capture_output=True)
+          state=module.schema_state()
+          assert state['columns']==module.FIELDS and state['tables']==[]
+          module.validate_migrations(state,{'old':'old-hash',**module.MIGRATIONS})
+          try:
+              module.sql('CREATE TABLE forbidden_write (id int)')
+              raise AssertionError('read-only transaction allowed a write')
+          except module.Stop:
+              pass
+          assert module.schema_state()==state
+          PY
+      - name: Repeat on preview host Python 3.9 without network
+        run: docker run --rm --network none -v "$PWD:/src:ro" -w /src python:3.9-slim python -m unittest discover -s infra/operations -p test_catalog_b2b_publication.py -v
