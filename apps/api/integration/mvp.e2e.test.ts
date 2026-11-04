@@ -437,6 +437,34 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
       });
       expect(savedMatchResponse.headers.get("cache-control")).toBe("no-store");
       await savedMatchResponse.arrayBuffer();
+      const refreshable = await fixture(customerId);
+      const completedRequest = randomUUID();
+      await db.mvpPhotoAnalysis.update({
+        where: { id: refreshable.id },
+        data: {
+          intent: "saç kesimi",
+          target: "kolay kesim",
+          output: {
+            status: "PLAN", observations: [], questions: [],
+            steps: ["Synthetic haircut"], searchQuery: "saç kesimi", limitations: [],
+          },
+          matchingStatus: "READY",
+          matchingOutput: [],
+          matchingRequestId: completedRequest,
+        },
+      });
+      const refreshPath = endpoint + "/" + refreshable.id + "/matches/refresh";
+      const snapshot = await request(endpoint + "/" + refreshable.id + "/matches", customerToken);
+      expect(snapshot.body.refreshRevision).toMatch(/^[a-f0-9]{64}$/);
+      const refreshBody = { expectedRevision: snapshot.body.refreshRevision, requestId: completedRequest };
+      expect((await request(refreshPath, "", "POST", refreshBody)).status).toBe(401);
+      expect((await request(refreshPath, strangerToken, "POST", refreshBody)).status).toBe(404);
+      expect((await request(refreshPath, customerToken, "POST", { expectedRevision: "invalid", requestId: "short" })).status).toBe(400);
+      expect((await request(refreshPath, customerToken, "POST", { expectedRevision: "0".repeat(64), requestId: randomUUID() })).status).toBe(409);
+      const replay = await request(refreshPath, customerToken, "POST", refreshBody);
+      expect(replay.status).toBe(201);
+      expect(replay.body).toEqual(snapshot.body);
+      expect(await db.mvpPhotoAnalysis.findUniqueOrThrow({ where: { id: refreshable.id } })).toMatchObject({ status: "PLAN", attempts: 1, matchingRequestId: completedRequest });
       const cache = await fetch(base + endpoint, {
         headers: { authorization: `Bearer ${customerToken}` },
       });

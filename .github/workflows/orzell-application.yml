@@ -29,7 +29,7 @@ jobs:
       - run: pnpm --filter @beauty-platform/types build
       - name: Check photo source formatting
         run: |
-          files="apps/mobile/VisualJourney.tsx apps/mobile/App.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs scripts/check-consultation-recovery.cjs scripts/check-matching-availability.cjs apps/api/src/mvp/visual.service.ts apps/api/src/mvp/visual.controller.ts apps/api/src/mvp/visual-matches.service.ts apps/api/src/mvp/semantic.service.ts apps/api/src/mvp/photo-maintenance.service.ts apps/api/integration/providers.test.ts apps/api/integration/mvp.e2e.test.ts packages/types/src/mvp-visual.ts"
+          files="apps/mobile/VisualJourney.tsx apps/mobile/App.tsx apps/mobile/photo-upload.ts apps/mobile/native-photo.ts apps/mobile/native-photo-expo.ts apps/mobile/src/native-photo.test.ts scripts/check-photo-picker-web.cjs scripts/check-consultation-recovery.cjs scripts/check-matching-availability.cjs apps/api/src/mvp/visual.service.ts apps/api/src/mvp/visual.controller.ts apps/api/src/mvp/visual-matches.service.ts apps/api/src/mvp/semantic.service.ts apps/api/src/mvp/photo-maintenance.service.ts apps/api/integration/providers.test.ts apps/api/integration/mvp.e2e.test.ts packages/types/src/mvp-visual.ts apps/api/src/mvp/visual.dto.ts scripts/check-matching-refresh.cjs .github/workflows/orzell-application.yml"
           if ! pnpm exec prettier --check $files; then
             pnpm exec prettier --write $files
             git diff --no-ext-diff -- $files
@@ -47,6 +47,8 @@ jobs:
         run: node scripts/check-matching-availability.cjs apps/mobile/dist /tmp/orzell-application-review
       - name: Restore saved consultations without repeating provider work
         run: node scripts/check-consultation-recovery.cjs apps/mobile/dist /tmp/orzell-application-review
+      - name: Refresh a saved NO_MATCH without another photo analysis
+        run: node scripts/check-matching-refresh.cjs apps/mobile/dist /tmp/orzell-application-review
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

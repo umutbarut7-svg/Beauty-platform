@@ -21,6 +21,7 @@ import { VerificationService } from "./verification.service.js";
 import {
   IndexCatalogDto,
   PhotoConsentDto,
+  RefreshVisualMatchesDto,
   SemanticQueryDto,
   VerificationDecisionDto,
   VerificationSubmitDto,
@@ -121,6 +122,15 @@ export class VisualController {
     @Param("sessionId", ResourceIdPipe) id: string,
   ) {
     return this.visualMatches.create(user, id);
+  }
+  @Post("visual/sessions/:sessionId/matches/refresh")
+  @Header("Cache-Control", "no-store")
+  refreshMatches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("sessionId", ResourceIdPipe) id: string,
+    @Body() dto: RefreshVisualMatchesDto,
+  ) {
+    return this.visualMatches.refresh(user, id, dto);
   }
   @Post("businesses/:businessId/services/:serviceId/semantic-index") index(
     @CurrentUser() user: AuthenticatedUser,
