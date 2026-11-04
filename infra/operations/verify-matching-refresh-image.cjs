@@ -55,16 +55,19 @@ async function main() {
   assert.equal(compatibleVisualService("CUT", "Saç kesimi"), true);
   assert.equal(compatibleVisualService("CUT", "Kesim ve boya"), false);
   assert.equal(compatibleVisualService("EXTENSIONS", "Kirpik kaynak"), false);
-  const { VisualMatchesService } = require("/application/dist/mvp/visual-matches.service.js");
-  const { RefreshVisualMatchesDto } = require("/application/dist/mvp/visual.dto.js");
+  const matching = require("/application/dist/mvp/visual-matches.service.js");
+  const dto = require("/application/dist/mvp/visual.dto.js");
   const { validateSync } = require("/application/node_modules/class-validator");
-  assert.equal(typeof VisualMatchesService.prototype.refresh, "function");
-  const valid = Object.assign(new RefreshVisualMatchesDto(), {
+  assert.equal(
+    typeof matching.VisualMatchesService.prototype.refresh,
+    "function",
+  );
+  const valid = Object.assign(new dto.RefreshVisualMatchesDto(), {
     expectedRevision: "a".repeat(64),
     requestId: "synthetic-refresh-request",
   });
   assert.equal(validateSync(valid).length, 0);
-  const invalid = Object.assign(new RefreshVisualMatchesDto(), {
+  const invalid = Object.assign(new dto.RefreshVisualMatchesDto(), {
     expectedRevision: "invalid",
     requestId: "short",
   });
@@ -102,7 +105,7 @@ async function main() {
   }
   console.log(
     JSON.stringify({
-      source: "7b995e79c397d46c18e6095648d3c6c147ff0287",
+      source: "f712d06427092211d11c28d862365283d79f26e1",
       prismaVersion: Prisma.prismaVersion.client,
       matchingFields: expected,
       modules,

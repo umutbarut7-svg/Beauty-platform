@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-release_source=7b995e79c397d46c18e6095648d3c6c147ff0287
-api_image=orzell-matching-refresh-api:7b995e79c397
-migrate_image=orzell-matching-refresh-migrate:7b995e79c397
+release_source=f712d06427092211d11c28d862365283d79f26e1
+api_image=orzell-matching-refresh-api:f712d0642709
+migrate_image=orzell-matching-refresh-migrate:f712d0642709
 test_network=orzell-matching-refresh-isolated
 test_postgres=orzell-matching-refresh-postgres
 test_api=orzell-matching-refresh-api
@@ -63,7 +63,7 @@ if archive.stat().st_size>2_000_000_000:
 digest=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
 def image_id(name):
     return subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',name],text=True).strip()
-manifest={'source':'7b995e79c397d46c18e6095648d3c6c147ff0287','images':{'api':image_id('orzell-matching-refresh-api:7b995e79c397'),'migrate':image_id('orzell-matching-refresh-migrate:7b995e79c397')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
+manifest={'source':'f712d06427092211d11c28d862365283d79f26e1','images':{'api':image_id('orzell-matching-refresh-api:f712d0642709'),'migrate':image_id('orzell-matching-refresh-migrate:f712d0642709')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
 (root/'release.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print(json.dumps(manifest))
 PY

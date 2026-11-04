@@ -22,7 +22,7 @@ jobs:
       - name: Checkout exact reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 7b995e79c397d46c18e6095648d3c6c147ff0287
+          ref: f712d06427092211d11c28d862365283d79f26e1
           path: application
           persist-credentials: false
       - name: Build API and migration images and rehearse in an isolated database

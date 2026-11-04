@@ -1,6 +1,6 @@
 # Same-plan matching refresh: release preparation
 
-Exact application candidate: `7b995e79c397d46c18e6095648d3c6c147ff0287`, PR #82.
+Exact application candidate: `f712d06427092211d11c28d862365283d79f26e1`, PR #82.
 The API/privacy worker currently run the 4 November compatible-service image
 `sha256:d2b7ae718ad2ad78aa2ce4700646b4e37f3b861f0b39362e47af47219f11b5b6`.
 No source-photo, matching provider or catalog update is run by this rehearsal.
