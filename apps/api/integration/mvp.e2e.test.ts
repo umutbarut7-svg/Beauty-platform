@@ -41,6 +41,7 @@ const environment = {
   DATABASE_URL: url,
   STAGE33_MVP_ENABLED: "true",
   MVP_INVENTORY_ENABLED: "true",
+  MVP_B2B_ENABLED: "true",
   MVP_REDIS_ENABLED: "true",
   MVP_REDIS_URL: process.env.STAGE33_TEST_REDIS_URL,
   JWT_ACCESS_SECRET: "isolated-stage33-test-access-not-production",
@@ -2094,5 +2095,309 @@ describe("Shared product catalog and inventory HTTP/DB acceptance", () => {
         ),
       ).size,
     ).toBe(52);
+  });
+});
+
+describe("Shared B2B supplier-to-business bridge", () => {
+  let supplierToken = "",
+    supplierId = "",
+    productId = "",
+    privateProductId = "",
+    quoteId = "";
+  const requestKey = `b2b-${key}-request`;
+  beforeAll(async () => {
+    const email = `supplier-${key}@example.test`;
+    await db.user.create({
+      data: {
+        email,
+        passwordHash: await hash("Isolated-supplier-password-33", 12),
+      },
+    });
+    supplierToken = (
+      await create("/auth/login", "", {
+        email,
+        password: "Isolated-supplier-password-33",
+      })
+    ).accessToken;
+    supplierId = (
+      await create("/businesses", supplierToken, {
+        name: `Supplier-${key}`,
+        timezone: "UTC",
+      })
+    ).id;
+    await create(
+      `/businesses/${supplierId}`,
+      supplierToken,
+      { isPublic: true },
+      "PATCH",
+    );
+    const rows = ["B2B-A", "B2B-PRIVATE"].map((sku) => ({
+      sku,
+      name: "Shared synthetic supplier product",
+      brand: "Fixture",
+      price: "100.50",
+      currency: "TRY",
+      unit: "UNIT",
+      lowStockThreshold: "1",
+    }));
+    [productId, privateProductId] = (
+      await create(`/businesses/${supplierId}/products/import`, supplierToken, {
+        idempotencyKey: `b2b-${key}-import`,
+        products: rows,
+      })
+    ).ids;
+    await create(
+      `/businesses/${supplierId}/products/${productId}`,
+      supplierToken,
+      { expectedRevision: 0, b2bAvailable: true },
+      "PATCH",
+    );
+    await create(
+      `/businesses/${supplierId}/b2b/profile`,
+      supplierToken,
+      {
+        kind: "WHOLESALER",
+        description: "Synthetic supplier profile",
+        isListed: true,
+      },
+      "PATCH",
+    );
+  });
+  it("lists only opted-in suppliers/products and denies outsider or staff access", async () => {
+    const path = `/businesses/${businessId}/b2b`;
+    for (const token of [
+      customerToken,
+      strangerToken,
+      professionalToken,
+      supplierToken,
+    ])
+      expect((await request(`${path}/suppliers`, token)).status).toBe(403);
+    const directory = await request(
+      `${path}/suppliers?query=${encodeURIComponent(`Supplier-${key}`)}`,
+      ownerToken,
+    );
+    expect(directory.status).toBe(200);
+    expect(directory.body.items).toHaveLength(1);
+    expect(directory.body.items[0]).toMatchObject({
+      id: supplierId,
+      isVerified: false,
+      supplierProfile: { kind: "WHOLESALER" },
+    });
+    const products = await request(
+      `${path}/suppliers/${supplierId}/products`,
+      ownerToken,
+    );
+    expect(products.status).toBe(200);
+    expect(products.body.items).toHaveLength(1);
+    expect(products.body.items[0].id).toBe(productId);
+    for (const field of [
+      "stockQuantity",
+      "lowStockThreshold",
+      "revision",
+      "businessId",
+    ])
+      expect(products.body.items[0]).not.toHaveProperty(field);
+    expect(
+      (await request(`/mvp/v1/catalog/${supplierId}/products`, customerToken))
+        .body.items,
+    ).toHaveLength(0);
+  });
+  it("creates one concurrent quote request and rejects changed replay, unlisted products and fractional units", async () => {
+    const path = `/businesses/${businessId}/b2b/quotes`;
+    const payload = {
+      supplierBusinessId: supplierId,
+      productId,
+      quantity: "2",
+      note: "Synthetic purchasing question",
+      idempotencyKey: requestKey,
+    };
+    const [a, b] = await Promise.all([
+      request(path, ownerToken, "POST", payload),
+      request(path, ownerToken, "POST", payload),
+    ]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(a.body).toEqual(b.body);
+    quoteId = a.body.id;
+    expect(
+      await db.b2BQuoteRequest.count({
+        where: { buyerBusinessId: businessId, supplierBusinessId: supplierId },
+      }),
+    ).toBe(1);
+    expect(
+      (await request(path, ownerToken, "POST", { ...payload, quantity: "3" }))
+        .status,
+    ).toBe(409);
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...payload,
+          productId: privateProductId,
+          idempotencyKey: `${requestKey}-private`,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(path, ownerToken, "POST", {
+          ...payload,
+          quantity: "1.5",
+          idempotencyKey: `${requestKey}-fraction`,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(
+          `/businesses/${supplierId}/b2b/quotes`,
+          supplierToken,
+          "POST",
+          { ...payload, idempotencyKey: `${requestKey}-self` },
+        )
+      ).status,
+    ).toBe(400);
+  });
+  it("restricts quote history/replies to the correct party and preserves product snapshots without stock writes", async () => {
+    const buyer = `/businesses/${businessId}/b2b/quotes`,
+      seller = `/businesses/${supplierId}/b2b/quotes`;
+    expect(
+      (await request(`${buyer}?side=BUYER`, ownerToken)).body.items,
+    ).toMatchObject([
+      { id: quoteId, status: "REQUESTED", quantity: "2", unit: "UNIT" },
+    ]);
+    expect(
+      (await request(`${seller}?side=SUPPLIER`, supplierToken)).body.items,
+    ).toMatchObject([{ id: quoteId }]);
+    expect(
+      (await request(`${seller}?side=BUYER`, supplierToken)).body.items,
+    ).toHaveLength(0);
+    expect(
+      (
+        await request(`${buyer}/${quoteId}/reply`, ownerToken, "POST", {
+          expectedRevision: 0,
+          action: "QUOTE",
+          unitPrice: "90.50",
+          currency: "TRY",
+          note: "Wrong side",
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(`${seller}/${quoteId}/reply`, supplierToken, "POST", {
+          expectedRevision: 0,
+          action: "QUOTE",
+          unitPrice: "90.50",
+          currency: "TRY",
+          note: "Synthetic price reply",
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await request(`${seller}/${quoteId}/reply`, supplierToken, "POST", {
+          expectedRevision: 0,
+          action: "DECLINE",
+          note: "Stale",
+        })
+      ).status,
+    ).toBe(409);
+    await create(
+      `/businesses/${supplierId}/products/${productId}`,
+      supplierToken,
+      { expectedRevision: 1, name: "Changed supplier product" },
+      "PATCH",
+    );
+    const quote = (await request(`${buyer}?side=BUYER`, ownerToken)).body
+      .items[0];
+    expect(quote).toMatchObject({
+      productName: "Shared synthetic supplier product",
+      status: "QUOTED",
+      quotedUnitPrice: "90.5",
+      currency: "TRY",
+      revision: 1,
+    });
+    expect(quote).not.toHaveProperty("requestedBy");
+    expect(quote).not.toHaveProperty("keyHash");
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: productId } })
+      ).stockQuantity.toString(),
+    ).toBe("0");
+    expect(
+      await db.inventoryMovement.count({ where: { businessId: supplierId } }),
+    ).toBe(0);
+    expect(
+      (
+        await request(`${buyer}/${quoteId}/cancel`, ownerToken, "POST", {
+          expectedRevision: 0,
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await request(`${buyer}/${quoteId}/cancel`, ownerToken, "POST", {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await request(`${seller}/${quoteId}/reply`, supplierToken, "POST", {
+          expectedRevision: 2,
+          action: "QUOTE",
+          unitPrice: "90",
+          currency: "TRY",
+          note: "Already cancelled",
+        })
+      ).status,
+    ).toBe(409);
+  });
+  it("delisting closes new requests but keeps existing party history and exact replay", async () => {
+    await create(
+      `/businesses/${supplierId}/b2b/profile`,
+      supplierToken,
+      {
+        kind: "WHOLESALER",
+        description: "Hidden",
+        isListed: false,
+        expectedRevision: 0,
+      },
+      "PATCH",
+    );
+    const base = `/businesses/${businessId}/b2b`;
+    expect(
+      (
+        await request(
+          `${base}/suppliers?query=${encodeURIComponent(`Supplier-${key}`)}`,
+          ownerToken,
+        )
+      ).body.items,
+    ).toHaveLength(0);
+    expect(
+      (await request(`${base}/suppliers/${supplierId}/products`, ownerToken))
+        .status,
+    ).toBe(404);
+    const payload = {
+      supplierBusinessId: supplierId,
+      productId,
+      quantity: "2",
+      note: "Synthetic purchasing question",
+      idempotencyKey: requestKey,
+    };
+    expect(
+      (
+        await request(`${base}/quotes`, ownerToken, "POST", {
+          ...payload,
+          idempotencyKey: `${requestKey}-new`,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await request(`${base}/quotes`, ownerToken, "POST", payload)).body,
+    ).toEqual({ id: quoteId });
+    expect(
+      (await request(`${base}/quotes?side=BUYER`, ownerToken)).body.items[0]
+        .status,
+    ).toBe("CANCELLED");
   });
 });

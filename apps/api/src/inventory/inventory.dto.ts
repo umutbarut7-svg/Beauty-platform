@@ -43,6 +43,7 @@ export class ImportProductsDto {
   products!: ProductInput[];
 }
 export class UpdateProductDto {
+  @IsOptional() @IsBoolean() b2bAvailable?: boolean;
   @IsInt() @Min(0) @Max(2147483646) expectedRevision!: number;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120) name?: string;
   @IsOptional() @IsString() @MaxLength(120) brand?: string;

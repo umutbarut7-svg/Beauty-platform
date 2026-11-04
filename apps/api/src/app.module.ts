@@ -28,6 +28,7 @@ import { GrowthModule } from "./growth/growth.module.js";
 import { GovernanceModule } from "./governance/governance.module.js";
 import { MvpModule } from "./mvp/mvp.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
+import { B2BModule } from "./b2b/b2b.module.js";
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { InventoryModule } from "./inventory/inventory.module.js";
     GovernanceModule,
     MvpModule,
     InventoryModule,
+    B2BModule,
     ThrottlerModule.forRootAsync({
       imports: [],
       useFactory: () => {

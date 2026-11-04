@@ -26,6 +26,7 @@ import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
 import { ServiceChoice } from "./ServiceChoice";
 import { ProductInventory } from "./ProductInventory";
+import { BusinessB2B } from "./BusinessB2B";
 import { PublicProducts } from "./PublicProducts";
 import { BusinessDemand } from "./BusinessDemand";
 import { VisualJourney } from "./VisualJourney";
@@ -61,6 +62,7 @@ type Screen =
   | "workspace"
   | "setup"
   | "inventory"
+  | "b2b"
   | "insights";
 const transitions: Record<string, string[]> = {
   PENDING: ["CONFIRMED", "CHECKED_IN", "CANCELLED", "NO_SHOW"],
@@ -484,7 +486,7 @@ export default function App() {
   const activeTab =
     screen === "consultation"
       ? "discover"
-      : screen === "setup" || screen === "inventory"
+      : screen === "setup" || screen === "inventory" || screen === "b2b"
         ? "workspace"
         : screen;
   return (
@@ -1155,6 +1157,9 @@ export default function App() {
                       {button("Ürünler ve stok", async () => {
                         setScreen("inventory");
                       })}
+                      {button("Tedarikçiler ve B2B", async () =>
+                        setScreen("b2b"),
+                      )}
                       {button(
                         "İşletme randevularını gör",
                         async () => {
@@ -1192,6 +1197,23 @@ export default function App() {
                     })}
                   </View>
                 )}
+              </>
+            )}
+            {mode === "business" && screen === "b2b" && business && (
+              <>
+                {button(
+                  "İşletmeme dön",
+                  async () => setScreen("workspace"),
+                  true,
+                )}
+                <Text style={styles.title}>{business.name}</Text>
+                <BusinessB2B
+                  key={business.id}
+                  api={api}
+                  businessId={business.id}
+                  busy={busy}
+                  run={run}
+                />
               </>
             )}
             {mode === "business" && screen === "inventory" && business && (
