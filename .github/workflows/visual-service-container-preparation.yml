@@ -33,5 +33,5 @@ jobs:
           name: visual-service-release-${{ github.run_id }}
           path: release/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 3
           compression-level: 0
