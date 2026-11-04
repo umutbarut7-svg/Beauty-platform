@@ -15,7 +15,8 @@ import urllib.request
 import zipfile
 
 ROOT = Path('/opt/epifiz/operations')
-WORK = ROOT / 'matching-refresh-release-20261104-1'
+WORK = ROOT / 'matching-refresh-release-20261104-2'
+PREPARATION = ROOT / 'matching-refresh-release-20261104-1' / 'result.json'
 SOURCE = 'f712d06427092211d11c28d862365283d79f26e1'
 API_IMAGE = 'sha256:6370a6ed976c6b074c001e7c6db84156443c988f3d53342cde32cdd7e6e46936'
 MIGRATE_IMAGE = 'sha256:90449f2f64f6061993051b00be6dc989c8f41932cf5f065a58e3ebcc9ad24616'
@@ -27,7 +28,7 @@ TAR_SIZE = 771729356
 MIGRATION = '20261030000000_visual_matching_recovery'
 MIGRATION_SHA = '9019aa2f5582dff9ce12b3f66c5b3cc0d06196e57e598d6d26a46fd61b6b26a9'
 FIELDS = ['matchingOutput', 'matchingRequestId', 'matchingStatus']
-MODULES = ['mvp.module', 'visual.service', 'visual.controller', 'visual.dto', 'semantic.service', 'visual-matches.service', 'matching-refresh-compatibility', 'photo-maintenance.service']
+MODULES = ['mvp.module', 'visual.service', 'visual.controller', 'visual.dto', 'semantic.service', 'visual-matches.service', 'visual-service-compatibility', 'photo-maintenance.service']
 
 
 class Stop(Exception):
@@ -291,9 +292,16 @@ def rollback(commands, before, candidate_api_attempted):
 
 
 
+def prior_preparation():
+    require(PREPARATION.is_file() and not PREPARATION.is_symlink(), 'Prior preparation result unavailable')
+    prior = json.loads(PREPARATION.read_text())
+    require(prior.get('status') == 'PREPARATION_FAILED' and prior.get('source') == SOURCE and prior.get('image') == API_IMAGE and prior.get('previous') == PREVIOUS and prior.get('schemaChange') is False, 'Prior state does not permit reviewed preparation repair')
+
+
 def publish(url):
     require(not WORK.is_symlink(), 'Operation directory cannot be a symlink')
     require(not WORK.exists(), 'Existing operation cannot be replayed; inspect before retry')
+    prior_preparation()
     require(shutil.disk_usage(ROOT).free >= 8 * 1024**3, 'Insufficient safe preparation disk space')
     before = snapshot()
     ready()

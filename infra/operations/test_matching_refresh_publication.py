@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -20,9 +21,28 @@ def load(name, filename):
 
 pub = load('publication_under_test', 'publish-matching-refresh.py')
 dispatch = load('dispatch_under_test', 'dispatch-matching-refresh.py')
+# Read the independent image verifier: fixtures must not mirror a publisher typo.
+verifier = Path(__file__).with_name('verify-matching-refresh-image.cjs').read_text()
+rehearsed_block = verifier.split('for (const stem of [', 1)[1].split('])', 1)[0]
+REHEARSED_MODULES = re.findall(r'"([^"]+)"', rehearsed_block)
+
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_publisher_requires_the_modules_in_the_actual_image_rehearsal(self):
+        self.assertEqual(set(pub.MODULES), set(REHEARSED_MODULES))
+        self.assertEqual(len(REHEARSED_MODULES), 8)
+
+    def test_only_pre_mutation_failure_can_enable_repaired_preparation(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(pub, 'PREPARATION', Path(folder) / 'result.json'):
+            prior = {'status': 'PREPARATION_FAILED', 'source': pub.SOURCE, 'image': pub.API_IMAGE, 'previous': pub.PREVIOUS, 'schemaChange': False}
+            pub.PREPARATION.write_text(json.dumps(prior))
+            pub.prior_preparation()
+            for key, value in [('status', 'COMPLETED'), ('status', 'ROLLED_BACK'), ('source', 'different'), ('image', 'different'), ('schemaChange', True)]:
+                pub.PREPARATION.write_text(json.dumps({**prior, key: value}))
+                with self.assertRaises(pub.Stop):
+                    pub.prior_preparation()
+
     def test_live_probes_check_read_and_refresh_without_credentials(self):
         import urllib.error
         seen = []
@@ -104,7 +124,7 @@ class ArtifactTests(unittest.TestCase):
     def package(self, extra=False, corrupt=False):
         tar = b'synthetic-image-bytes'
         manifest = {'source': pub.SOURCE, 'images': {'api': pub.API_IMAGE, 'migrate': pub.MIGRATE_IMAGE}, 'archive': {'name': 'images.tar.gz', 'bytes': len(tar), 'sha256': hashlib.sha256(tar).hexdigest()}, 'rehearsal': 'PASS', 'liveDeployment': False, 'providerRequests': 0}
-        evidence = {'source': pub.SOURCE, 'prismaVersion': '6.19.0', 'matchingFields': pub.FIELDS, 'modules': {name: 'a' * 64 for name in pub.MODULES}, 'isolatedDatabase': 'PASS', 'compiledCompatibilityAssertions': 6, 'compiledRefreshAssertions': 3}
+        evidence = {'source': pub.SOURCE, 'prismaVersion': '6.19.0', 'matchingFields': pub.FIELDS, 'modules': {name: 'a' * 64 for name in REHEARSED_MODULES}, 'isolatedDatabase': 'PASS', 'compiledCompatibilityAssertions': 6, 'compiledRefreshAssertions': 3}
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w') as archive:
             archive.writestr('images.tar.gz', tar if not corrupt else b'changed-image-bytes!!')
@@ -189,6 +209,7 @@ class PublicationSequenceTests(unittest.TestCase):
             marker.mkdir()
             (marker / 'result.json').write_text('{"status":"RESTORED"}')
             stack.enter_context(patch.object(pub, 'ROOT', root))
+            stack.enter_context(patch.object(pub, 'prior_preparation'))
             stack.enter_context(patch.object(pub, 'WORK', root / 'new-release'))
             stack.enter_context(patch.object(pub.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 16 * 1024**3})()))
             before = {service: {'Image': pub.PREVIOUS[service], 'Config': {'Env': ['MVP_AI_DAILY_REQUEST_LIMIT=5', 'MVP_AI_GLOBAL_DAILY_REQUEST_LIMIT=20'], 'Labels': {'com.docker.compose.config-hash': 'hash'}}} for service in ['api', 'worker']}
