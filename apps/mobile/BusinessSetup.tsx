@@ -2,7 +2,13 @@ import { AppText as Text, palette } from "./ui";
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { MvpApiClient } from "@beauty-platform/types";
+import { ServiceChoice } from "./ServiceChoice";
 type Named = { id: string; name: string };
+type ManagedService = Named & {
+  price: string;
+  currency: string;
+  durationMinutes?: number;
+};
 type Professional = { id: string; displayName: string };
 type Hour = {
   dayOfWeek: string;
@@ -33,9 +39,7 @@ export function BusinessSetup({
   const [locations, setLocations] = useState<Named[]>([]);
   const [categories, setCategories] = useState<Named[]>([]);
   const [staff, setStaff] = useState<Professional[]>([]);
-  const [services, setServices] = useState<
-    Array<Named & { price: string; currency: string }>
-  >([]);
+  const [services, setServices] = useState<ManagedService[]>([]);
   const [locationId, setLocationId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [staffId, setStaffId] = useState("");
@@ -99,9 +103,7 @@ export function BusinessSetup({
       api.request<Named[]>(`${path}/locations`),
       api.request<Named[]>(`${path}/service-categories`),
       api.request<Professional[]>(`${path}/staff`),
-      api.request<Array<Named & { price: string; currency: string }>>(
-        `${path}/services`,
-      ),
+      api.request<ManagedService[]>(`${path}/services`),
     ]);
     setLocations(l);
     setCategories(c);
@@ -203,17 +205,23 @@ export function BusinessSetup({
         setCategoryId(c.id);
         await load();
       })}
-      {services.map((s) =>
-        button(
-          `${s.name} · ${s.price} ${s.currency}${s.id === serviceId ? " ✓" : ""}`,
-          async () => {
-            setServiceId(s.id);
-            setServiceName(s.name);
-            setPrice(s.price);
-            setCurrency(s.currency);
-          },
-        ),
-      )}
+      {services.map((s) => (
+        <ServiceChoice
+          key={s.id}
+          service={s}
+          selected={s.id === serviceId}
+          disabled={busy}
+          label={`${s.name} · ${s.price} ${s.currency}${s.id === serviceId ? " ✓" : ""}`}
+          onPress={() =>
+            void run(async () => {
+              setServiceId(s.id);
+              setServiceName(s.name);
+              setPrice(s.price);
+              setCurrency(s.currency);
+            })
+          }
+        />
+      ))}
       {field("Hizmet adı", serviceName, setServiceName)}
       {field("Fiyat (ondalık metin)", price, setPrice)}
       {field("Para birimi", currency, setCurrency)}
