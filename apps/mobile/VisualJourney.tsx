@@ -54,6 +54,7 @@ export function VisualJourney({
     MvpVisualSessionSummary[] | null
   >(null);
   const [matches, setMatches] = useState<SemanticMatches | null>(null);
+  const [refreshRevision, setRefreshRevision] = useState<string | null>(null);
   const [savedMatching, setSavedMatching] =
     useState<VisualMatchingStatus["status"]>("NOT_REQUESTED");
   const [matchRead, setMatchRead] = useState<"ready" | "loading" | "error">(
@@ -77,6 +78,7 @@ export function VisualJourney({
   const clearMatches = useCallback(() => {
     matchingRequest.current = null;
     setMatches(null);
+    setRefreshRevision(null);
     setSavedMatching("NOT_REQUESTED");
     setMatchRead("ready");
   }, []);
@@ -154,18 +156,63 @@ export function VisualJourney({
       );
       if (epoch !== generation.current) return;
       setMatches(value.result);
+      setRefreshRevision(value.refreshRevision ?? null);
       setSavedMatching(value.status);
       setMatchRead("ready");
     } catch (error) {
       if (epoch !== generation.current) return;
-      setMatches(null);
-      if (error instanceof ApiError && [403, 404].includes(error.status)) {
+      setRefreshRevision(null);
+      if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
         clearMatches();
         setSession(null);
         setAnswers([]);
       }
       setMatchRead("error");
       throw error;
+    }
+  }
+  async function refreshMatches() {
+    if (!session || !refreshRevision || matches?.status !== "NO_MATCH") return;
+    const epoch = generation.current;
+    const key = `${epoch}:${session.id}:refresh:${refreshRevision}`;
+    if (matchingRequest.current?.key === key) return;
+    const request = { key, completed: false };
+    matchingRequest.current = request;
+    try {
+      if (!(await matchingAvailable())) {
+        setMatchingState("unavailable");
+        return;
+      }
+      if (epoch !== generation.current) return;
+      const value = await api.request<VisualMatchingStatus>(
+        `/mvp/v1/visual/sessions/${session.id}/matches/refresh`,
+        "POST",
+        {
+          expectedRevision: refreshRevision,
+          requestId: `refresh-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`,
+        },
+        { timeoutMs: 30000 },
+      );
+      if (epoch !== generation.current || matchingRequest.current !== request)
+        return;
+      request.completed = true;
+      setMatches(value.result);
+      setSavedMatching(value.status);
+      setRefreshRevision(value.refreshRevision ?? null);
+      setMatchRead("ready");
+    } catch (error) {
+      if (epoch !== generation.current) return;
+      if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+        clearMatches();
+        setSession(null);
+        setAnswers([]);
+        throw error;
+      }
+      // Recover authoritative state with a GET; never retry the paid POST.
+      await restoreMatches(session.id, epoch);
+      if (!(error instanceof ApiError && error.status === 409)) throw error;
+    } finally {
+      if (matchingRequest.current === request) matchingRequest.current = null;
     }
   }
   const button = (label: string, action: () => Promise<void>) => (
@@ -582,6 +629,8 @@ export function VisualJourney({
                       request.completed = true;
                       setMatches(result);
                       setSavedMatching("READY");
+                      if (result.status === "NO_MATCH")
+                        await restoreMatches(session.id, epoch);
                     }
                   } catch (error) {
                     if (epoch !== generation.current) return;
@@ -610,7 +659,14 @@ export function VisualJourney({
                 })}
               {matches && (
                 <Text style={styles.heading} accessibilityLiveRegion="polite">
-                  Arama tamamlandı
+                  {savedMatching === "FAILED"
+                    ? "Önceki arama sonucu"
+                    : "Arama tamamlandı"}
+                </Text>
+              )}
+              {matches && savedMatching === "FAILED" && (
+                <Text accessibilityRole="alert">
+                  Yeni arama tamamlanamadı. Önceki sonuç ve planın korundu.
                 </Text>
               )}
               {matches?.status === "NO_MATCH" && (
@@ -620,6 +676,21 @@ export function VisualJourney({
                     : "Uygun, güncel arama kaydı bulunamadı."}
                 </Text>
               )}
+              {matches?.status === "NO_MATCH" &&
+                matches.reason !== "CONSULTATION_UNCLEAR" &&
+                refreshRevision &&
+                matchRead === "ready" &&
+                savedMatching !== "RUNNING" &&
+                matchingState === "available" && (
+                  <>
+                    <Text>
+                      Planını ve fotoğraf analizini koruyarak güncel hizmetlerde
+                      yeniden arama yapabilirsin. Bu işlem ücretli AI kullanımı
+                      oluşturabilir.
+                    </Text>
+                    {button("Yeni hizmetlerle tekrar ara", refreshMatches)}
+                  </>
+                )}
               {matches?.items.map((match) => (
                 <View key={`${match.businessId}-${match.serviceId}`}>
                   <Text>

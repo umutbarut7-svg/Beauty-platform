@@ -39,6 +39,14 @@ export class IndexCatalogDto {
   @Matches(/^[A-Za-z0-9_-]+$/)
   idempotencyKey!: string;
 }
+export class RefreshVisualMatchesDto {
+  @IsString() @Matches(/^[a-f0-9]{64}$/) expectedRevision!: string;
+  @IsString()
+  @MinLength(16)
+  @MaxLength(100)
+  @Matches(/^[A-Za-z0-9_-]+$/)
+  requestId!: string;
+}
 export class VerificationSubmitDto {
   @IsString() @MinLength(1) @MaxLength(100) policyVersion!: string;
   @IsObject() answers!: Record<string, string>;

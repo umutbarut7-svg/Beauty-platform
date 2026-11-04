@@ -6,7 +6,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   SemanticMatches,
   VisualMatchingStatus,
@@ -21,8 +21,27 @@ import {
   resolveVisualServiceKind,
 } from "./visual-service-compatibility.js";
 import type { HairServiceKind } from "./visual-service-compatibility.js";
+import type { RefreshVisualMatchesDto } from "./visual.dto.js";
 
 type MatchingContext = { query: string; kind: HairServiceKind | null };
+type SavedMatching = {
+  matchingStatus: string | null;
+  matchingRequestId: string | null;
+  matchingOutput: unknown;
+};
+
+function refreshRevision(id: string, row: SavedMatching) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        id,
+        row.matchingStatus,
+        row.matchingRequestId,
+        row.matchingOutput,
+      ]),
+    )
+    .digest("hex");
+}
 
 type MatchReference = {
   businessId: string;
@@ -157,17 +176,26 @@ export class VisualMatchesService {
     return this.locked(user, id, async (tx, context) => {
       const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
         where: { id },
-        select: { matchingStatus: true, matchingOutput: true },
+        select: {
+          matchingStatus: true,
+          matchingOutput: true,
+          matchingRequestId: true,
+        },
       });
       const status = row.matchingStatus ?? "NOT_REQUESTED";
       if (!["NOT_REQUESTED", "RUNNING", "READY", "FAILED"].includes(status))
         throw new ServiceUnavailableException("VISUAL_MATCH_UNAVAILABLE");
+      const result =
+        status === "READY" ||
+        (status === "FAILED" && Array.isArray(row.matchingOutput))
+          ? await this.project(tx, row.matchingOutput, context.kind)
+          : null;
       return {
         status,
-        result:
-          status === "READY"
-            ? await this.project(tx, row.matchingOutput, context.kind)
-            : null,
+        result,
+        ...(context.kind && result?.status === "NO_MATCH"
+          ? { refreshRevision: refreshRevision(id, row) }
+          : {}),
       };
     });
   }
@@ -180,7 +208,10 @@ export class VisualMatchesService {
         where: { id },
         select: { matchingStatus: true, matchingOutput: true },
       });
-      if (row.matchingStatus === "READY")
+      if (
+        row.matchingStatus === "READY" ||
+        (row.matchingStatus === "FAILED" && Array.isArray(row.matchingOutput))
+      )
         return {
           result: await this.project(tx, row.matchingOutput, kind),
           query,
@@ -227,9 +258,72 @@ export class VisualMatchesService {
       return { result: null, query };
     });
     if (claim.result) return claim.result;
+    return this.searchAndSave(user, id, requestId, claim.query, false);
+  }
+
+  async refresh(
+    user: AuthenticatedUser,
+    id: string,
+    dto: RefreshVisualMatchesDto,
+  ): Promise<VisualMatchingStatus> {
+    const claim = await this.locked(user, id, async (tx, context) => {
+      const row = await tx.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id },
+        select: {
+          matchingStatus: true,
+          matchingOutput: true,
+          matchingRequestId: true,
+        },
+      });
+      if (row.matchingStatus === "RUNNING")
+        throw new ConflictException("VISUAL_MATCH_RUNNING");
+      if (row.matchingRequestId === dto.requestId) {
+        if (row.matchingStatus !== "READY")
+          throw new ConflictException("VISUAL_MATCH_REFRESH_FAILED");
+        return { replay: true, query: context.query };
+      }
+      if (refreshRevision(id, row) !== dto.expectedRevision)
+        throw new ConflictException("VISUAL_MATCH_CHANGED");
+      if (
+        !["READY", "FAILED"].includes(row.matchingStatus ?? "") ||
+        !Array.isArray(row.matchingOutput) ||
+        !context.kind
+      )
+        throw new BadRequestException("VISUAL_MATCH_REFRESH_UNAVAILABLE");
+      const previous = await this.project(tx, row.matchingOutput, context.kind);
+      if (previous.status !== "NO_MATCH")
+        throw new BadRequestException("VISUAL_MATCH_REFRESH_UNAVAILABLE");
+      const saved = await tx.mvpPhotoAnalysis.updateMany({
+        where: {
+          id,
+          ownerId: user.id,
+          status: "PLAN",
+          expiresAt: { gt: new Date() },
+          matchingStatus: row.matchingStatus,
+          matchingRequestId: row.matchingRequestId,
+        },
+        // Keep the prior result; failure must not delete it or the plan.
+        data: { matchingStatus: "RUNNING", matchingRequestId: dto.requestId },
+      });
+      if (saved.count !== 1)
+        throw new ConflictException("VISUAL_MATCH_CHANGED");
+      return { replay: false, query: context.query };
+    });
+    if (!claim.replay)
+      await this.searchAndSave(user, id, dto.requestId, claim.query, true);
+    return this.get(user, id);
+  }
+
+  private async searchAndSave(
+    user: AuthenticatedUser,
+    id: string,
+    requestId: string,
+    query: string,
+    refresh: boolean,
+  ): Promise<SemanticMatches> {
     try {
       // Provider work happens outside the transaction and only after an explicit POST.
-      const result = await this.semantic.search(user, claim.query);
+      const result = await this.semantic.search(user, query);
       const references: MatchReference[] = result.items.map(
         (item: MatchReference) => ({
           businessId: item.businessId,
@@ -260,7 +354,7 @@ export class VisualMatchesService {
           data: {
             matchingStatus: "READY",
             matchingOutput: accepted,
-            matchingRequestId: null,
+            matchingRequestId: refresh ? requestId : null,
           },
         });
         if (saved.count !== 1)
@@ -277,8 +371,8 @@ export class VisualMatchesService {
         },
         data: {
           matchingStatus: "FAILED",
-          matchingRequestId: null,
-          matchingOutput: null,
+          matchingRequestId: refresh ? requestId : null,
+          ...(refresh ? {} : { matchingOutput: null }),
         },
       });
       throw error;

@@ -43,6 +43,7 @@ export interface SemanticMatches {
 export interface VisualMatchingStatus {
   status: "NOT_REQUESTED" | "RUNNING" | "READY" | "FAILED";
   result: SemanticMatches | null;
+  refreshRevision?: string;
 }
 export interface MvpVerificationPolicy {
   automatic: false;
