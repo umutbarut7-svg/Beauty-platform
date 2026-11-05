@@ -1,0 +1,125 @@
+name: Verify completed backup storage and one encrypted probe
+on:
+  pull_request:
+    paths:
+      - infra/operations/audit-backup-foundation.py
+      - infra/operations/probe-backup-storage.py
+      - infra/operations/test_backup_foundation_audit.py
+      - infra/operations/test_backup_storage_probe.py
+      - .github/operations/backup-storage-verification.json
+      - .github/workflows/verify-backup-storage.yml
+  push:
+    branches: [main]
+    paths: [.github/operations/backup-storage-verification.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify exact-policy audit and one-object operation boundaries
+        run: |
+          python3 -m unittest discover -s infra/operations -p test_backup_foundation_audit.py -v
+          python3 -m unittest discover -s infra/operations -p test_backup_storage_probe.py -v
+  audit:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      complete: ${{ steps.audit.outputs.complete }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: backup-foundation-audit-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - id: audit
+        name: Read completed stack and exact live policies
+        run: python3 infra/operations/audit-backup-foundation.py
+  probe:
+    needs: audit
+    if: github.ref == 'refs/heads/main' && needs.audit.outputs.complete == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: backup-storage-probe-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Verify one bounded encrypted object from the unchanged host
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess, time
+          def aws(*args):
+              p = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if p.returncode:
+                  raise SystemExit('AWS operation unavailable: ' + ' '.join(args[:2]))
+              return json.loads(p.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected operations identity')
+          request = json.loads(pathlib.Path('.github/operations/backup-storage-verification.json').read_text())
+          if request != {'request_id': 'orzell-backup-storage-verification-20261105-1', 'mode': 'audit-and-one-encrypted-probe'}:
+              raise SystemExit('Unsupported fixed request')
+          recipient = pathlib.Path('infra/operations/install-backup-recipient.py').read_text()
+          script = 'import types\nRECIPIENT = types.ModuleType("trusted_public_recipient")\nexec(' + repr(recipient) + ', RECIPIENT.__dict__)\n' + pathlib.Path('infra/operations/probe-backup-storage.py').read_text()
+          if len(script.encode()) > 24000:
+              raise SystemExit('Probe payload exceeds reviewed bound')
+          commands = ['python3 - <<\'ORZELL_STORAGE_PROBE\'\n' + script + '\nORZELL_STORAGE_PROBE']
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': commands, 'executionTimeout': ['360']}), '--comment', 'Reviewed one-object backup storage probe ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          for _ in range(70):
+              time.sleep(5)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Probe status uncertain; inspect recorded command and receipt before any retry')
+          print('SSM status:', result['Status'])
+          try:
+              report = json.loads(result.get('StandardOutputContent', ''))
+          except ValueError:
+              report = {'status': 'PROBE_OUTPUT_UNAVAILABLE'}
+          if result['Status'] != 'Success':
+              reason = report.get('reason', '')
+              print(json.dumps({'status': 'PROBE_FAILED', 'reason': reason if re.fullmatch(r'[A-Za-z0-9_:.-]{1,160}', reason) else 'INSPECTION_REQUIRED'}))
+              raise SystemExit('Probe failed; no blind rerun')
+          if report.get('status') != 'STORAGE_PROBE_COMPLETE' or report.get('productionBackupCreated') is not False or report.get('privateKeyUsed') is not False or report.get('serviceStateUnchanged') is not True:
+              raise SystemExit('Probe evidence differs')
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Encrypted storage probe\n\nCommand: `' + command_id + '`\n\n```json\n' + json.dumps(report, indent=2, sort_keys=True) + '\n```\n')
+          PY
