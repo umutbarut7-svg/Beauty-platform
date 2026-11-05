@@ -32,7 +32,12 @@ WHERE "revokedAt" IS NULL;
 
 UPDATE "MvpPhotoAnalysis"
 SET status = 'REVOKED', output = NULL, intent = '', target = '',
-    answers = '[]'::jsonb, "updatedAt" = CURRENT_TIMESTAMP
+    answers = '[]'::jsonb, "matchingStatus" = NULL,
+    "matchingRequestId" = NULL, "matchingOutput" = NULL,
+    "updatedAt" = CURRENT_TIMESTAMP
 WHERE status IS DISTINCT FROM 'REVOKED' OR output IS NOT NULL
-   OR intent <> '' OR target <> '' OR answers IS DISTINCT FROM '[]'::jsonb;
+   OR intent <> '' OR target <> '' OR answers IS DISTINCT FROM '[]'::jsonb
+   OR "matchingStatus" IS NOT NULL OR "matchingRequestId" IS NOT NULL
+   OR "matchingOutput" IS NOT NULL;
 COMMIT;
+
