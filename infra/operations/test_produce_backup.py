@@ -6,7 +6,6 @@ import subprocess
 import sys
 import unittest
 from unittest.mock import patch
-import zipfile
 
 import test_backup_manifest as fixtures
 
@@ -14,6 +13,9 @@ import test_backup_manifest as fixtures
 SPEC = importlib.util.spec_from_file_location("producer", Path(__file__).with_name("produce-backup.py"))
 PRODUCER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PRODUCER)
+PACKAGE_SPEC = importlib.util.spec_from_file_location("package", Path(__file__).with_name("recover-backup-package.py"))
+PACKAGE = importlib.util.module_from_spec(PACKAGE_SPEC)
+PACKAGE_SPEC.loader.exec_module(PACKAGE)
 
 
 class BackupProducerTests(unittest.TestCase):
@@ -40,17 +42,12 @@ class BackupProducerTests(unittest.TestCase):
         return PRODUCER.produce(**{**arguments, **changes})
 
     def recover(self):
-        # Fixed names only; tests never use extractall on untrusted archive paths.
-        with zipfile.ZipFile(self.output) as archive:
-            self.assertEqual(archive.namelist(), ["backup.cms", "manifest.json"])
-            for name in archive.namelist():
-                (self.path / name).write_bytes(archive.read(name))
         recovered = self.path / "recovered.dump"
         ended = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        PRODUCER.VERIFIED.decrypt(self.path / "backup.cms", self.path / "manifest.json", self.root / "signer.pub",
-                                  self.root / "recipient.crt", self.root / "recipient.key", recovered,
-                                  self.context["expected_signer"], self.context["expected_recipient"],
-                                  "producer-fixture", "a" * 40, "ISOLATED", "2026-01-01T00:00:00Z", ended)
+        PACKAGE.recover(self.output, recovered, self.root / "signer.pub", self.root / "recipient.crt",
+                        self.root / "recipient.key", self.context["expected_signer"], self.context["expected_recipient"],
+                        "producer-fixture", "a" * 40, "ISOLATED", "2026-01-01T00:00:00Z", ended,
+                        max_package_bytes=1024 * 1024, max_cipher_bytes=512 * 1024)
         return recovered
 
     def test_real_stream_encryption_signature_and_atomic_package(self):

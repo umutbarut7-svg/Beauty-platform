@@ -31,3 +31,18 @@ custody or prove a working backup schedule or recovery. Those remain production
 acceptance gates. It changes no live services, keys, data or resources.
 
 Stage 33 remains **NOT PASS**.
+
+## Observed live metadata
+
+PR100 was merged as `064e00c2dd18e33534090316489e1fada7fc6677`; the tree is identical
+to the tested candidate. The offline inspection run `42101166664` and general
+repository run `42101166499` passed. Main-only live read `42101668478`, job
+`127505747146`, completed successfully on 5 November 2026 at 23:15 Istanbul.
+
+There was one bucket, in `eu-north-1`, with all four bucket public access blocks
+enabled, public-policy status false and default AES256 encryption. Active
+lifecycle rules: zero. Object Lock: not enabled. Versioning: UNKNOWN under the
+existing audit identity, not assumed disabled or enabled. No objects were listed
+or read. This bucket was not selected or modified as a production backup
+destination; effective writer/recovery access and the other gates above remain
+unverified.

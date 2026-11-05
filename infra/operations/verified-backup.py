@@ -19,28 +19,39 @@ MANIFEST = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MANIFEST)
 
 
-def snapshot(stack, path, private=False):
+def snapshot_stream(stack, source, max_bytes=None):
+    """Copy a stream with an optional enforced byte cap, then seal it."""
+    if max_bytes is not None and (type(max_bytes) is not int or max_bytes <= 0):
+        raise ValueError("INVALID_SNAPSHOT_LIMIT")
+    descriptor = os.memfd_create("orzell-backup-input", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+    stream = stack.enter_context(os.fdopen(descriptor, "w+b", buffering=0))
+    os.fchmod(descriptor, 0o600)
+    total = 0
+    while True:
+        data = source.read(1024 * 1024 if max_bytes is None else min(1024 * 1024, max_bytes - total + 1))
+        if not data:
+            break
+        total += len(data)
+        if max_bytes is not None and total > max_bytes:
+            raise ValueError("SNAPSHOT_SIZE_LIMIT")
+        view = memoryview(data)
+        while view:
+            count = stream.write(view)
+            if not count:
+                raise OSError("SNAPSHOT_WRITE_FAILED")
+            view = view[count:]
+    if sys.platform != "linux":
+        raise ValueError("LINUX_SEALED_FILES_REQUIRED")
+    # Stable Linux UAPI values, also for Python builds omitting these names.
+    fcntl.fcntl(descriptor, 1033, 0x0008 | 0x0004 | 0x0002 | 0x0001)
+    stream.seek(0)
+    return descriptor
+
+
+def snapshot(stack, path, private=False, max_bytes=None):
     """Copy once, then prohibit writes, growth and truncation at kernel level."""
     with MANIFEST.FILES.regular_file(path, private=private) as source:
-        descriptor = os.memfd_create("orzell-backup-input", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
-        stream = stack.enter_context(os.fdopen(descriptor, "w+b", buffering=0))
-        os.fchmod(descriptor, 0o600)
-        while True:
-            data = source.read(1024 * 1024)
-            if not data:
-                break
-            view = memoryview(data)
-            while view:
-                count = stream.write(view)
-                if not count:
-                    raise OSError("SNAPSHOT_WRITE_FAILED")
-                view = view[count:]
-        if sys.platform != "linux":
-            raise ValueError("LINUX_SEALED_FILES_REQUIRED")
-        # Stable Linux UAPI values, also for Python builds omitting these names.
-        fcntl.fcntl(descriptor, 1033, 0x0008 | 0x0004 | 0x0002 | 0x0001)
-        stream.seek(0)
-        return descriptor
+        return snapshot_stream(stack, source, max_bytes)
 
 
 def decrypt(ciphertext, manifest_path, public_key, certificate, private_key, output,
