@@ -9,6 +9,8 @@ on:
       - infra/operations/test_encrypted_backup.py
       - infra/operations/verified-backup.py
       - infra/operations/test_verified_backup.py
+      - infra/operations/produce-backup.py
+      - infra/operations/test_produce_backup.py
       - infra/operations/backup-manifest.py
       - infra/operations/test_backup_manifest.py
       - infra/operations/quarantine-current-photos.sql
@@ -68,6 +70,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: application/pnpm-lock.yaml
       - name: Test authenticated encryption and failure boundaries
+        env:
+          BACKUP_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: python3 -m unittest discover -s harness/infra/operations -p 'test_*backup*.py' -v
       - name: Build reviewed application and migrate source fixture database
         working-directory: application
