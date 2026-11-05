@@ -416,7 +416,9 @@ async function main() {
         "--application-sha": application,
         "--snapshot-boundary": BOUNDARY,
         "--created-not-before": createdAt,
-        "--created-not-after": new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+        "--created-not-after": new Date()
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "Z"),
         ...overrides,
       };
       execFileSync(
