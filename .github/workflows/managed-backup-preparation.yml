@@ -1,0 +1,121 @@
+name: Prepare daily managed backup and approved retention
+on:
+  pull_request:
+    paths:
+      - infra/operations/approve-backup-retention.py
+      - infra/operations/managed-database-backup.py
+      - infra/operations/install-managed-backup.py
+      - infra/operations/activate-managed-backup.py
+      - infra/operations/audit-managed-backup.py
+      - infra/operations/test_backup_retention_approval.py
+      - infra/operations/test_managed*.py
+      - .github/operations/managed-backup-preparation.json
+      - .github/workflows/managed-backup*.yml
+  push:
+    branches: [main]
+    paths: [.github/operations/managed-backup-preparation.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: managed_backup_ci
+        options: >-
+          --health-cmd "pg_isready -U postgres -d managed_backup_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify boundaries, real signer, systemd parser and actual PostgreSQL recovery
+        env:
+          BACKUP_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          python3 -m unittest discover -s infra/operations -p test_backup_retention_approval.py -v
+          python3 -m unittest discover -s infra/operations -p test_managed_database_backup.py -v
+          python3 -m unittest discover -s infra/operations -p test_managed_backup_installation.py -v
+          python3 -m unittest discover -s infra/operations -p test_managed_backup_audit.py -v
+          python3 -m unittest discover -s infra/operations -p test_managed_backup_activation.py -v
+      - name: Validate the exact CloudFormation update with pinned schema linter
+        run: |
+          python3 -m pip install cfn-lint==1.59.0
+          python3 infra/operations/approve-backup-retention.py --print-template > "$RUNNER_TEMP/approved-retention.json"
+          cfn-lint --template "$RUNNER_TEMP/approved-retention.json" --regions eu-north-1
+  prepare:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: managed-backup-prepare-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Install pinned tools, signer and disabled units without reading the database
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, time
+          def aws(*args):
+              p = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if p.returncode:
+                  raise SystemExit('AWS operation unavailable: ' + ' '.join(args[:2]))
+              return json.loads(p.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected operation identity')
+          request = json.loads(pathlib.Path('.github/operations/managed-backup-preparation.json').read_text())
+          if request != {'request_id': 'orzell-managed-backup-preparation-20261106-1', 'mode': 'install-disabled-tools-and-public-signer'}:
+              raise SystemExit('Unsupported preparation request')
+          names = ['managed-database-backup.py', 'produce-backup.py', 'verified-backup.py', 'backup-manifest.py', 'encrypted-backup.py']
+          manifest = {'source': os.environ['GITHUB_SHA'], 'files': {name: hashlib.sha256(pathlib.Path('infra/operations', name).read_bytes()).hexdigest() for name in names}}
+          script = 'SOURCE_MANIFEST = ' + repr(manifest) + '\n' + pathlib.Path('infra/operations/install-managed-backup.py').read_text()
+          if len(script.encode()) > 24000:
+              raise SystemExit('Installation payload exceeds bound')
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': ['python3 - <<\'ORZELL_MANAGED_PREPARE\'\n' + script + '\nORZELL_MANAGED_PREPARE'], 'executionTimeout': ['480']}), '--comment', 'Reviewed disabled backup preparation ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          for _ in range(95):
+              time.sleep(5)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Installation uncertain; inspect command before any retry')
+          print('SSM status:', result['Status'])
+          try:
+              report = json.loads(result.get('StandardOutputContent', ''))
+          except ValueError:
+              report = {'status': 'OUTPUT_UNAVAILABLE'}
+          if result['Status'] != 'Success':
+              reason = report.get('reason', '')
+              print(json.dumps({'status': 'PREPARATION_FAILED', 'reason': reason if re.fullmatch(r'[A-Za-z0-9_:.-]{1,160}', reason) else 'INSPECTION_REQUIRED'}))
+              raise SystemExit('Preparation failed; do not blindly resend')
+          if report.get('status') != 'MANAGED_BACKUP_PREPARED_DISABLED' or report.get('timersEnabled') is not False or report.get('databaseBackupStarted') is not False or report.get('applicationServicesUnchanged') is not True:
+              raise SystemExit('Preparation evidence differs')
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Prepared backup service (disabled)\n\nCommand: `' + command_id + '`\n\n```json\n' + json.dumps(report, indent=2, sort_keys=True) + '\n```\n')
+          PY
