@@ -80,6 +80,11 @@ jobs:
           cp ../harness/infra/operations/backup-manifest.py apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/
           cp ../harness/infra/operations/quarantine-current-photos.sql apps/api/
+      - name: Check harness formatting with pinned application formatter
+        working-directory: application
+        run: |
+          pnpm exec prettier ../harness/scripts/check-encrypted-backup-restore.cjs > "$RUNNER_TEMP/formatted-restore.cjs"
+          diff -u ../harness/scripts/check-encrypted-backup-restore.cjs "$RUNNER_TEMP/formatted-restore.cjs"
       - name: Backup, restore, check access and run cleanup twice
         working-directory: application/apps/api
         env:
