@@ -7,6 +7,8 @@ on:
       - scripts/check-encrypted-backup-restore.cjs
       - infra/operations/encrypted-backup.py
       - infra/operations/test_encrypted_backup.py
+      - infra/operations/verified-backup.py
+      - infra/operations/test_verified_backup.py
       - infra/operations/backup-manifest.py
       - infra/operations/test_backup_manifest.py
       - infra/operations/quarantine-current-photos.sql
@@ -78,6 +80,7 @@ jobs:
           cp ../harness/scripts/check-encrypted-backup-restore.cjs apps/api/
           cp ../harness/infra/operations/encrypted-backup.py apps/api/
           cp ../harness/infra/operations/backup-manifest.py apps/api/
+          cp ../harness/infra/operations/verified-backup.py apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/
           cp ../harness/infra/operations/quarantine-current-photos.sql apps/api/
       - name: Check harness formatting with pinned application formatter

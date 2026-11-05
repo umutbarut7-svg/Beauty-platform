@@ -28,7 +28,9 @@ def openssl(arguments, **kwargs):
 
 
 def regular_file(path, private=False):
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    descriptor = os.dup(path) if type(path) is int else os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    if type(path) is int:
+        os.lseek(descriptor, 0, os.SEEK_SET)
     stream = os.fdopen(descriptor, "rb", buffering=0)
     info = os.fstat(descriptor)
     if not stat.S_ISREG(info.st_mode) or (
