@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { ResourceIdPipe } from "../businesses/resource-id.pipe.js";
 import { InventoryService } from "./inventory.service.js";
 import {
+  AppointmentConsumptionDto,
   ImportProductsDto,
   ProductPageDto,
   StockMovementDto,
@@ -67,5 +68,25 @@ export class PublicProductsController {
     @Query() page: ProductPageDto,
   ) {
     return this.inventory.publicCatalog(businessId, page.after);
+  }
+}
+
+@Controller("businesses/:businessId/appointments/:appointmentId/materials")
+export class AppointmentMaterialsController {
+  constructor(private readonly inventory: InventoryService) {}
+  @Get() get(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("businessId", ResourceIdPipe) businessId: string,
+    @Param("appointmentId", ResourceIdPipe) appointmentId: string,
+  ) {
+    return this.inventory.consumption(user, businessId, appointmentId);
+  }
+  @Post() consume(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("businessId", ResourceIdPipe) businessId: string,
+    @Param("appointmentId", ResourceIdPipe) appointmentId: string,
+    @Body() dto: AppointmentConsumptionDto,
+  ) {
+    return this.inventory.consume(user, businessId, appointmentId, dto);
   }
 }

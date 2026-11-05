@@ -14,6 +14,7 @@ import { PermissionsService } from "../auth/permissions.service.js";
 import { PRISMA_SERVICE } from "../database/database.tokens.js";
 import type { PrismaService } from "../database/prisma.service.js";
 import type {
+  AppointmentConsumptionDto,
   ImportProductsDto,
   StockMovementDto,
   UpdateProductDto,
@@ -115,6 +116,7 @@ export class InventoryService {
       tx: Prisma.TransactionClient,
       operationId: string,
     ) => Promise<Prisma.InputJsonValue>,
+    authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
     const keyHash = digest(key),
       requestHash = digest(JSON.stringify([user.id, type, payload]));
@@ -122,6 +124,7 @@ export class InventoryService {
       try {
         return await this.db.$transaction(
           async (tx: Prisma.TransactionClient) => {
+            await authorize?.(tx);
             const prior = await tx.inventoryOperation.findUnique({
               where: { businessId_keyHash: { businessId, keyHash } },
             });
@@ -149,7 +152,7 @@ export class InventoryService {
             });
             return response;
           },
-          { isolationLevel: "Serializable" },
+          { isolationLevel: "Serializable", timeout: 15000 },
         );
       } catch (error) {
         if (
@@ -307,6 +310,189 @@ export class InventoryService {
       },
     );
   }
+
+  // Internal NUL-separated keys cannot collide with validated manual movement
+  // keys. One permanent parent receipt per appointment prevents duplicate use
+  // across devices, retries, new client keys and later application sessions.
+  private consumptionKey(appointmentId: string) {
+    return `appointment-consumption\0${appointmentId}`;
+  }
+  private async consumptionAccess(
+    tx: Prisma.TransactionClient,
+    user: AuthenticatedUser,
+    businessId: string,
+    appointmentId: string,
+    write: boolean,
+  ) {
+    await this.permissions.assertBusinessAccess(
+      user,
+      businessId,
+      write ? "inventory:manage" : "inventory:read",
+      tx,
+    );
+    const appointment = await tx.appointment.findFirst({
+      where: { id: appointmentId, businessId },
+      select: {
+        id: true,
+        status: true,
+        serviceId: true,
+        service: { select: { name: true } },
+      },
+    });
+    if (!appointment) throw new NotFoundException("Appointment not found");
+    return appointment;
+  }
+  async consumption(
+    user: AuthenticatedUser,
+    businessId: string,
+    appointmentId: string,
+  ) {
+    this.enabled();
+    return this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      await this.consumptionAccess(tx, user, businessId, appointmentId, false);
+      const receipt = await tx.inventoryOperation.findUnique({
+        where: {
+          businessId_keyHash: {
+            businessId,
+            keyHash: digest(this.consumptionKey(appointmentId)),
+          },
+        },
+      });
+      return {
+        consumption:
+          receipt?.type === "APPOINTMENT_CONSUMPTION" ? receipt.response : null,
+      };
+    });
+  }
+  async consume(
+    user: AuthenticatedUser,
+    businessId: string,
+    appointmentId: string,
+    dto: AppointmentConsumptionDto,
+  ) {
+    await this.access(user, businessId, true);
+    const payload = {
+      appointmentId,
+      reason: dto.reason.trim(),
+      items: dto.items
+        .map((item) => ({
+          productId: item.productId,
+          quantity: new Prisma.Decimal(item.quantity).toString(),
+        }))
+        .sort((a, b) => a.productId.localeCompare(b.productId, "en")),
+    };
+    if (
+      !payload.reason ||
+      new Set(payload.items.map((item) => item.productId)).size !==
+        payload.items.length
+    )
+      throw new BadRequestException(
+        "Reason required; use each product only once",
+      );
+    return this.operation(
+      user,
+      businessId,
+      this.consumptionKey(appointmentId),
+      "APPOINTMENT_CONSUMPTION",
+      payload,
+      async (tx, parentOperationId) => {
+        const appointment = await this.consumptionAccess(
+          tx,
+          user,
+          businessId,
+          appointmentId,
+          true,
+        );
+        if (appointment.status !== "COMPLETED")
+          throw new ConflictException(
+            "Only completed appointments can record material use",
+          );
+        const items: Prisma.InputJsonValue[] = [];
+        const createdAt = new Date().toISOString();
+        for (const item of payload.items) {
+          const product = await tx.catalogProduct.findFirst({
+            where: { id: item.productId, businessId, isActive: true },
+          });
+          if (!product) throw new NotFoundException("Active product not found");
+          const quantity = this.quantity(item.quantity, product.unit);
+          if (!quantity.gt(0))
+            throw new BadRequestException("Material quantity must be positive");
+          const after = product.stockQuantity.minus(quantity);
+          if (after.lt(0))
+            throw new ConflictException(
+              "Insufficient stock; no materials were recorded",
+            );
+          const changed = await tx.catalogProduct.updateMany({
+            where: { id: product.id, businessId, revision: product.revision },
+            data: { stockQuantity: after, revision: { increment: 1 } },
+          });
+          if (changed.count !== 1)
+            throw new ConflictException(
+              "Stock changed; reload before confirming",
+            );
+          // Preserve the existing one-operation/one-movement schema. Child
+          // operations and the parent receipt commit in the SAME transaction.
+          const child = await tx.inventoryOperation.create({
+            data: {
+              businessId,
+              actorId: user.id,
+              type: "APPOINTMENT_MATERIAL",
+              keyHash: digest(
+                `appointment-material\0${appointmentId}\0${product.id}`,
+              ),
+              requestHash: digest(JSON.stringify([parentOperationId, item])),
+              response: {},
+            },
+          });
+          const movement = await tx.inventoryMovement.create({
+            data: {
+              businessId,
+              productId: product.id,
+              operationId: child.id,
+              direction: "OUT",
+              quantity,
+              quantityAfter: after,
+              reason: payload.reason,
+            },
+          });
+          const line = {
+            productId: product.id,
+            productName: product.name,
+            sku: product.sku,
+            unit: product.unit,
+            quantity: quantity.toString(),
+            quantityAfter: after.toString(),
+            movementId: movement.id,
+          };
+          items.push(line);
+          await tx.inventoryOperation.update({
+            where: { id: child.id },
+            data: {
+              response: {
+                ...line,
+                appointmentId,
+                serviceId: appointment.serviceId,
+                serviceName: appointment.service.name,
+                parentOperationId,
+              },
+            },
+          });
+        }
+        return {
+          appointmentId,
+          serviceId: appointment.serviceId,
+          serviceName: appointment.service.name,
+          operationId: parentOperationId,
+          reason: payload.reason,
+          createdAt,
+          items,
+        };
+      },
+      async (tx) => {
+        await this.consumptionAccess(tx, user, businessId, appointmentId, true);
+      },
+    );
+  }
   async history(
     user: AuthenticatedUser,
     businessId: string,
@@ -320,7 +506,7 @@ export class InventoryService {
       }))
     )
       throw new NotFoundException("Product not found");
-    return this.db.inventoryMovement.findMany({
+    const movements = await this.db.inventoryMovement.findMany({
       where: { businessId, productId },
       select: {
         id: true,
@@ -329,9 +515,28 @@ export class InventoryService {
         quantityAfter: true,
         reason: true,
         createdAt: true,
+        operation: { select: { type: true, response: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 100,
+    });
+    return movements.map(({ operation, ...movement }) => {
+      const snapshot = operation.response as Record<
+        string,
+        Prisma.JsonValue
+      > | null;
+      return {
+        ...movement,
+        ...(operation.type === "APPOINTMENT_MATERIAL" &&
+        snapshot &&
+        typeof snapshot.appointmentId === "string" &&
+        typeof snapshot.serviceName === "string"
+          ? {
+              appointmentId: snapshot.appointmentId,
+              serviceName: snapshot.serviceName,
+            }
+          : {}),
+      };
     });
   }
 }
