@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 import zipfile
 
 import test_backup_manifest as fixtures
@@ -88,6 +89,18 @@ class BackupProducerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.create(signing_private=self.root / "attacker.key")
         self.assertFalse(self.output.exists())
+
+    def test_encryptor_failure_terminates_pipeline_without_publication(self):
+        original = PRODUCER.subprocess.Popen
+        def fail_encryptor(command, **kwargs):
+            if command[:2] == ["openssl", "cms"]:
+                return original([sys.executable, "-c", "raise SystemExit(7)"], **kwargs)
+            return original(command, **kwargs)
+        with patch.object(PRODUCER.subprocess, "Popen", side_effect=fail_encryptor):
+            with self.assertRaisesRegex(ValueError, "PIPELINE_FAILED"):
+                self.create("import sys,time;sys.stdout.buffer.write(b'PGDMP partial');sys.stdout.buffer.flush();time.sleep(30)")
+        self.assertFalse(self.output.exists())
+        self.assertEqual(list(self.path.glob(".backup-producer-*")), [])
 
     def test_existing_output_is_not_overwritten(self):
         target = self.path / "complete.zip"

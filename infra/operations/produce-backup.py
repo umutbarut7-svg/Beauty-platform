@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import shutil
 import subprocess
@@ -58,7 +59,6 @@ def produce(command, output, certificate, signing_public, signing_private,
         # Check the actual pinned certificate's strength and validity before
         # starting any database producer. Never include command/env in errors.
         cert_path = f"/proc/self/fd/{cert}"
-        import re
         description = FILES.openssl(["x509", "-in", cert_path, "-text", "-noout"], pass_fds=[cert]).decode("ascii")
         bits = re.search(r"Public-Key: \((\d+) bit\)", description)
         if "Public Key Algorithm: rsaEncryption" not in description or not bits or int(bits[1]) < 3072:

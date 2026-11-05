@@ -32,9 +32,9 @@ the pipeline start, not an independently attested PostgreSQL transaction time.
 Never pass credentials in command arguments; use the existing protected runtime
 binding. This tool does not provision credentials or select a live database.
 
-Eight local boundary tests plus a CI-only real PostgreSQL producer/restore test
+Nine local boundary tests plus a CI-only real PostgreSQL producer/restore test
 cover completion, producer failure after partial output, empty/wrong-format output,
-timeouts before/after output, wrong recipient before command execution, mismatched
+timeouts before/after output, encryptor failure and pipeline termination, wrong recipient before command execution, mismatched
 signing key, existing-output preservation and invalid command/timeout. The real
 CI test creates a separate synthetic source database, runs actual pg_dump through
 the new pipeline, verifies/decrypts the package and runs pg_restore into another
