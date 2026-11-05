@@ -183,7 +183,7 @@ class ManagedBackupTests(unittest.TestCase):
             encrypted = self.root / "retrieved.zip"
             encrypted.write_bytes(self.remote); encrypted.chmod(0o600)
             dump = self.root / "restored.dump"
-            end = MANAGED.timestamp(datetime.now(timezone.utc) + timedelta(minutes=1))
+            end = MANAGED.timestamp(datetime.now(timezone.utc))
             PACKAGE.recover(encrypted, dump, keys / "signer.pub", keys / "recipient.crt", keys / "recipient.key", signer, recipient,
                             report["backupId"], MANAGED.APPLICATION, "LIVE_DAILY_SNAPSHOT", start, end,
                             max_package_bytes=16 * 1024 * 1024, max_cipher_bytes=15 * 1024 * 1024)
