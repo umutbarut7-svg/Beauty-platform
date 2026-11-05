@@ -1,0 +1,90 @@
+name: Install public backup recipient and inspect readiness
+on:
+  pull_request:
+    paths:
+      - infra/operations/install-backup-recipient.py
+      - infra/operations/test_backup_recipient_installation.py
+      - .github/operations/backup-recipient-20261105.pem
+      - .github/operations/backup-recipient-installation.json
+      - .github/workflows/install-backup-recipient.yml
+  push:
+    branches: [main]
+    paths: [.github/operations/backup-recipient-installation.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify public-only pinning and no-overwrite installation
+        run: python3 -m unittest discover -s infra/operations -p test_backup_recipient_installation.py -v
+  install:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: backup-recipient-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Install only the pinned public certificate on the current host
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, time
+          def aws(*args):
+              p = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if p.returncode:
+                  raise SystemExit('AWS operation unavailable: ' + ' '.join(args[:2]))
+              return json.loads(p.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected operation identity')
+          request = json.loads(pathlib.Path('.github/operations/backup-recipient-installation.json').read_text())
+          if request != {'request_id': 'orzell-backup-recipient-installation-20261105-1', 'mode': 'install-public-recipient-only'}:
+              raise SystemExit('Unsupported fixed request')
+          certificate = pathlib.Path('.github/operations/backup-recipient-20261105.pem').read_text()
+          script = 'CERTIFICATE_PEM = ' + repr(certificate) + '\n' + pathlib.Path('infra/operations/install-backup-recipient.py').read_text()
+          if len(script) > 24000 or 'PRIVATE KEY-----' in certificate:
+              raise SystemExit('Public recipient payload rejected')
+          commands = ['python3 - <<\'ORZELL_PUBLIC_RECIPIENT\'\n' + script + '\nORZELL_PUBLIC_RECIPIENT']
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': commands, 'executionTimeout': ['360']}), '--comment', 'Reviewed public backup recipient ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          for _ in range(70):
+              time.sleep(5)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Command status uncertain; inspect recorded command before retrying')
+          print('Status:', result['Status'])
+          if result['Status'] != 'Success':
+              raise SystemExit('Public recipient operation failed; no blind retry')
+          report = json.loads(result.get('StandardOutputContent', ''))
+          if report.get('privateKeyTransferred') is not False or report.get('backupStarted') is not False or report.get('serviceStateUnchanged') is not True:
+              raise SystemExit('Unexpected operation evidence')
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Public backup recipient\n\nCommand: `' + command_id + '`\n\n```json\n' + json.dumps(report, indent=2, sort_keys=True) + '\n```\n')
+          PY
