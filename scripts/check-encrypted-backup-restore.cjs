@@ -426,6 +426,7 @@ async function main() {
         ["backup-manifest.py", "verify", ...Object.entries(context).flat()],
         { stdio: "ignore", timeout: 30000 },
       );
+      return context;
     };
     for (const context of [
       { "--backup-id": "wrong-backup" },
@@ -445,7 +446,7 @@ async function main() {
     await fs.writeFile(tampered, JSON.stringify(envelope), { mode: 0o600 });
     assert.throws(() => verifyManifest({ "--manifest": tampered }));
     assert.equal(await exists(recovered), false);
-    verifyManifest();
+    const approvedContext = verifyManifest();
     assert.equal((await fs.stat(manifest)).mode & 0o777, 0o600);
     console.log(
       "PASS: independent signer/recipient pins, signed ciphertext/context/time checks and rejection before decryption or target creation",
@@ -453,10 +454,8 @@ async function main() {
     execFileSync(
       "python3",
       [
-        "encrypted-backup.py",
-        "decrypt",
-        "--input",
-        encrypted,
+        "verified-backup.py",
+        ...Object.entries(approvedContext).flat(),
         "--output",
         recovered,
         "--certificate",
