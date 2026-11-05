@@ -34,8 +34,9 @@ binding. This tool does not provision credentials or select a live database.
 
 Nine local boundary tests plus a CI-only real PostgreSQL producer/restore test
 cover completion, producer failure after partial output, empty/wrong-format output,
-timeouts before/after output, encryptor failure and pipeline termination, wrong recipient before command execution, mismatched
-signing key, existing-output preservation and invalid command/timeout. The real
+timeouts before/after output, encryptor failure and pipeline termination, wrong
+recipient before command execution, mismatched signing key, existing-output
+preservation and invalid command/timeout. The real
 CI test creates a separate synthetic source database, runs actual pg_dump through
 the new pipeline, verifies/decrypts the package and runs pg_restore into another
 database, checking exact decimal content. The existing current-schema two-boundary
@@ -43,8 +44,8 @@ privacy/stock/B2B restore matrix remains a separate required gate.
 
 Invocation uses named flags `--output`, `--certificate`, `--signing-public`,
 `--signing-private`, `--expected-recipient`, `--expected-signer`, `--backup-id`,
-`--application-sha`, `--boundary`, optional `--timeout` (pipeline seconds, at most
-3600) and `--passphrase` (a protected file path). Put `--` before the trusted
+`--application-sha`, `--boundary`, optional `--timeout` (pipeline seconds, up to
+one hour) and `--passphrase` (a protected file path). Put `--` before the trusted
 producer command and arguments. CLI stdout contains status only.
 
 ## Remaining production gates
