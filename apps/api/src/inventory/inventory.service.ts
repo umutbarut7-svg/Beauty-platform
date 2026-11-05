@@ -360,7 +360,14 @@ export class InventoryService {
       });
       return {
         consumption:
-          receipt?.type === "APPOINTMENT_CONSUMPTION" ? receipt.response : null,
+          receipt?.type === "MOVEMENT" &&
+          receipt.response &&
+          typeof receipt.response === "object" &&
+          !Array.isArray(receipt.response) &&
+          receipt.response.kind === "APPOINTMENT_CONSUMPTION" &&
+          receipt.response.appointmentId === appointmentId
+            ? receipt.response
+            : null,
       };
     });
   }
@@ -372,6 +379,7 @@ export class InventoryService {
   ) {
     await this.access(user, businessId, true);
     const payload = {
+      kind: "APPOINTMENT_CONSUMPTION",
       appointmentId,
       reason: dto.reason.trim(),
       items: dto.items
@@ -393,7 +401,7 @@ export class InventoryService {
       user,
       businessId,
       this.consumptionKey(appointmentId),
-      "APPOINTMENT_CONSUMPTION",
+      "MOVEMENT",
       payload,
       async (tx, parentOperationId) => {
         const appointment = await this.consumptionAccess(
@@ -436,7 +444,7 @@ export class InventoryService {
             data: {
               businessId,
               actorId: user.id,
-              type: "APPOINTMENT_MATERIAL",
+              type: "MOVEMENT",
               keyHash: digest(
                 `appointment-material\0${appointmentId}\0${product.id}`,
               ),
@@ -469,6 +477,7 @@ export class InventoryService {
             where: { id: child.id },
             data: {
               response: {
+                kind: "APPOINTMENT_MATERIAL",
                 ...line,
                 appointmentId,
                 serviceId: appointment.serviceId,
@@ -479,6 +488,7 @@ export class InventoryService {
           });
         }
         return {
+          kind: "APPOINTMENT_CONSUMPTION",
           appointmentId,
           serviceId: appointment.serviceId,
           serviceName: appointment.service.name,
@@ -527,7 +537,8 @@ export class InventoryService {
       > | null;
       return {
         ...movement,
-        ...(operation.type === "APPOINTMENT_MATERIAL" &&
+        ...(operation.type === "MOVEMENT" &&
+        snapshot?.kind === "APPOINTMENT_MATERIAL" &&
         snapshot &&
         typeof snapshot.appointmentId === "string" &&
         typeof snapshot.serviceName === "string"

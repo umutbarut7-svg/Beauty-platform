@@ -2584,7 +2584,11 @@ describe("Shared appointment material consumption", () => {
     });
     expect(
       await db.inventoryOperation.count({
-        where: { businessId, type: "APPOINTMENT_CONSUMPTION" },
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_CONSUMPTION" },
+        },
       }),
     ).toBe(0);
   });
@@ -2658,12 +2662,20 @@ describe("Shared appointment material consumption", () => {
       expect(history[0]).not.toHaveProperty(field);
     expect(
       await db.inventoryOperation.count({
-        where: { businessId, type: "APPOINTMENT_CONSUMPTION" },
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_CONSUMPTION" },
+        },
       }),
     ).toBe(1);
     expect(
       await db.inventoryOperation.count({
-        where: { businessId, type: "APPOINTMENT_MATERIAL" },
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_MATERIAL" },
+        },
       }),
     ).toBe(2);
     await db.catalogProduct.update({
@@ -2705,7 +2717,11 @@ describe("Shared appointment material consumption", () => {
     ).toHaveLength(1);
     expect(
       await db.inventoryOperation.count({
-        where: { businessId, type: "APPOINTMENT_MATERIAL" },
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_MATERIAL" },
+        },
       }),
     ).toBe(4);
   });

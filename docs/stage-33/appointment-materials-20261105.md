@@ -17,6 +17,10 @@ existing explicit, reasoned product movement workflow and do not rewrite it.
 Recipes, automatic consumption estimates, cost/margin calculations and product
 sales/payments are not introduced.
 
+The existing database restriction to IMPORT/MOVEMENT operation types stays intact.
+Parent and child receipts use MOVEMENT with explicit APPOINTMENT_CONSUMPTION
+and APPOINTMENT_MATERIAL JSON kind tags; no new database type is required.
+
 The API verifies current inventory management membership and appointment tenant
 inside the serializable transaction. Non-completed appointments, inactive or
 foreign products, duplicate product IDs, fractional UNIT amounts, non-positive
