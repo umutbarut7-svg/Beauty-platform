@@ -177,6 +177,7 @@ class ManagedBackupTests(unittest.TestCase):
             docker("createdb", "-U", "postgres", "managed_backup_fixture")
             docker("psql", "-U", "postgres", "-d", "managed_backup_fixture", "-v", "ON_ERROR_STOP=1", "-c",
                    "CREATE TABLE sample(id integer PRIMARY KEY, value numeric(12,3)); INSERT INTO sample VALUES(1,12.345)")
+            start = MANAGED.timestamp(datetime.now(timezone.utc) - timedelta(minutes=1))
             with patch.object(MANAGED, "PIN", recipient), patch.object(MANAGED, "dump_command", return_value=["docker", "exec", container, "pg_dump", "-U", "postgres", "--format=custom", "--no-owner", "--dbname=managed_backup_fixture"]):
                 report = self.backup(create=MANAGED.produce)
             encrypted = self.root / "retrieved.zip"
@@ -184,7 +185,7 @@ class ManagedBackupTests(unittest.TestCase):
             dump = self.root / "restored.dump"
             end = MANAGED.timestamp(datetime.now(timezone.utc) + timedelta(minutes=1))
             PACKAGE.recover(encrypted, dump, keys / "signer.pub", keys / "recipient.crt", keys / "recipient.key", signer, recipient,
-                            report["backupId"], MANAGED.APPLICATION, "LIVE_DAILY_SNAPSHOT", MANAGED.timestamp(self.now - timedelta(minutes=1)), end,
+                            report["backupId"], MANAGED.APPLICATION, "LIVE_DAILY_SNAPSHOT", start, end,
                             max_package_bytes=16 * 1024 * 1024, max_cipher_bytes=15 * 1024 * 1024)
             docker("createdb", "-U", "postgres", "managed_restore_fixture")
             with dump.open("rb") as source:
