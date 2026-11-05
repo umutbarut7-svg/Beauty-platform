@@ -21,7 +21,7 @@ jobs:
       - name: Checkout exact reviewed material consumption application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 6a549267e063e11e2ef7b8b908b177fe33d7b0c6
+          ref: 2e56def282c97a804a2f3d6c9b36a53b42a09df5
           path: application
           persist-credentials: false
       - name: Build and exercise API, migration and worker in an isolated database

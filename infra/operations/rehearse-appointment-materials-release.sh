@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-release_source=6a549267e063e11e2ef7b8b908b177fe33d7b0c6
-api_image=orzell-appointment-materials-api:6a549267e063
-migrate_image=orzell-appointment-materials-migrate:6a549267e063
+release_source=2e56def282c97a804a2f3d6c9b36a53b42a09df5
+api_image=orzell-appointment-materials-api:2e56def282c9
+migrate_image=orzell-appointment-materials-migrate:2e56def282c9
 test_network=orzell-appointment-materials-isolated
 test_postgres=orzell-appointment-materials-postgres
 test_api=orzell-appointment-materials-api
@@ -63,7 +63,7 @@ if archive.stat().st_size>2_000_000_000:
 digest=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
 def image_id(name):
     return subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',name],text=True).strip()
-manifest={'source':'6a549267e063e11e2ef7b8b908b177fe33d7b0c6','images':{'api':image_id('orzell-appointment-materials-api:6a549267e063'),'migrate':image_id('orzell-appointment-materials-migrate:6a549267e063')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
+manifest={'source':'2e56def282c97a804a2f3d6c9b36a53b42a09df5','images':{'api':image_id('orzell-appointment-materials-api:2e56def282c9'),'migrate':image_id('orzell-appointment-materials-migrate:2e56def282c9')},'archive':{'name':'images.tar.gz','bytes':archive.stat().st_size,'sha256':digest},'rehearsal':'PASS','liveDeployment':False,'providerRequests':0}
 (root/'release.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print(json.dumps(manifest))
 PY

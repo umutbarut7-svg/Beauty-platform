@@ -340,7 +340,7 @@ async function main() {
   }
   console.log(
     JSON.stringify({
-      source: "6a549267e063e11e2ef7b8b908b177fe33d7b0c6",
+      source: "2e56def282c97a804a2f3d6c9b36a53b42a09df5",
       prismaVersion: Prisma.prismaVersion.client,
       models,
       modules,
