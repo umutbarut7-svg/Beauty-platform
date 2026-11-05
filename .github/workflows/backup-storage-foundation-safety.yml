@@ -1,0 +1,24 @@
+name: Backup storage foundation safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/bootstrap-backup-storage.py
+      - infra/operations/test_backup_storage_bootstrap.py
+      - .github/workflows/backup-storage-foundation-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify owner preflight and no-change failure paths
+        run: python3 -m unittest discover -s infra/operations -p test_backup_storage_bootstrap.py -v
+      - name: Validate generated CloudFormation with pinned schema linter
+        run: |
+          python3 -m pip install cfn-lint==1.59.0
+          python3 infra/operations/bootstrap-backup-storage.py --print-template > "$RUNNER_TEMP/backup-storage.json"
+          cfn-lint --template "$RUNNER_TEMP/backup-storage.json" --regions eu-north-1
