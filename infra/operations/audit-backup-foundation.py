@@ -14,7 +14,8 @@ SPEC.loader.exec_module(FOUNDATION)
 ROLE = "BeautyPlatformPreview-RuntimeRole-qJeq1ARIaXWh"
 ALLOWED = {("sts", "get-caller-identity"), ("cloudformation", "describe-stacks"),
            ("cloudformation", "get-template"), ("iam", "get-role-policy"),
-           ("s3api", "get-bucket-policy"), ("s3api", "get-bucket-encryption")}
+           ("s3api", "get-bucket-policy"), ("s3api", "get-bucket-encryption"),
+           ("s3api", "get-bucket-lifecycle-configuration"), ("cloudwatch", "describe-alarms")}
 
 
 def aws(service, operation, *arguments):
@@ -53,13 +54,13 @@ def resolve(value):
     return [resolve(item) for item in value] if isinstance(value, list) else value
 
 
-def inspect(read=aws):
+def inspect(read=aws, expected_template=None, accepted_statuses=("CREATE_COMPLETE",)):
     identity = read("sts", "get-caller-identity")
     prefix = "arn:aws:sts::" + FOUNDATION.ACCOUNT + ":assumed-role/BeautyPlatformGitHubAudit/"
     if identity.get("Account") != FOUNDATION.ACCOUNT or not identity.get("Arn", "").startswith(prefix):
         raise ValueError("AUDIT_IDENTITY_DIFFERS")
     stacks = read("cloudformation", "describe-stacks", "--stack-name", FOUNDATION.STACK).get("Stacks", [])
-    if len(stacks) != 1 or stacks[0].get("StackStatus") != "CREATE_COMPLETE":
+    if len(stacks) != 1 or stacks[0].get("StackStatus") not in accepted_statuses:
         raise ValueError("STACK_NOT_CREATE_COMPLETE")
     stack = stacks[0]
     parameters = {item["ParameterKey"]: item["ParameterValue"] for item in stack.get("Parameters", [])}
@@ -69,7 +70,7 @@ def inspect(read=aws):
     actual = read("cloudformation", "get-template", "--stack-name", FOUNDATION.STACK).get("TemplateBody")
     if isinstance(actual, str):
         actual = json.loads(actual)
-    expected = FOUNDATION.template()
+    expected = expected_template if expected_template is not None else FOUNDATION.template()
     if actual != expected:
         raise ValueError("STACK_TEMPLATE_DIFFERS")
     writer = read("iam", "get-role-policy", "--role-name", ROLE, "--policy-name", FOUNDATION.POLICY).get("PolicyDocument")
@@ -84,7 +85,7 @@ def inspect(read=aws):
     encryption = read("s3api", "get-bucket-encryption", *options).get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
     if len(encryption) != 1 or encryption[0].get("ApplyServerSideEncryptionByDefault") != {"SSEAlgorithm": "AES256"}:
         raise ValueError("BUCKET_ENCRYPTION_DIFFERS")
-    return {"status": "FOUNDATION_AUDIT_COMPLETE", "stackStatus": "CREATE_COMPLETE",
+    return {"status": "FOUNDATION_AUDIT_COMPLETE", "stackStatus": stack["StackStatus"],
             "templateAndRoleBinding": True, "liveWriterPolicy": True, "liveTlsAndSsePolicy": True,
             "defaultEncryption": "AES256", "productionReady": False}
 
