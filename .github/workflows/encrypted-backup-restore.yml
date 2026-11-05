@@ -11,6 +11,8 @@ on:
       - infra/operations/test_verified_backup.py
       - infra/operations/produce-backup.py
       - infra/operations/test_produce_backup.py
+      - infra/operations/recover-backup-package.py
+      - infra/operations/test_backup_package.py
       - infra/operations/backup-manifest.py
       - infra/operations/test_backup_manifest.py
       - infra/operations/quarantine-current-photos.sql
@@ -85,6 +87,7 @@ jobs:
           cp ../harness/infra/operations/encrypted-backup.py apps/api/
           cp ../harness/infra/operations/backup-manifest.py apps/api/
           cp ../harness/infra/operations/verified-backup.py apps/api/
+          cp ../harness/infra/operations/recover-backup-package.py apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/
           cp ../harness/infra/operations/quarantine-current-photos.sql apps/api/
       - name: Check harness formatting with pinned application formatter

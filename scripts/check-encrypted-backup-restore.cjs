@@ -451,18 +451,54 @@ async function main() {
     console.log(
       "PASS: independent signer/recipient pins, signed ciphertext/context/time checks and rejection before decryption or target creation",
     );
+    const packagePath = path.join(root, "complete.zip");
     execFileSync(
       "python3",
       [
-        "verified-backup.py",
-        ...Object.entries(approvedContext).flat(),
-        "--output",
-        recovered,
-        "--certificate",
-        certificate,
-        "--private-key",
-        key,
+        "-c",
+        "import sys,zipfile;from pathlib import Path;" +
+          "a=zipfile.ZipFile(sys.argv[1],'x',compression=zipfile.ZIP_STORED);" +
+          "a.write(sys.argv[2],arcname='backup.cms');a.write(sys.argv[3],arcname='manifest.json');" +
+          "a.close();Path(sys.argv[1]).chmod(0o600)",
+        packagePath,
+        encrypted,
+        manifest,
       ],
+      { stdio: "ignore", timeout: 30000 },
+    );
+    const packageContext = {
+      "--package": packagePath,
+      "--public-key": signingPublic,
+      "--expected-signer": signerFingerprint,
+      "--expected-recipient": recipientFingerprint,
+      "--backup-id": backupId,
+      "--application-sha": application,
+      "--boundary": BOUNDARY,
+      "--not-before": createdAt,
+      "--not-after": approvedContext["--created-not-after"],
+      "--max-package-bytes": "67108864",
+      "--max-cipher-bytes": "66060288",
+      "--output": recovered,
+      "--certificate": certificate,
+      "--private-key": key,
+    };
+    assert.throws(() =>
+      execFileSync(
+        "python3",
+        [
+          "recover-backup-package.py",
+          ...Object.entries({
+            ...packageContext,
+            "--expected-signer": "0".repeat(64),
+          }).flat(),
+        ],
+        { stdio: "ignore", timeout: 60000 },
+      ),
+    );
+    assert.equal(await exists(recovered), false);
+    execFileSync(
+      "python3",
+      ["recover-backup-package.py", ...Object.entries(packageContext).flat()],
       { stdio: "ignore", timeout: 60000 },
     );
     const authenticatedDump = await fs.readFile(recovered);
@@ -470,7 +506,7 @@ async function main() {
     assert.equal((await fs.stat(encrypted)).mode & 0o777, 0o600);
     assert.equal((await fs.stat(recovered)).mode & 0o777, 0o600);
     console.log(
-      "PASS: AES-256-GCM CMS encrypted dump; RSA-OAEP recipient; plaintext published only after authentication",
+      "PASS: bounded sealed ZIP package, pinned signed context and authenticated CMS before plaintext publication",
     );
     await source.$disconnect();
     console.log(
