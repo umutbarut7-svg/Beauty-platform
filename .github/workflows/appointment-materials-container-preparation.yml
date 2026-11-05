@@ -1,0 +1,36 @@
+name: Appointment material consumption release rehearsal
+on:
+  pull_request:
+    paths:
+      - .github/workflows/appointment-materials-container-preparation.yml
+      - infra/operations/rehearse-appointment-materials-release.sh
+      - infra/operations/verify-appointment-materials-image.cjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout release harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Checkout exact reviewed material consumption application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 2e56def282c97a804a2f3d6c9b36a53b42a09df5
+          path: application
+          persist-credentials: false
+      - name: Build and exercise API, migration and worker in an isolated database
+        run: bash harness/infra/operations/rehearse-appointment-materials-release.sh
+      - name: Preserve immutable release and synthetic evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: appointment-materials-release-${{ github.run_id }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
