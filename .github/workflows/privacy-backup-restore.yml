@@ -76,6 +76,8 @@ jobs:
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/api build
           pnpm --filter @beauty-platform/api prisma:migrate
+          pnpm exec prettier --write ../harness/.github/workflows/privacy-backup-restore.yml ../harness/scripts/check-privacy-backup-restore.cjs ../harness/scripts/privacy-backup-envelope.cjs ../harness/scripts/privacy-backup-envelope.test.cjs ../harness/docs/stage-33/encrypted-restore-20261105.md
+          git -C ../harness diff --exit-code
           cp ../harness/scripts/check-privacy-backup-restore.cjs apps/api/
           cp ../harness/scripts/privacy-backup-envelope.cjs apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/

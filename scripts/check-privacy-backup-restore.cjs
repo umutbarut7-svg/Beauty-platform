@@ -8,7 +8,7 @@ const { once } = require("node:events");
 const { sealFixture, openFixture } = require("./privacy-backup-envelope.cjs");
 const APPLICATION = "9c487dc425d157a2a5bb1de9bc48beab63eda90c";
 require("reflect-metadata");
-const { PrismaClient } = require("@prisma/client");
+const { Prisma, PrismaClient } = require("@prisma/client");
 const { VisualService } = require("./dist/mvp/visual.service.js");
 const SOURCE =
   "postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_backup_ci?schema=public";
@@ -327,6 +327,18 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 100));
     stage = "read-guards-before-cleanup";
     await hidden(expired);
+    // A previously scrubbed row can still contain only a stale RUNNING match.
+    // This verifies the SQL predicate as well as its SET list.
+    await restored.mvpPhotoAnalysis.update({
+      where: { id: expired.analysis.id },
+      data: {
+        status: "REVOKED",
+        output: Prisma.DbNull,
+        intent: "",
+        target: "",
+        answers: [],
+      },
+    });
     if (BEFORE_WITHDRAWAL) {
       // No listener exists: deliberately show why an old backup MUST stay offline.
       assert.equal(

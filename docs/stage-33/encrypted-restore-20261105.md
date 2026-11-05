@@ -6,6 +6,8 @@ request identity and matching output. This update pins the application to
 `9c487dc425d157a2a5bb1de9bc48beab63eda90c` (TestFlight 1151 source) and removes
 all three matching fields during offline SQL quarantine. It checks the SQL result
 before starting the cleanup worker, so later worker cleanup cannot mask a leak.
+A row whose original content is already scrubbed but still has a matching request
+also exercises the SQL update predicate.
 
 Both real PostgreSQL snapshots, before and after a synthetic consent withdrawal,
 remain offline. Every restored owner's photo consent is invalidated, including
