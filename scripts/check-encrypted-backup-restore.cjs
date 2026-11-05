@@ -328,6 +328,128 @@ async function main() {
     );
     await fs.rm(plaintext);
     assert.equal(await exists(plaintext), false);
+    stage = "independently-pinned-signed-manifest";
+    const signingKey = path.join(root, "fixture-signing.key");
+    const signingPublic = path.join(root, "fixture-signing.pub");
+    const manifest = path.join(root, "snapshot-manifest.json");
+    const backupId = `synthetic-${BOUNDARY}`;
+    const application = "2e56def282c97a804a2f3d6c9b36a53b42a09df5";
+    const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    execFileSync(
+      "openssl",
+      [
+        "genpkey",
+        "-algorithm",
+        "RSA",
+        "-pkeyopt",
+        "rsa_keygen_bits:3072",
+        "-out",
+        signingKey,
+      ],
+      { stdio: "ignore", timeout: 30000 },
+    );
+    await fs.chmod(signingKey, 0o600);
+    execFileSync(
+      "openssl",
+      ["pkey", "-in", signingKey, "-pubout", "-out", signingPublic],
+      { stdio: "ignore", timeout: 30000 },
+    );
+    // Trust pins come directly from this disposable fixture's independent key
+    // setup, never from the untrusted manifest. These are NOT production pins.
+    const signerFingerprint = createHash("sha256")
+      .update(
+        execFileSync("openssl", [
+          "pkey",
+          "-pubin",
+          "-in",
+          signingPublic,
+          "-outform",
+          "DER",
+        ]),
+      )
+      .digest("hex");
+    const recipientFingerprint = createHash("sha256")
+      .update(
+        execFileSync("openssl", [
+          "x509",
+          "-in",
+          certificate,
+          "-outform",
+          "DER",
+        ]),
+      )
+      .digest("hex");
+    execFileSync(
+      "python3",
+      [
+        "backup-manifest.py",
+        "sign",
+        "--input",
+        encrypted,
+        "--manifest",
+        manifest,
+        "--public-key",
+        signingPublic,
+        "--private-key",
+        signingKey,
+        "--certificate",
+        certificate,
+        "--backup-id",
+        backupId,
+        "--application-sha",
+        application,
+        "--snapshot-boundary",
+        BOUNDARY,
+        "--created-at",
+        createdAt,
+      ],
+      { stdio: "ignore", timeout: 30000 },
+    );
+    const verifyManifest = (overrides = {}) => {
+      const context = {
+        "--input": encrypted,
+        "--manifest": manifest,
+        "--public-key": signingPublic,
+        "--expected-signer-sha256": signerFingerprint,
+        "--expected-recipient-sha256": recipientFingerprint,
+        "--backup-id": backupId,
+        "--application-sha": application,
+        "--snapshot-boundary": BOUNDARY,
+        "--created-not-before": createdAt,
+        "--created-not-after": new Date()
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "Z"),
+        ...overrides,
+      };
+      execFileSync(
+        "python3",
+        ["backup-manifest.py", "verify", ...Object.entries(context).flat()],
+        { stdio: "ignore", timeout: 30000 },
+      );
+    };
+    for (const context of [
+      { "--backup-id": "wrong-backup" },
+      { "--application-sha": "0".repeat(40) },
+      { "--snapshot-boundary": "WRONG_BOUNDARY" },
+      { "--expected-signer-sha256": "0".repeat(64) },
+      { "--expected-recipient-sha256": "0".repeat(64) },
+      { "--created-not-after": "2000-01-01T00:00:00Z" },
+      { "--manifest": path.join(root, "missing.json") },
+    ]) {
+      assert.throws(() => verifyManifest(context));
+      assert.equal(await exists(recovered), false);
+    }
+    const tampered = path.join(root, "tampered-manifest.json");
+    const envelope = JSON.parse(await fs.readFile(manifest, "utf8"));
+    envelope.manifest.cipherBytes += 1;
+    await fs.writeFile(tampered, JSON.stringify(envelope), { mode: 0o600 });
+    assert.throws(() => verifyManifest({ "--manifest": tampered }));
+    assert.equal(await exists(recovered), false);
+    verifyManifest();
+    assert.equal((await fs.stat(manifest)).mode & 0o777, 0o600);
+    console.log(
+      "PASS: independent signer/recipient pins, signed ciphertext/context/time checks and rejection before decryption or target creation",
+    );
     execFileSync(
       "python3",
       [
@@ -614,6 +736,9 @@ async function main() {
           productionBackupEncryptionTested: false,
           isolatedAuthenticatedEncryptionTested: true,
           encryptionFormat: "CMS AuthEnvelopedData AES-256-GCM RSA-OAEP-SHA256",
+          independentlyPinnedManifestSignatureTested: true,
+          signedContextRejectionsBeforeDecryption: 8,
+          productionManifestTrustConfigured: false,
           restoredSavedMatchingScrubbed: true,
           catalogInventoryB2BSnapshotsPreserved: true,
           appointmentConsumptionFixture: "IMMUTABLE_RECEIPT_SNAPSHOT_ONLY",
