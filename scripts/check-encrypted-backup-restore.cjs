@@ -460,6 +460,16 @@ async function main() {
         sql;
       psql(acknowledged);
       psql(acknowledged);
+      // Verify the SQL before worker cleanup can hide a regression.
+      for (const item of [retained, expired, revoked, other]) {
+        const quarantined = await restored.mvpPhotoAnalysis.findUniqueOrThrow({
+          where: { id: item.analysis.id },
+        });
+        assert.equal(quarantined.matchingStatus, null);
+        assert.equal(quarantined.matchingRequestId, null);
+        assert.equal(quarantined.matchingOutput, null);
+        assert.equal(quarantined.output, null);
+      }
       assert.equal(
         await restored.mvpPhotoConsent.count({ where: { revokedAt: null } }),
         0,
@@ -624,3 +634,4 @@ main().catch((error) => {
   console.error("FAIL:", stage, error.name);
   process.exitCode = 1;
 });
+
