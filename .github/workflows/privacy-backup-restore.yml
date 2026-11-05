@@ -6,6 +6,8 @@ on:
       - .github/workflows/privacy-backup-restore.yml
       - scripts/check-privacy-backup-restore.cjs
       - scripts/privacy-restore-preload.cjs
+      - scripts/privacy-backup-envelope.cjs
+      - scripts/privacy-backup-envelope.test.cjs
       - infra/operations/quarantine-restored-photos.sql
   workflow_dispatch:
 
@@ -23,6 +25,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/beauty_privacy_backup_ci?schema=public
       PRIVACY_RESTORE_FIXTURE: confirmed
+      PRIVACY_RESTORE_APPLICATION: 9c487dc425d157a2a5bb1de9bc48beab63eda90c
       PRIVACY_SNAPSHOT_BOUNDARY: ${{ matrix.snapshot }}
       NODE_ENV: test
       MVP_AI_ENABLED: "false"
@@ -50,7 +53,7 @@ jobs:
       - name: Checkout reviewed application
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 06242d064f387cc57aac81d4344e0d714c071ff4
+          ref: 9c487dc425d157a2a5bb1de9bc48beab63eda90c
           path: application
           persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
@@ -62,6 +65,9 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: application/pnpm-lock.yaml
+      - name: Check authenticated fixture archive failures
+        working-directory: harness
+        run: node --test scripts/privacy-backup-envelope.test.cjs
       - name: Build reviewed application and migrate source fixture database
         working-directory: application
         run: |
@@ -70,7 +76,10 @@ jobs:
           pnpm --filter @beauty-platform/types build
           pnpm --filter @beauty-platform/api build
           pnpm --filter @beauty-platform/api prisma:migrate
+          pnpm exec prettier --write ../harness/.github/workflows/privacy-backup-restore.yml ../harness/scripts/check-privacy-backup-restore.cjs ../harness/scripts/privacy-backup-envelope.cjs ../harness/scripts/privacy-backup-envelope.test.cjs ../harness/docs/stage-33/encrypted-restore-20261105.md
+          git -C ../harness diff --exit-code
           cp ../harness/scripts/check-privacy-backup-restore.cjs apps/api/
+          cp ../harness/scripts/privacy-backup-envelope.cjs apps/api/
           cp ../harness/scripts/privacy-restore-preload.cjs apps/api/
           cp ../harness/infra/operations/quarantine-restored-photos.sql apps/api/
       - name: Backup, restore, check access and run cleanup twice
