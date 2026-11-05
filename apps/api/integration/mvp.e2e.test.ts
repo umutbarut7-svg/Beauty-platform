@@ -2401,3 +2401,362 @@ describe("Shared B2B supplier-to-business bridge", () => {
     ).toBe("CANCELLED");
   });
 });
+
+describe("Shared appointment material consumption", () => {
+  let completedId = "",
+    pendingId = "",
+    cancelledId = "",
+    unitId = "",
+    measuredId = "";
+  const path = (id: string, tenant = businessId) =>
+    `/businesses/${tenant}/appointments/${id}/materials`;
+  const batch = () => ({
+    reason: "Synthetic service materials",
+    items: [
+      { productId: unitId, quantity: "1" },
+      { productId: measuredId, quantity: "0.125" },
+    ],
+  });
+  async function appointment(
+    status: "COMPLETED" | "PENDING" | "CANCELLED" = "COMPLETED",
+  ) {
+    const source = await db.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
+    });
+    return (
+      await db.appointment.create({
+        data: {
+          businessId,
+          customerId: source.customerId,
+          serviceId,
+          status,
+          startsAt: new Date("2026-01-02T10:00:00Z"),
+          endsAt: new Date("2026-01-02T11:00:00Z"),
+          price: "125.50",
+          currency: "TRY",
+        },
+      })
+    ).id;
+  }
+  it("requires management access and a completed appointment in the same tenant", async () => {
+    completedId = await appointment();
+    pendingId = await appointment("PENDING");
+    cancelledId = await appointment("CANCELLED");
+    const imported = await create(
+      `/businesses/${businessId}/products/import`,
+      ownerToken,
+      {
+        idempotencyKey: `material-fixture-${key}`,
+        products: [
+          {
+            sku: "MATERIAL-UNIT",
+            name: "Original material",
+            price: "25",
+            currency: "TRY",
+            unit: "UNIT",
+            lowStockThreshold: "1",
+          },
+          {
+            sku: "MATERIAL-ML",
+            name: "Measured material",
+            price: "50",
+            currency: "TRY",
+            unit: "ML",
+            lowStockThreshold: "0.1",
+          },
+        ],
+      },
+    );
+    [unitId, measuredId] = imported.ids;
+    for (const [productId, quantity] of [
+      [unitId, "3"],
+      [measuredId, "0.375"],
+    ])
+      await create(
+        `/businesses/${businessId}/products/${productId}/movements`,
+        ownerToken,
+        {
+          idempotencyKey: `material-in-${productId}`,
+          direction: "IN",
+          quantity,
+          reason: "Synthetic starting stock",
+        },
+      );
+    for (const token of [customerToken, strangerToken, professionalToken]) {
+      expect((await request(path(completedId), token)).status).toBe(403);
+      expect(
+        (await request(path(completedId), token, "POST", batch())).status,
+      ).toBe(403);
+    }
+    expect((await request(path(completedId), "", "POST", batch())).status).toBe(
+      401,
+    );
+    expect(
+      (
+        await request(
+          path(completedId, otherBusinessId),
+          ownerToken,
+          "POST",
+          batch(),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await request(path(pendingId), ownerToken, "POST", batch())).status,
+    ).toBe(409);
+    expect(
+      (await request(path(cancelledId), ownerToken, "POST", batch())).status,
+    ).toBe(409);
+    expect((await request(path(completedId), ownerToken)).body).toEqual({
+      consumption: null,
+    });
+  });
+  it("validates one batch and rolls back all lines when any line fails", async () => {
+    const before = await db.catalogProduct.findMany({
+      where: { id: { in: [unitId, measuredId] } },
+      orderBy: { id: "asc" },
+    });
+    for (const [items, expected] of [
+      [
+        [
+          { productId: unitId, quantity: "1" },
+          { productId: unitId, quantity: "1" },
+        ],
+        400,
+      ],
+      [[{ productId: unitId, quantity: "0.1" }], 400],
+      [[{ productId: unitId, quantity: "0" }], 400],
+      [
+        [
+          { productId: unitId, quantity: "1" },
+          { productId: measuredId, quantity: "1" },
+        ],
+        409,
+      ],
+      [
+        [
+          { productId: "unknown-product", quantity: "1" },
+          { productId: measuredId, quantity: "0.1" },
+        ],
+        404,
+      ],
+      [
+        Array.from({ length: 51 }, () => ({
+          productId: unitId,
+          quantity: "1",
+        })),
+        400,
+      ],
+    ] as const) {
+      expect(
+        (
+          await request(path(completedId), ownerToken, "POST", {
+            reason: "Atomic fixture",
+            items,
+          })
+        ).status,
+      ).toBe(expected);
+    }
+    expect(
+      (
+        await request(path(completedId), ownerToken, "POST", {
+          ...batch(),
+          reason: "  ",
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(path(completedId), ownerToken, "POST", {
+          ...batch(),
+          idempotencyKey: "forged-key",
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      await db.catalogProduct.findMany({
+        where: { id: { in: [unitId, measuredId] } },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(before);
+    expect((await request(path(completedId), ownerToken)).body).toEqual({
+      consumption: null,
+    });
+    expect(
+      await db.inventoryOperation.count({
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_CONSUMPTION" },
+        },
+      }),
+    ).toBe(0);
+  });
+  it("records the shared batch exactly once across concurrent canonical retries and preserves private snapshots", async () => {
+    const input = batch();
+    const [a, b] = await Promise.all([
+      request(path(completedId), ownerToken, "POST", input),
+      request(path(completedId), ownerToken, "POST", {
+        ...input,
+        items: [...input.items].reverse().map((item) => ({
+          ...item,
+          quantity: item.productId === unitId ? "1.000" : "0.125",
+        })),
+      }),
+    ]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(a.body).toEqual(b.body);
+    expect(a.body.appointmentId).toBe(completedId);
+    expect(a.body.items).toHaveLength(2);
+    expect(
+      a.body.items.find(
+        (line: { productId: string }) => line.productId === unitId,
+      ),
+    ).toMatchObject({
+      quantity: "1",
+      quantityAfter: "2",
+      productName: "Original material",
+    });
+    expect(
+      a.body.items.find(
+        (line: { productId: string }) => line.productId === measuredId,
+      ),
+    ).toMatchObject({ quantity: "0.125", quantityAfter: "0.25" });
+    expect(
+      (
+        await request(path(completedId), ownerToken, "POST", {
+          ...input,
+          reason: "Changed intent",
+        })
+      ).status,
+    ).toBe(409);
+    await db.catalogProduct.update({
+      where: { id: unitId },
+      data: { name: "Later material name", isActive: false },
+    });
+    expect(
+      (await request(path(completedId), ownerToken)).body.consumption,
+    ).toEqual(a.body);
+    expect(
+      (await request(path(completedId), ownerToken, "POST", input)).body,
+    ).toEqual(a.body);
+    const history = (
+      await request(
+        `/businesses/${businessId}/products/${unitId}/movements`,
+        ownerToken,
+      )
+    ).body;
+    expect(history[0]).toMatchObject({
+      appointmentId: completedId,
+      direction: "OUT",
+      quantity: "1",
+    });
+    expect(history[0].serviceName).toBe(a.body.serviceName);
+    for (const field of [
+      "actorId",
+      "operation",
+      "keyHash",
+      "requestHash",
+      "parentOperationId",
+    ])
+      expect(history[0]).not.toHaveProperty(field);
+    expect(
+      await db.inventoryOperation.count({
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_CONSUMPTION" },
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.inventoryOperation.count({
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_MATERIAL" },
+        },
+      }),
+    ).toBe(2);
+    await db.catalogProduct.update({
+      where: { id: unitId },
+      data: { isActive: true },
+    });
+  });
+  it("prevents overspending across two appointments and rolls back the losing batch", async () => {
+    const one = await appointment(),
+      two = await appointment();
+    const payload = {
+      ...batch(),
+      items: [
+        { productId: unitId, quantity: "2" },
+        { productId: measuredId, quantity: "0.1" },
+      ],
+    };
+    const results = await Promise.all([
+      request(path(one), ownerToken, "POST", payload),
+      request(path(two), ownerToken, "POST", payload),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: unitId } })
+      ).stockQuantity.toString(),
+    ).toBe("0");
+    expect(
+      (
+        await db.catalogProduct.findUniqueOrThrow({ where: { id: measuredId } })
+      ).stockQuantity.toString(),
+    ).toBe("0.15");
+    const receipts = await Promise.all([
+      request(path(one), ownerToken),
+      request(path(two), ownerToken),
+    ]);
+    expect(
+      receipts.filter((result) => result.body.consumption !== null),
+    ).toHaveLength(1);
+    expect(
+      await db.inventoryOperation.count({
+        where: {
+          businessId,
+          type: "MOVEMENT",
+          response: { path: ["kind"], equals: "APPOINTMENT_MATERIAL" },
+        },
+      }),
+    ).toBe(4);
+  });
+  it("accepts the fifty-line boundary as one shared operation", async () => {
+    const batchId = await appointment();
+    const products = Array.from({ length: 50 }, (_, i) => ({
+      id: `material-boundary-${key}-${i}`,
+      businessId,
+      sku: `MATERIAL-BOUNDARY-${i}`,
+      name: `Boundary material ${i}`,
+      price: "1",
+      currency: "TRY",
+      unit: "UNIT" as const,
+      stockQuantity: "1",
+    }));
+    await db.catalogProduct.createMany({ data: products });
+    const response = await request(path(batchId), ownerToken, "POST", {
+      reason: "Shared maximum batch",
+      items: products.map((product) => ({
+        productId: product.id,
+        quantity: "1",
+      })),
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.items).toHaveLength(50);
+    expect(
+      await db.catalogProduct.count({
+        where: {
+          id: { in: products.map((product) => product.id) },
+          stockQuantity: "0",
+        },
+      }),
+    ).toBe(50);
+    expect((await request(path(batchId), ownerToken)).body.consumption).toEqual(
+      response.body,
+    );
+  });
+});

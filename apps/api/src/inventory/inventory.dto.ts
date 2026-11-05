@@ -60,3 +60,17 @@ export class StockMovementDto {
   @IsString() @Matches(QUANTITY) quantity!: string;
   @IsString() @MinLength(1) @MaxLength(200) reason!: string;
 }
+
+export class AppointmentMaterialInput {
+  @IsString() @Matches(/^[A-Za-z0-9_-]{1,64}$/) productId!: string;
+  @IsString() @Matches(QUANTITY) quantity!: string;
+}
+export class AppointmentConsumptionDto {
+  @IsString() @MinLength(1) @MaxLength(200) reason!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => AppointmentMaterialInput)
+  items!: AppointmentMaterialInput[];
+}

@@ -26,6 +26,7 @@ import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
 import { ServiceChoice } from "./ServiceChoice";
 import { ProductInventory } from "./ProductInventory";
+import { AppointmentMaterials } from "./AppointmentMaterials";
 import { BusinessB2B } from "./BusinessB2B";
 import { PublicProducts } from "./PublicProducts";
 import { BusinessDemand } from "./BusinessDemand";
@@ -1543,6 +1544,16 @@ export default function App() {
                             </>
                           )}
                       </>
+                    )}
+                    {mode === "business" && selected.status === "COMPLETED" && (
+                      <AppointmentMaterials
+                        key={`${selected.businessId}:${selected.id}`}
+                        api={api}
+                        businessId={selected.businessId}
+                        appointmentId={selected.id}
+                        busy={busy}
+                        run={run}
+                      />
                     )}
                     {result && (
                       <>

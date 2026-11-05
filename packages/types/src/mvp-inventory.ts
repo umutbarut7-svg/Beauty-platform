@@ -40,10 +40,35 @@ export interface ProductImportRow {
   lowStockThreshold: string;
 }
 export interface StockMovement {
+  appointmentId?: string;
+  serviceName?: string;
   id: string;
   direction: "IN" | "OUT";
   quantity: string;
   quantityAfter: string;
   reason: string;
   createdAt: string;
+}
+
+export interface AppointmentMaterialLine {
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: InventoryUnit;
+  quantity: string;
+  quantityAfter: string;
+  movementId: string;
+}
+export interface AppointmentConsumption {
+  appointmentId: string;
+  serviceId: string;
+  serviceName: string;
+  operationId: string;
+  reason: string;
+  createdAt: string;
+  items: AppointmentMaterialLine[];
+}
+export interface AppointmentConsumptionInput {
+  reason: string;
+  items: Array<{ productId: string; quantity: string }>;
 }

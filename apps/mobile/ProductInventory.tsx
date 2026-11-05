@@ -297,6 +297,9 @@ export function ProductInventory({
               )}
               {history.map((item) => (
                 <Text key={item.id} style={styles.body}>
+                  {item.serviceName
+                    ? `${item.serviceName} · Randevu sarfı · `
+                    : ""}
                   {item.direction === "IN" ? "+" : "−"}
                   {item.quantity} {unitLabel[selected.unit]} · {item.reason} ·{" "}
                   {new Date(item.createdAt).toLocaleString("tr-TR")} · Kalan:{" "}

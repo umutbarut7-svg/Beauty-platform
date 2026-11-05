@@ -19,6 +19,15 @@ describe("inventory rollout and permissions", () => {
     await expect(service.publicCatalog("business")).rejects.toThrow(
       "INVENTORY_DISABLED",
     );
+    await expect(
+      service.consumption(user, "business", "appointment"),
+    ).rejects.toThrow("INVENTORY_DISABLED");
+    await expect(
+      service.consume(user, "business", "appointment", {
+        reason: "Test",
+        items: [],
+      }),
+    ).rejects.toThrow("INVENTORY_DISABLED");
     expect(permissions.assertBusinessAccess).not.toHaveBeenCalled();
   });
   it("gives inventory access to management roles and denies staff/customer", () => {

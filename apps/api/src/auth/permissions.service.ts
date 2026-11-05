@@ -325,13 +325,14 @@ export class PermissionsService {
     user: AuthenticatedUser,
     businessId: string,
     permission: Permission,
+    client: Pick<PrismaService, "businessMember"> = this.prisma,
   ): Promise<void> {
     if (user.role === "SUPER_ADMIN") {
       if (!this.has(user.role, permission))
         throw new ForbiddenException("Insufficient permission");
       return;
     }
-    const membership = await this.prisma.businessMember.findUnique({
+    const membership = await client.businessMember.findUnique({
       where: { userId_businessId: { userId: user.id, businessId } },
       select: { id: true, role: true },
     });
