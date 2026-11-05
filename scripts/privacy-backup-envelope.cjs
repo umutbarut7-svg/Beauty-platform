@@ -1,7 +1,11 @@
 "use strict";
 // CI fixture only. Key custody, durable storage and production recovery are separate.
 const assert = require("node:assert/strict");
-const { createCipheriv, createDecipheriv, randomBytes } = require("node:crypto");
+const {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+} = require("node:crypto");
 const MAGIC = Buffer.from("ORZELL-SYNTHETIC-BACKUP-V1\n");
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;

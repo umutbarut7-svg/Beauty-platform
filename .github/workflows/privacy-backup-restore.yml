@@ -94,4 +94,3 @@ jobs:
           path: application/apps/api/privacy-restore-evidence.json
           if-no-files-found: error
           retention-days: 7
-
