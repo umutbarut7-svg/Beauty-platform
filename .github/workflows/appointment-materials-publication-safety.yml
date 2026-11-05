@@ -1,0 +1,24 @@
+name: Appointment material publication safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-appointment-materials.py
+      - infra/operations/dispatch-appointment-materials.py
+      - infra/operations/test_appointment_materials_publication.py
+      - .github/operations/appointment-materials-release.json
+      - .github/workflows/publish-appointment-materials.yml
+      - .github/workflows/appointment-materials-publication-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test artifact integrity, schema immutability, sequence and rollback
+        run: python3 -m unittest discover -s infra/operations -p test_appointment_materials_publication.py -v
+      - name: Repeat on the observed host Python 3.9 family without network access
+        run: docker run --rm --network none -v "$PWD:/src:ro" -w /src python:3.9-slim python -m unittest discover -s infra/operations -p test_appointment_materials_publication.py -v
