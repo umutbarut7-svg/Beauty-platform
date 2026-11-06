@@ -54,7 +54,7 @@ pg_restore -h /work --exit-on-error --no-owner --no-privileges -d restored /work
 stage=verify
 test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c 'SELECT count(*)=2 AND sum(stock)=18 AND count(DISTINCT tenant)=2 FROM probe')" = t
 test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c 'SELECT stock FROM probe WHERE tenant=1 AND item=1')" = 7
-test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c \"SELECT count(*) FROM pg_extension WHERE extname='vector'\")" = 1
+test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_extension WHERE extname='vector'")" = 1
 printf 'ORZELL_SYNTHETIC_RESTORE_OK\n'
 """
 
