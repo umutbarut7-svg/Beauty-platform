@@ -1,0 +1,24 @@
+name: Phone-controlled synthetic recovery environment
+on:
+  pull_request:
+    paths:
+      - infra/operations/phone-recovery-rehearsal.py
+      - infra/operations/test_phone_recovery_rehearsal.py
+      - .github/workflows/phone-recovery-rehearsal.yml
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject unsafe environment, inherited credentials and false success
+        run: python3 -m unittest discover -s infra/operations -p test_phone_recovery_rehearsal.py -v
+      - name: Prepare disposable CI runner without swap
+        # CI-only host preparation; the owner's probe never changes swap.
+        run: sudo swapoff -a
+      - name: Restore synthetic PostgreSQL and pgvector in isolated RAM-backed container
+        run: python3 infra/operations/phone-recovery-rehearsal.py --allow-public-image-pull
