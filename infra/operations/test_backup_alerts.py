@@ -99,7 +99,7 @@ class AlertTests(unittest.TestCase):
         self.assertFalse(report["notificationDeliveryVerified"])
         self.assertEqual([x[1] for x in fake.writes()], ["validate-template", "update-stack"])
         update = fake.writes()[-1][2]
-        self.assertIn("orzell-backup-alert-email-v1", update)
+        self.assertIn("orzell-backup-alert-email-v2", update)
         self.assertNotIn("publish", [x[1] for x in fake.calls])
 
     def test_wrong_account_role_template_or_unstable_stack_stops_before_writes(self):
@@ -159,8 +159,51 @@ class AlertTests(unittest.TestCase):
     def test_policy_serialization_order_is_not_false_drift(self):
         fake = Fake(attached=True, confirmed=True)
         fake.policy["Statement"].reverse()
-        fake.policy["Statement"][0]["Action"] = ["sns:*"]
+        fake.policy["Statement"][0]["Action"].reverse()
         self.assertTrue(ALERTS.inspect_route(fake.call)["subscriptionConfirmed"])
+
+    def test_tls_deny_covers_only_valid_topic_actions_and_cannot_be_silently_weakened(self):
+        fake = Fake(attached=True, confirmed=True)
+        deny = fake.policy["Statement"][1]
+        self.assertEqual(deny["Effect"], "Deny")
+        self.assertEqual(deny["Condition"], {"Bool": {"aws:SecureTransport": "false"}})
+        self.assertEqual(set(deny["Action"]), {"sns:AddPermission", "sns:DeleteTopic", "sns:GetDataProtectionPolicy",
+            "sns:GetTopicAttributes", "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource", "sns:Publish",
+            "sns:PutDataProtectionPolicy", "sns:RemovePermission", "sns:SetTopicAttributes", "sns:Subscribe"})
+        deny["Action"].remove("sns:Publish")
+        with self.assertRaisesRegex(ValueError, "POLICY_DIFFERS"):
+            ALERTS.inspect_route(fake.call)
+
+    def test_reviewed_rollback_requires_explicit_mode_and_exact_original_template(self):
+        fake = Fake()
+        fake.stack_status = "UPDATE_ROLLBACK_COMPLETE"
+        with self.assertRaisesRegex(ValueError, "STACK_NOT_STABLE"):
+            ALERTS.apply(fake.call, fake.retention)
+        self.assertEqual(fake.writes(), [])
+        self.assertEqual(ALERTS.apply(fake.call, fake.retention, allow_reviewed_rollback=True)["status"], "ALERT_UPDATE_REQUESTED")
+        for state in ("UPDATE_ROLLBACK_FAILED", "UPDATE_ROLLBACK_IN_PROGRESS", "UPDATE_IN_PROGRESS"):
+            fake = Fake()
+            fake.stack_status = state
+            with self.assertRaisesRegex(ValueError, "STACK_NOT_STABLE"):
+                ALERTS.apply(fake.call, fake.retention, allow_reviewed_rollback=True)
+            self.assertEqual(fake.writes(), [])
+        fake = Fake()
+        fake.stack_status = "UPDATE_ROLLBACK_COMPLETE"
+        fake.template["Resources"]["BackupBucket"]["Properties"]["VersioningConfiguration"] = {}
+        with self.assertRaisesRegex(ValueError, "UNREVIEWED_STACK"):
+            ALERTS.apply(fake.call, fake.retention, allow_reviewed_rollback=True)
+        self.assertEqual(fake.writes(), [])
+
+    def test_v2_avoids_retained_name_without_any_adoption_or_delete_operation(self):
+        fake = Fake()
+        template = ALERTS.desired_template(fake.retention)
+        topic = template["Resources"]["BackupAlertTopic"]
+        self.assertEqual(topic["Properties"]["TopicName"], "ORZELL-Backup-Health-Alerts-v2")
+        self.assertEqual(topic["DeletionPolicy"], "RetainExceptOnCreate")
+        ALERTS.apply(fake.call, fake.retention)
+        self.assertEqual([x[1] for x in fake.writes()], ["validate-template", "update-stack"])
+        self.assertNotIn(("sns", "delete-topic"), ALERTS.READS | ALERTS.WRITES)
+        self.assertNotIn(("cloudformation", "delete-stack"), ALERTS.READS | ALERTS.WRITES)
 
     def test_only_confirmed_recipient_can_receive_one_synthetic_test(self):
         fake = Fake(attached=True, confirmed=True)

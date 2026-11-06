@@ -80,7 +80,8 @@ jobs:
               if not state.endswith('_FAILED') or resource not in known or len(failures) >= 4:
                   continue
               reason = event.get('ResourceStatusReason', '')
-              category = ('ACCESS_DENIED' if re.search('AccessDenied|not authorized|Unauthorized', reason, re.I)
+              category = ('POLICY_ACTION_OUT_OF_SCOPE' if re.search('policy statement action out of service scope', reason, re.I)
+                  else 'ACCESS_DENIED' if re.search('AccessDenied|not authorized|Unauthorized', reason, re.I)
                   else 'NAME_CONFLICT' if re.search('AlreadyExists|already exists', reason, re.I)
                   else 'INVALID_CONFIGURATION' if re.search('InvalidRequest|InvalidParameter|invalid parameter', reason, re.I)
                   else 'REVIEW_REQUIRED')
