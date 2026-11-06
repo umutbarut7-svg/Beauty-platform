@@ -17,7 +17,9 @@ class Fake:
     def __init__(self):
         self.account = PLAN.ACCOUNT
         self.image = {"ImageId": "ami-1234567890abcdef0", "State": "available", "Architecture": "x86_64",
-                      "RootDeviceType": "ebs", "RootDeviceName": "/dev/xvda", "Public": True}
+                      "RootDeviceType": "ebs", "RootDeviceName": "/dev/xvda", "Public": True,
+                      "Name": "al2023-ami-2023.9.20261101.0-kernel-6.1-x86_64", "ImageOwnerAlias": "amazon",
+                      "CreationDate": "2026-11-01T00:00:00.000Z"}
         self.price = "0.045"
         self.storage = "0.088"
         self.next_token = None
@@ -30,12 +32,8 @@ class Fake:
             raise AssertionError("Mutation attempted")
         if operation == "get-caller-identity":
             return {"Account": self.account}
-        if operation == "get-parameter":
-            if args != ("--name", PLAN.AMI_PARAMETER):
-                raise AssertionError("Only public AMI parameter allowed")
-            return {"Parameter": {"Value": "ami-1234567890abcdef0"}}
         if operation == "describe-images":
-            if args != ("--image-ids", "ami-1234567890abcdef0", "--owners", "amazon"):
+            if args != ("--owners", "amazon", "--filters", json.dumps(PLAN.IMAGE_FILTERS)):
                 raise AssertionError("Amazon ownership filter required")
             return {"Images": [self.image]}
         attributes = {item["Field"]: item["Value"] for item in json.loads(args[args.index("--filters") + 1])}
@@ -103,7 +101,7 @@ class HostPlanTests(unittest.TestCase):
         self.assertTrue(value["withinOneDollarPlanningBudget"])
         for field in ["hardBillingCap", "terminationVerified", "accountLossRecoveryVerified", "realRecoveryReady", "provisioned", "privateKeyRead", "productionDataRead"]:
             self.assertFalse(value[field])
-        self.assertEqual(len(fake.calls), 5)
+        self.assertEqual(len(fake.calls), 4)
         fake.price = "10"
         self.assertFalse(PLAN.inspect(fake.read)["withinOneDollarPlanningBudget"])
 
@@ -113,12 +111,35 @@ class HostPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "WRONG_ACCOUNT"):
             PLAN.inspect(fake.read)
         self.assertEqual(len(fake.calls), 1)
-        for key, value in [("Public", False), ("Architecture", "arm64"), ("RootDeviceName", "/dev/sda1")]:
+        for key, value in [("Public", False), ("Architecture", "arm64"), ("RootDeviceName", "/dev/sda1"),
+                           ("ImageOwnerAlias", "marketplace"), ("ProductCodes", ["extra-charge"]), ("Name", "al2023-ami-minimal-2023.9.20261101.0-kernel-6.1-x86_64")]:
             fake = Fake()
             fake.image[key] = value
             with self.assertRaisesRegex(ValueError, "IMAGE_BINDING"):
                 PLAN.inspect(fake.read)
             self.assertFalse(any(service == "pricing" for service, _, _ in fake.calls))
+
+    def test_exact_reviewed_image_id_has_no_mutable_parameter_default(self):
+        parameter = PLAN.template()["Parameters"]["AmiId"]
+        self.assertEqual(parameter["Type"], "AWS::EC2::Image::Id")
+        self.assertNotIn("Default", parameter)
+        self.assertNotIn(("ssm", "get-parameter"), PLAN.READS)
+        fake = Fake()
+        original = fake.read
+        def ambiguous(service, operation, *args):
+            value = original(service, operation, *args)
+            if operation == "describe-images":
+                value["Images"].append({**fake.image, "ImageId": "ami-abcdef01234567890"})
+            return value
+        with self.assertRaisesRegex(ValueError, "AMBIGUOUS"):
+            PLAN.inspect(ambiguous)
+
+    def test_provider_error_is_classified_without_echoing_secret_stderr(self):
+        result = subprocess.CompletedProcess([], 1, "", "An error occurred (AccessDeniedException): secret-token")
+        with patch.object(PLAN.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "PRICING_GET_PRODUCTS_ACCESSDENIEDEXCEPTION") as found:
+                PLAN.aws("pricing", "get-products")
+            self.assertNotIn("secret-token", str(found.exception))
 
     def test_unknown_or_misbound_regional_prices_cannot_be_treated_as_estimates(self):
         changes = [lambda p: p["product"]["attributes"].update(regionCode="us-east-1"),

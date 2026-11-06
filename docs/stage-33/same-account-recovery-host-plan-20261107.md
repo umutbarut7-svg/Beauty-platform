@@ -9,9 +9,18 @@ remains separate.
 `plan-recovery-host.py` prepares a candidate CloudFormation template and reads
 regional pricing. It **cannot provision, update, terminate or delete anything**.
 Its default and print-template modes are offline. The main-only inspection uses
-the existing audit role to read caller identity, the public AL2023 AMI parameter,
-Amazon-owned image metadata and two exact Price List products. A failed or
+the existing audit role to read caller identity, Amazon-owned public AL2023
+image inventory and two exact Price List products. A failed or
 ambiguous price remains unverified; no new IAM permission is requested.
+
+The first actual plan read stopped at the public Parameter Store value request.
+The revised planner therefore uses the already authorized EC2 public image
+inventory with `--owners amazon`, explicit standard AL2023/x86_64/EBS/public
+filters, owner/name/root-device checks and a unique latest creation timestamp.
+Minimal, paid-product and wrong-owner images reject. The template now requires
+the exact reviewed `amiId`; there is no mutable AMI default. No Parameter Store
+permission or other IAM scope was added. Provider read errors expose only an
+allowlisted error category, never raw stderr or credentials.
 
 ## Reviewable candidate
 
@@ -65,3 +74,4 @@ Primary AWS references, checked 7 November 2026:
 - [Public IPv4 pricing](https://aws.amazon.com/vpc/pricing/)
 - [EBS pricing and prorating](https://aws.amazon.com/ebs/pricing/)
 - [T3 specifications and regional price limitation](https://aws.amazon.com/ec2/instance-types/t3/)
+- [Amazon public image inventory](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html)
