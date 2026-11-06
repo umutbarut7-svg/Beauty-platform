@@ -1,0 +1,137 @@
+name: Read-only managed backup health and receipt inspection
+on:
+  pull_request:
+    paths:
+      - infra/operations/inspect-managed-backup.py
+      - infra/operations/test_managed_backup_inspection.py
+      - .github/workflows/managed-backup-inspection.yml
+      - .github/operations/managed-backup-inspection.json
+  push:
+    branches: [main]
+    paths: [.github/operations/managed-backup-inspection.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Reject changed receipts, stale state, mutations and unsafe commands
+        run: python3 -m unittest discover -s infra/operations -p test_managed_backup_inspection.py -v
+      - name: Check exact installed release hashes and host payload bound
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess
+          root = pathlib.Path('infra/operations')
+          names = ['managed-database-backup.py', 'produce-backup.py', 'verified-backup.py', 'backup-manifest.py', 'encrypted-backup.py']
+          for name in names:
+              expected = subprocess.check_output(['git', 'show', '247668b35e8a8d63cdfda3f0e56dbc50be1acdab:infra/operations/' + name])
+              assert (root / name).read_bytes() == expected, 'Installed release needs review'
+          payload = (root / 'install-managed-backup.py').read_bytes() + (root / 'inspect-managed-backup.py').read_bytes()
+          assert len(payload) + 2500 < 24000, 'Inspection payload exceeds bound'
+          PY
+        # The installed revision is needed only for local source comparison.
+  audit:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: backup-health-audit-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read current retention, security configuration and actual alarm state
+        run: python3 infra/operations/audit-managed-backup.py
+  inspect:
+    needs: audit
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: backup-health-inspect-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read host state and one matching S3 object metadata without starting anything
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, time
+          def aws(*args):
+              if args[:2] not in [('sts', 'get-caller-identity'), ('ssm', 'send-command'), ('ssm', 'get-command-invocation')]:
+                  raise SystemExit('Unsupported inspection transport')
+              p = subprocess.run(['aws', *args, '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=35)
+              if p.returncode:
+                  raise SystemExit('Inspection transport unavailable')
+              return json.loads(p.stdout)
+          identity = aws('sts', 'get-caller-identity')
+          if identity.get('Account') != '926642724499' or not identity.get('Arn', '').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'):
+              raise SystemExit('Unexpected operation identity')
+          request = json.loads(pathlib.Path('.github/operations/managed-backup-inspection.json').read_text())
+          if request != {'request_id': 'orzell-managed-backup-inspection-20261106-1', 'mode': 'read-only-health-and-receipt'}:
+              raise SystemExit('Unsupported inspection request')
+          root = pathlib.Path('infra/operations')
+          names = ['managed-database-backup.py', 'produce-backup.py', 'verified-backup.py', 'backup-manifest.py', 'encrypted-backup.py']
+          hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
+          script = 'import types\nINSTALLER = types.ModuleType("backup_read_helpers")\nexec(' + repr((root / 'install-managed-backup.py').read_text()) + ', INSTALLER.__dict__)\nINSPECTION_REQUEST = ' + repr(request) + '\nTOOL_HASHES = ' + repr(hashes) + '\n' + (root / 'inspect-managed-backup.py').read_text()
+          if len(script.encode()) > 24000:
+              raise SystemExit('Inspection payload exceeds bound')
+          response = aws('ssm', 'send-command', '--instance-ids', 'i-09fe7fdb5f10d63b6', '--document-name', 'AWS-RunShellScript', '--parameters', json.dumps({'commands': ['PYTHONDONTWRITEBYTECODE=1 python3 - <<\'ORZELL_BACKUP_READ_ONLY\'\n' + script + '\nORZELL_BACKUP_READ_ONLY'], 'executionTimeout': ['300']}), '--comment', 'Read-only backup health inspection ' + os.environ['GITHUB_RUN_ID'])
+          command_id = response['Command']['CommandId']
+          print('SSM command:', command_id, flush=True)
+          for _ in range(65):
+              time.sleep(5)
+              result = aws('ssm', 'get-command-invocation', '--command-id', command_id, '--instance-id', 'i-09fe7fdb5f10d63b6')
+              if result['Status'] not in ['Pending', 'InProgress', 'Delayed']:
+                  break
+          else:
+              raise SystemExit('Read-only inspection outcome unavailable; inspect existing command')
+          try:
+              report = json.loads(result.get('StandardOutputContent', ''))
+          except ValueError:
+              report = {'status': 'OUTPUT_UNAVAILABLE'}
+          if result['Status'] != 'Success' or report.get('status') != 'MANAGED_BACKUP_INSPECTED':
+              reason = report.get('reason', '')
+              print(json.dumps({'status': 'INSPECTION_FAILED', 'reason': reason if re.fullmatch('[A-Za-z_]{1,100}', reason) else 'INSPECTION_REQUIRED'}))
+              raise SystemExit('Backup inspection did not pass')
+          expected = {'healthy': True, 'timersEnabledAndActive': True, 'remoteMetadataMatchesReceipt': True, 'applicationServicesUnchanged': True, 'databaseRead': False, 'backupBodyRead': False, 'privateKeyRead': False, 'writesPerformed': False, 'restoreVerified': False}
+          if any(report.get(k) is not v for k, v in expected.items()):
+              raise SystemExit('Read-only inspection evidence differs')
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Read-only backup inspection\n\nCommand: `' + command_id + '`\n\n```json\n' + json.dumps(report, indent=2, sort_keys=True) + '\n```\n')
+          if report.get('scheduledBackupObserved') is not True:
+              raise SystemExit('Latest due daily backup not observed; investigate without rerunning backup')
+          PY
