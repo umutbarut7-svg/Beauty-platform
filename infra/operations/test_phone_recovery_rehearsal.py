@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import io
 from unittest.mock import patch
 
 
@@ -120,10 +121,29 @@ class PhoneRecoveryTests(unittest.TestCase):
             (proc / "meminfo").write_text("MemAvailable: 1000000 kB\n")
             with self.assertRaisesRegex(PHONE.Rejected, "ACTIVE_SWAP"):
                 PHONE.host_checks(proc)
+            self.assertTrue(PHONE.host_checks(proc, allow_synthetic_swap=True))
             (proc / "swaps").write_text("Filename Type Size Used Priority\n")
             (proc / "meminfo").write_text("MemAvailable: 1 kB\n")
             with self.assertRaisesRegex(PHONE.Rejected, "MEMORY"):
                 PHONE.host_checks(proc)
+
+    def test_explicit_swap_mode_keeps_production_blocked_and_reports_swap(self):
+        with patch("sys.argv", ["phone-recovery-rehearsal.py", "--synthetic-only-allow-host-swap"]), \
+                patch.object(PHONE, "host_checks", return_value=True) as host, \
+                patch.object(PHONE, "Docker", return_value=FakeDocker()), \
+                patch.object(PHONE.shutil, "disk_usage") as usage, \
+                patch("sys.stdout", new_callable=io.StringIO) as output:
+            usage.return_value.free = 3 * 1024**3
+            self.assertEqual(PHONE.main(), 0)
+            host.assert_called_once_with(allow_synthetic_swap=True)
+            report = json.loads(output.getvalue())
+        self.assertEqual(report["status"], "SYNTHETIC_PROBE_PASSED_HOST_SWAP_REVIEW_REQUIRED")
+        self.assertTrue(report["hostSwapActive"])
+        self.assertFalse(report["productionRestoreVerified"])
+        self.assertFalse(report["realRecoveryReady"])
+        self.assertFalse(report["privateKeyRead"])
+        self.assertFalse(report["productionDataRead"])
+        self.assertIn("ACTIVE_HOST_SWAP_NOT_APPROVED_FOR_REAL_DATA", report["productionRecoveryBlockers"])
 
     def test_docker_cli_drops_inherited_cloud_credentials_and_remote_context(self):
         with patch.dict(PHONE.os.environ, {"AWS_SECRET_ACCESS_KEY": "synthetic", "DOCKER_HOST": "tcp://bad:2375"}):

@@ -63,10 +63,11 @@ class Rejected(Exception):
     pass
 
 
-def host_checks(proc=Path("/proc")):
+def host_checks(proc=Path("/proc"), allow_synthetic_swap=False):
     if os.uname().sysname != "Linux":
         raise Rejected("LINUX_REQUIRED")
-    if len((proc / "swaps").read_text().splitlines()) != 1:
+    swap_active = len((proc / "swaps").read_text().splitlines()) != 1
+    if swap_active and not allow_synthetic_swap:
         raise Rejected("ACTIVE_SWAP_REQUIRES_REVIEW")
     match = re.search(r"^MemAvailable:\s+(\d+) kB$", (proc / "meminfo").read_text(), re.M)
     if not match or int(match[1]) * 1024 < 768 * 1024 * 1024:
@@ -75,12 +76,15 @@ def host_checks(proc=Path("/proc")):
     fd = os.memfd_create("orzell-synthetic-probe", os.MFD_ALLOW_SEALING | os.MFD_CLOEXEC)
     try:
         os.write(fd, b"synthetic")
-        seals = fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE
-        fcntl.fcntl(fd, fcntl.F_ADD_SEALS, seals)
-        if fcntl.fcntl(fd, fcntl.F_GET_SEALS) != seals:
+        # Same stable Linux UAPI as verified-backup.py; some Python builds do
+        # not export the corresponding fcntl names.
+        seals = 0x0001 | 0x0002 | 0x0004 | 0x0008
+        fcntl.fcntl(fd, 1033, seals)
+        if fcntl.fcntl(fd, 1034) != seals:
             raise Rejected("SEALED_MEMORY_UNAVAILABLE")
     finally:
         os.close(fd)
+    return swap_active
 
 
 class Docker:
@@ -174,12 +178,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-public-image-pull", action="store_true",
                         help="Download only the pinned public PostgreSQL image into the local Docker cache")
+    parser.add_argument("--synthetic-only-allow-host-swap", action="store_true",
+                        help="Run only hard-coded fake data with host swap; never approves real recovery")
     args = parser.parse_args()
     try:
-        host_checks()
+        swap_active = host_checks(allow_synthetic_swap=args.synthetic_only_allow_host_swap)
         with tempfile.TemporaryDirectory(prefix="orzell-public-docker-") as config:
             report = rehearse(Docker(config), args.allow_public_image_pull)
-    except (Rejected, OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired) as exc:
+        report["hostSwapActive"] = swap_active
+        report["productionRecoveryBlockers"] = ["HOST_TRUST_AND_REAL_HANDOFF_NOT_VERIFIED"]
+        if swap_active:
+            report["status"] = "SYNTHETIC_PROBE_PASSED_HOST_SWAP_REVIEW_REQUIRED"
+            report["productionRecoveryBlockers"].append("ACTIVE_HOST_SWAP_NOT_APPROVED_FOR_REAL_DATA")
+    except (Rejected, OSError, ValueError, KeyError, IndexError, AttributeError, subprocess.TimeoutExpired) as exc:
         code = str(exc) if isinstance(exc, Rejected) else "ENVIRONMENT_CHECK_FAILED"
         print(json.dumps({"status": "NOT_READY", "reason": code, "productionRestoreVerified": False,
                           "privateKeyRead": False, "productionDataRead": False}))
