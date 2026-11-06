@@ -17,5 +17,8 @@ jobs:
           persist-credentials: false
       - name: Reject unsafe environment, inherited credentials and false success
         run: python3 -m unittest discover -s infra/operations -p test_phone_recovery_rehearsal.py -v
+      - name: Prepare disposable CI runner without swap
+        # CI-only host preparation; the owner's probe never changes swap.
+        run: sudo swapoff -a
       - name: Restore synthetic PostgreSQL and pgvector in isolated RAM-backed container
         run: python3 infra/operations/phone-recovery-rehearsal.py --allow-public-image-pull
