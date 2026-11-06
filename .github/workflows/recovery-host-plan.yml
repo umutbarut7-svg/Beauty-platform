@@ -1,0 +1,52 @@
+name: Same-account synthetic recovery host plan only
+on:
+  pull_request:
+    paths:
+      - infra/operations/plan-recovery-host.py
+      - infra/operations/test_recovery_host_plan.py
+      - .github/workflows/recovery-host-plan.yml
+  push:
+    branches: [main]
+    paths: [.github/workflows/recovery-host-plan.yml]
+permissions: {}
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject production access, billing claims and malformed prices
+        run: python3 -m unittest discover -s infra/operations -p test_recovery_host_plan.py -v
+      - name: Validate candidate template without creating resources
+        run: |
+          python3 -m pip install cfn-lint==1.59.0
+          python3 infra/operations/plan-recovery-host.py --print-template > "$RUNNER_TEMP/recovery-host.json"
+          cfn-lint --template "$RUNNER_TEMP/recovery-host.json" --regions eu-north-1
+  inspect:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: recovery-host-plan-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read public AMI binding and exact regional on-demand prices only
+        run: python3 infra/operations/plan-recovery-host.py --inspect
