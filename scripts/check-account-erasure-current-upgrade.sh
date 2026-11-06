@@ -7,7 +7,7 @@ set -euo pipefail
 test "${CI:-}" = true
 test "${DATABASE_URL:-}" = 'postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public'
 baseline=9c487dc425d157a2a5bb1de9bc48beab63eda90c
-upgrade_url='postgresql://postgres:postgres@localhost:5432/beauty_erasure_upgrade_ci?schema=public'
+upgrade_url='postgresql://postgres:postgres@localhost:5432/beauty_erasure_upgrade_ci'
 admin_url='postgresql://postgres:postgres@localhost:5432/postgres'
 test "$(git rev-parse "$baseline^{commit}")" = "$baseline"
 upgrade_root=$(mktemp -d)
