@@ -113,6 +113,8 @@ def inspect_route(read=aws):
     attributes = read("sns", "get-topic-attributes", "--topic-arn", TOPIC_ARN).get("Attributes", {})
     if attributes.get("Owner") != ACCOUNT or attributes.get("TopicArn") != TOPIC_ARN:
         raise ValueError("ALERT_TOPIC_BINDING_DIFFERS")
+    if attributes.get("KmsMasterKeyId"):
+        raise ValueError("UNREVIEWED_ALERT_ENCRYPTION_KEY")
     if canonical_policy(json.loads(attributes.get("Policy", "null"))) != canonical_policy(topic_policy()):
         raise ValueError("ALERT_TOPIC_POLICY_DIFFERS")
     page = read("sns", "list-subscriptions-by-topic", "--topic-arn", TOPIC_ARN)
@@ -135,6 +137,8 @@ def inspect_route(read=aws):
         raise ValueError("ALERT_SUBSCRIPTION_DIFFERS")
     if json.loads(subscription.get("FilterPolicy", "{}")) != {}:
         raise ValueError("ALERT_FILTER_COULD_DROP_NOTIFICATIONS")
+    if json.loads(subscription.get("RedrivePolicy", "{}")) != {}:
+        raise ValueError("UNREVIEWED_ALERT_REDRIVE_ROUTE")
     return {"notificationRouteConfigured": True, "subscriptionConfirmed": True,
             "notificationDeliveryVerified": False, "notificationRouteStatus": "CONFIRMED_NOT_DELIVERY_PROOF"}
 

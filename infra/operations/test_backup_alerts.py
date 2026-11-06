@@ -26,6 +26,7 @@ class Fake:
         self.stack_status = "UPDATE_COMPLETE"
         self.topic_exists = attached
         self.policy = ALERTS.topic_policy()
+        self.topic_extras = {}
         self.arn = ALERTS.TOPIC_ARN + ":12345678-1234-1234-1234-123456789abc"
         self.subscriptions = [{"Owner": ALERTS.ACCOUNT, "TopicArn": ALERTS.TOPIC_ARN,
             "Protocol": "email", "Endpoint": ALERTS.RECIPIENT,
@@ -51,7 +52,7 @@ class Fake:
         if operation == "get-topic-attributes":
             if not self.topic_exists and kwargs.get("missing_topic"):
                 return None
-            return {"Attributes": {"Owner": ALERTS.ACCOUNT, "TopicArn": ALERTS.TOPIC_ARN, "Policy": json.dumps(self.policy)}}
+            return {"Attributes": {"Owner": ALERTS.ACCOUNT, "TopicArn": ALERTS.TOPIC_ARN, "Policy": json.dumps(self.policy), **self.topic_extras}}
         if operation == "list-subscriptions-by-topic":
             return {"Subscriptions": self.subscriptions}
         if operation == "get-subscription-attributes":
@@ -136,6 +137,8 @@ class AlertTests(unittest.TestCase):
         changes = [lambda f: f.subscriptions.append(copy.deepcopy(f.subscriptions[0])),
                    lambda f: f.subscriptions[0].update(Endpoint="other@example.test"),
                    lambda f: f.subscription.update(FilterPolicy='{"drop":["alarms"]}'),
+                   lambda f: f.subscription.update(RedrivePolicy='{"deadLetterTargetArn":"other"}'),
+                   lambda f: f.topic_extras.update(KmsMasterKeyId="unreviewed-key"),
                    lambda f: f.policy["Statement"][0].update(Principal="*"),
                    lambda f: f.policy["Statement"][0]["Condition"]["ArnEquals"].update({"aws:SourceArn": "*"})]
         for change in changes:
