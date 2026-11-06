@@ -18,6 +18,7 @@ ACCOUNT = '926642724499'
 BUCKET = 'orzell-backups-926642724499-eu-north-1'
 ROLE = 'BeautyPlatformPreview-RuntimeRole-qJeq1ARIaXWh'
 REQUEST = {'request_id': 'orzell-managed-backup-inspection-20261106-1', 'mode': 'read-only-health-and-receipt'}
+RECOVERY_EXPORT = {'request_id': 'orzell-recovery-binding-20261107-1', 'mode': 'read-only-encrypted-snapshot-binding'}
 
 
 def run(args):
@@ -51,9 +52,11 @@ def instant(value):
     return datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
 
-def inspect(request, helper, hashes, execute=run, call=aws, root=ROOT, unit_root=Path('/etc/systemd/system'), now=None):
+def inspect(request, helper, hashes, execute=run, call=aws, root=ROOT, unit_root=Path('/etc/systemd/system'), now=None, recovery_request=None):
     if request != REQUEST or set(hashes) != helper.FILES or not all(re.fullmatch('[0-9a-f]{64}', v) for v in hashes.values()):
         raise ValueError('FIXED_INSPECTION_BINDING_REQUIRED')
+    if recovery_request is not None and recovery_request != RECOVERY_EXPORT:
+        raise ValueError('FIXED_RECOVERY_EXPORT_REQUIRED')
     now = now or datetime.now(timezone.utc)
     root = Path(root)
     release = root / 'releases' / RELEASE
@@ -116,19 +119,36 @@ def inspect(request, helper, hashes, execute=run, call=aws, root=ROOT, unit_root
     due = now.replace(hour=0, minute=15, second=0, microsecond=0)
     expected_day = now.date() if now >= due else (now - timedelta(days=1)).date()
     scheduled = attempt.date() >= expected_day
-    return {'status': 'MANAGED_BACKUP_INSPECTED', 'healthy': True, 'checkedAt': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+    report = {'status': 'MANAGED_BACKUP_INSPECTED', 'healthy': True, 'checkedAt': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'lastSuccessAt': state['lastSuccessAt'], 'ageSeconds': int((now - success).total_seconds()),
             'backupDay': day, 'bytes': receipt['bytes'], 'scheduledBackupObserved': scheduled,
             'timersEnabledAndActive': True, 'serviceResultsSuccessful': True, 'remoteMetadataMatchesReceipt': True,
             'applicationServicesUnchanged': True, 'databaseRead': False, 'backupBodyRead': False,
             'privateKeyRead': False, 'writesPerformed': False, 'restoreVerified': False}
+    if recovery_request is not None:
+        # Return only the exact successful receipt that matched the remote head.
+        # No package/body/key is opened, and no receipt field selects a command.
+        if (not scheduled or not re.fullmatch(r'[A-Za-z0-9+/=_\-.]{1,1024}', receipt['versionId'])
+                or (success - attempt).total_seconds() > 660):
+            raise ValueError('RECOVERY_SNAPSHOT_BINDING_UNAVAILABLE')
+        report['recoveryBinding'] = {
+            'version': 1, 'kind': 'ENCRYPTED_SNAPSHOT_METADATA_ONLY',
+            'region': 'eu-north-1', 'account': ACCOUNT, 'bucket': BUCKET, 'objectKey': key,
+            'versionId': receipt['versionId'], 'packageBytes': receipt['bytes'], 'packageSha256': receipt['sha256'],
+            'backupId': backup_id, 'applicationSha': helper.APPLICATION, 'sourceImage': helper.IMAGE,
+            'snapshotBoundary': 'LIVE_DAILY_SNAPSHOT', 'expectedSigner': SIGNER, 'expectedRecipient': helper.PIN,
+            'notBefore': state['lastAttemptAt'], 'notAfter': state['lastSuccessAt'],
+            'maxPackageBytes': receipt['bytes'], 'maxCipherBytes': receipt['bytes'],
+            'independentRecoveryApproval': False, 'privateKeyRead': False, 'backupBodyRead': False, 'restoreVerified': False}
+    return report
 
 
 if __name__ == '__main__':
     try:
         if os.geteuid() != 0:
             raise ValueError('ROOT_INSPECTION_REQUIRED')
-        report = inspect(globals().get('INSPECTION_REQUEST'), globals().get('INSTALLER'), globals().get('TOOL_HASHES'))
+        report = inspect(globals().get('INSPECTION_REQUEST'), globals().get('INSTALLER'), globals().get('TOOL_HASHES'),
+                         recovery_request=globals().get('RECOVERY_REQUEST'))
         print(json.dumps(report, sort_keys=True))
     except Exception as error:
         # No paths, object identifiers, exception strings, command stderr or data.

@@ -88,8 +88,9 @@ class BackupInspectionTests(unittest.TestCase):
             return self.metadata
         raise AssertionError('Unexpected AWS operation')
 
-    def inspect(self):
-        return CHECK.inspect(copy.deepcopy(CHECK.REQUEST), self.helper, self.hashes, execute=self.execute, call=self.aws, now=self.now)
+    def inspect(self, recovery_request=None):
+        return CHECK.inspect(copy.deepcopy(CHECK.REQUEST), self.helper, self.hashes, execute=self.execute, call=self.aws, now=self.now,
+                             recovery_request=recovery_request)
 
     def test_success_is_metadata_only_and_never_opens_keys(self):
         report = self.inspect()
@@ -98,6 +99,54 @@ class BackupInspectionTests(unittest.TestCase):
         self.assertFalse(report['restoreVerified'])
         self.assertFalse(any('signing/' in p or '.cms' in p or '.zip' in p for p in self.reads))
         self.assertEqual([x[:2] for x in self.aws_calls], [('sts', 'get-caller-identity'), ('s3api', 'head-object')])
+        self.assertNotIn('recoveryBinding', report)
+
+    def test_recovery_binding_matches_verified_snapshot_without_extra_reads(self):
+        self.inspect()
+        original_reads, original_calls = list(self.reads), list(self.aws_calls)
+        self.reads, self.aws_calls = [], []
+        self.receipt['unrelatedSecret'] = 'never-export-this'
+        report = self.inspect(CHECK.RECOVERY_EXPORT)
+        binding = report['recoveryBinding']
+        self.assertEqual(binding['objectKey'], self.state['lastReceiptKey'])
+        self.assertEqual(binding['versionId'], self.metadata['VersionId'])
+        self.assertEqual(binding['packageBytes'], self.metadata['ContentLength'])
+        self.assertEqual(binding['packageSha256'], self.receipt['sha256'])
+        self.assertEqual(binding['notBefore'], self.state['lastAttemptAt'])
+        self.assertEqual(binding['notAfter'], self.state['lastSuccessAt'])
+        self.assertEqual(binding['expectedSigner'], CHECK.SIGNER)
+        self.assertEqual(binding['expectedRecipient'], INSTALL.PIN)
+        self.assertNotIn('never-export-this', json.dumps(report))
+        self.assertFalse(binding['independentRecoveryApproval'])
+        self.assertFalse(binding['restoreVerified'])
+        self.assertEqual(self.reads, original_reads)
+        self.assertEqual(self.aws_calls, original_calls)
+
+    def test_recovery_export_rejects_unknown_request_before_any_read(self):
+        with self.assertRaisesRegex(ValueError, 'FIXED_RECOVERY_EXPORT'):
+            self.inspect({**CHECK.RECOVERY_EXPORT, 'mode': 'read-private-key'})
+        self.assertEqual(self.reads, [])
+        self.assertEqual(self.aws_calls, [])
+
+    def test_recovery_export_rejects_due_snapshot_missing_or_broad_time_window(self):
+        self.now = datetime(2026, 11, 7, 0, 20, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ValueError, 'RECOVERY_SNAPSHOT'):
+            self.inspect(CHECK.RECOVERY_EXPORT)
+        self.setUp()
+        self.state['lastSuccessAt'] = self.receipt['verifiedAt'] = '2026-11-06T00:12:00Z'
+        with self.assertRaisesRegex(ValueError, 'RECOVERY_SNAPSHOT'):
+            self.inspect(CHECK.RECOVERY_EXPORT)
+
+    def test_recovery_export_does_not_publish_arbitrary_version_or_accept_remote_drift(self):
+        for value in ['version\nsecret', 'a' * 1025]:
+            self.setUp()
+            self.receipt['versionId'] = self.metadata['VersionId'] = value
+            with self.assertRaisesRegex(ValueError, 'RECOVERY_SNAPSHOT'):
+                self.inspect(CHECK.RECOVERY_EXPORT)
+        self.setUp()
+        self.metadata['VersionId'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'REMOTE_RECEIPT'):
+            self.inspect(CHECK.RECOVERY_EXPORT)
 
     def test_stale_failed_future_and_abandoned_states_fail_before_remote_read(self):
         original = copy.deepcopy(self.state)
