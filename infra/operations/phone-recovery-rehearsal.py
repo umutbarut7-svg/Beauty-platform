@@ -28,13 +28,18 @@ SQL_PROBE = r"""
 set -eu
 umask 077
 ulimit -c 0
+stage=identity
+trap 'rc=$?; if [ "$rc" != 0 ]; then printf "ORZELL_PROBE_FAILED_STAGE_%s\n" "$stage"; fi' EXIT
 test "$(id -u)" = 999
 test -z "$(env | sed -n '/^AWS_/p; /^OPENAI_/p; /^DATABASE_URL=/p')"
 test "$(find /sys/class/net -mindepth 1 -maxdepth 1 | wc -l)" -eq 1
 test -d /sys/class/net/lo
+stage=initdb
 initdb -D /work/db --auth-local=trust --auth-host=reject --no-sync >/dev/null 2>&1
+stage=postgres_start
 pg_ctl -D /work/db -l /work/server.log -o "-c listen_addresses='' -c unix_socket_directories=/work -c shared_buffers=16MB -c max_connections=8 -c log_statement=none" -w start >/dev/null 2>&1
-trap 'pg_ctl -D /work/db -m immediate -w stop >/dev/null 2>&1 || true' EXIT
+trap 'rc=$?; if [ "$rc" != 0 ]; then printf "ORZELL_PROBE_FAILED_STAGE_%s\n" "$stage"; fi; pg_ctl -D /work/db -m immediate -w stop >/dev/null 2>&1 || true' EXIT
+stage=create_databases
 createdb -h /work source
 createdb -h /work restored
 psql -X -h /work -d source -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
@@ -42,9 +47,11 @@ CREATE EXTENSION vector;
 CREATE TABLE probe (tenant integer NOT NULL, item integer NOT NULL, stock integer NOT NULL, embedding vector(3), PRIMARY KEY(tenant,item));
 INSERT INTO probe VALUES (1,1,7,'[1,0,0]'),(2,1,11,'[0,1,0]');
 SQL
+stage=dump_restore
 pg_dump -h /work -Fc -f /work/probe.dump source
 pg_restore --list /work/probe.dump >/dev/null
 pg_restore -h /work --exit-on-error --no-owner --no-privileges -d restored /work/probe.dump >/dev/null 2>&1
+stage=verify
 test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c 'SELECT count(*)=2 AND sum(stock)=18 AND count(DISTINCT tenant)=2 FROM probe')" = t
 test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c 'SELECT stock FROM probe WHERE tenant=1 AND item=1')" = 7
 test "$(psql -X -h /work -d restored -At -v ON_ERROR_STOP=1 -c \"SELECT count(*) FROM pg_extension WHERE extname='vector'\")" = 1
@@ -87,7 +94,9 @@ class Docker:
         result = subprocess.run(self.prefix + list(args), env=self.env, capture_output=True,
                                 text=True, timeout=timeout, check=False)
         if result.returncode:
-            raise Rejected("DOCKER_OPERATION_FAILED")
+            stage = re.search(r"^ORZELL_PROBE_FAILED_STAGE_([a-z_]+)$", result.stdout, re.M)
+            code = "SYNTHETIC_STAGE_" + stage[1].upper() if stage else "DOCKER_" + args[0].upper() + "_FAILED"
+            raise Rejected(code)
         if len(result.stdout) > 128 * 1024:
             raise Rejected("UNEXPECTED_DOCKER_OUTPUT")
         return result.stdout.strip()
