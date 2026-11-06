@@ -141,6 +141,19 @@ class HostPlanTests(unittest.TestCase):
                 PLAN.aws("pricing", "get-products")
             self.assertNotIn("secret-token", str(found.exception))
 
+    def test_same_release_selects_newest_kernel_but_not_arbitrary_image_id(self):
+        fake = Fake()
+        original = fake.read
+        def two_kernels(service, operation, *args):
+            value = original(service, operation, *args)
+            if operation == "describe-images":
+                value["Images"].append({**fake.image, "ImageId": "ami-abcdef01234567890",
+                    "Name": "al2023-ami-2023.9.20261101.0-kernel-6.12-x86_64"})
+            return value
+        value = PLAN.inspect(two_kernels)
+        self.assertEqual(value["amiId"], "ami-abcdef01234567890")
+        self.assertEqual(value["amiSelectionRule"], "LATEST_PUBLIC_RELEASE_THEN_NEWEST_KERNEL")
+
     def test_unknown_or_misbound_regional_prices_cannot_be_treated_as_estimates(self):
         changes = [lambda p: p["product"]["attributes"].update(regionCode="us-east-1"),
                    lambda p: p["terms"]["OnDemand"].clear(),

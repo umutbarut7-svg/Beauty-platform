@@ -48,5 +48,5 @@ jobs:
           mask-aws-account-id: true
           output-credentials: false
           disable-retry: true
-      - name: Read Amazon public image inventory and exact regional prices without Parameter Store access
+      - name: Read public image release and kernel preference with exact regional pricing
         run: python3 infra/operations/plan-recovery-host.py --inspect
