@@ -63,6 +63,12 @@ class Rejected(Exception):
     pass
 
 
+def progress(step):
+    # Only fixed operation names, never arguments, paths, environment or raw
+    # provider errors. Flush so a disconnected mobile terminal can read a log.
+    print(json.dumps({"step": step}), flush=True)
+
+
 def host_checks(proc=Path("/proc"), allow_synthetic_swap=False):
     if os.uname().sysname != "Linux":
         raise Rejected("LINUX_REQUIRED")
@@ -95,8 +101,15 @@ class Docker:
         self.env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8"}
 
     def __call__(self, *args, timeout=30):
-        result = subprocess.run(self.prefix + list(args), env=self.env, capture_output=True,
-                                text=True, timeout=timeout, check=False)
+        operation = "DOCKER_" + args[0].upper()
+        progress(operation)
+        try:
+            result = subprocess.run(self.prefix + list(args), env=self.env, capture_output=True,
+                                    text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            raise Rejected(operation + "_TIMEOUT") from None
+        except OSError as exc:
+            raise Rejected(operation + "_OSERROR_" + str(exc.errno)) from None
         if result.returncode:
             stage = re.search(r"^ORZELL_PROBE_FAILED_STAGE_([a-z_]+)$", result.stdout, re.M)
             code = "SYNTHETIC_STAGE_" + stage[1].upper() if stage else "DOCKER_" + args[0].upper() + "_FAILED"
@@ -141,11 +154,13 @@ def check_container(value, name, image_id):
 
 def rehearse(docker, allow_pull):
     root = docker("info", "--format", "{{.DockerRootDir}}")
+    progress("DOCKER_DISK_CHECK")
     if not root.startswith("/") or shutil.disk_usage(root).free < 2 * 1024**3:
         raise Rejected("INSUFFICIENT_DOCKER_DISK")
     if allow_pull:
         docker("pull", IMAGE, timeout=240)
     image = json.loads(docker("image", "inspect", IMAGE))[0]
+    progress("IMAGE_IDENTITY_CHECK")
     image_id = image["Id"]
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) or IMAGE not in image.get("RepoDigests", []):
         raise Rejected("PINNED_IMAGE_NOT_VERIFIED")
@@ -153,11 +168,13 @@ def rehearse(docker, allow_pull):
     try:
         docker(*create_args(name, image_id))
         value = json.loads(docker("inspect", name))[0]
+        progress("CONTAINER_BEFORE_START_CHECK")
         check_container(value, name, image_id)
         if value["State"]["Status"] != "created":
             raise Rejected("UNEXPECTED_CONTAINER_STATE")
         output = docker("start", "--attach", name, timeout=180)
         value = json.loads(docker("inspect", name))[0]
+        progress("CONTAINER_AFTER_EXIT_CHECK")
         check_container(value, name, image_id)
         if output != MARKER or value["State"]["Status"] != "exited" or value["State"]["ExitCode"] != 0:
             raise Rejected("SYNTHETIC_RESTORE_FAILED")
@@ -165,7 +182,9 @@ def rehearse(docker, allow_pull):
         # A unique, tool-generated name is the only removal target. No prune,
         # production container name, external volume or user-selected path.
         docker("rm", "--force", "--volumes", name)
-    if json.loads(docker("ps", "--all", "--filter", "name=^/" + name + "$", "--format", "json") or "null"):
+    remaining = docker("ps", "--all", "--filter", "name=^/" + name + "$", "--format", "json")
+    progress("CLEANUP_RESULT_CHECK")
+    if json.loads(remaining or "null"):
         raise Rejected("CLEANUP_NOT_VERIFIED")
     return {"status": "SYNTHETIC_RECOVERY_ENVIRONMENT_PASSED", "image": IMAGE,
             "syntheticRestoreVerified": True, "network": "none", "publicPorts": False,
@@ -182,7 +201,9 @@ def main():
                         help="Run only hard-coded fake data with host swap; never approves real recovery")
     args = parser.parse_args()
     try:
+        progress("HOST_CHECK")
         swap_active = host_checks(allow_synthetic_swap=args.synthetic_only_allow_host_swap)
+        progress("PUBLIC_DOCKER_WORKSPACE")
         with tempfile.TemporaryDirectory(prefix="orzell-public-docker-") as config:
             report = rehearse(Docker(config), args.allow_public_image_pull)
         report["hostSwapActive"] = swap_active
@@ -193,7 +214,8 @@ def main():
     except (Rejected, OSError, ValueError, KeyError, IndexError, AttributeError, subprocess.TimeoutExpired) as exc:
         code = str(exc) if isinstance(exc, Rejected) else "ENVIRONMENT_CHECK_FAILED"
         print(json.dumps({"status": "NOT_READY", "reason": code, "productionRestoreVerified": False,
-                          "privateKeyRead": False, "productionDataRead": False}))
+                          "errorType": type(exc).__name__, "errno": getattr(exc, "errno", None),
+                          "privateKeyRead": False, "productionDataRead": False}), flush=True)
         return 1
     print(json.dumps(report))
     return 0
