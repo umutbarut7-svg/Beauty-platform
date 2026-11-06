@@ -1,0 +1,26 @@
+{
+  "services": {
+    "api": {
+      "environment": {
+        "MVP_PHOTO_POLICY_REVIEWED": "false",
+        "MVP_AI_ENABLED": "false",
+        "MVP_SEMANTIC_ENABLED": "false",
+        "MVP_PHOTO_POLICY_VERSION": "orzell-photo-2026-10-27-draft-1",
+        "MVP_PHOTO_NOTICE": "ORZELL App işletmecisi Umut Barut, seçtiğiniz fotoğrafı, isteğinizi, hedefinizi ve analiz sorularına verdiğiniz yanıtları saç görünümünüz hakkında danışmanlık sunmak için işler. Fotoğraf özel AWS depolamasında tutulur; analizi başlattığınızda fotoğraf ve danışmanlık için gerekli bilgiler OpenAI API hizmetine iletilir. Fotoğrafınız işletmelere veya diğer kullanıcılara otomatik olarak paylaşılmaz. ORZELL sistemlerinde fotoğraf ve danışmanlık içeriğine erişim en geç 24 saat sonunda kapatılır; içerik silme sürecine alınır. Fiziksel silmede geçici hata olursa silme yeniden denenir ve tamamlanana kadar tamamlandı olarak gösterilmez. Onay ve işlem kanıtı için 90 günlük saklama süresi uygulanır. İzninizi fotoğraf izinleri bölümünden geri çekebilirsiniz; bu işlem yeni analizi ve mevcut fotoğraf/sonuç erişimini kapatır. OpenAI tarafındaki saklama, kendi veri işleme koşullarına tabidir: https://developers.openai.com/api/docs/guides/your-data . store:false ayarı sağlayıcıda sıfır saklama garantisi değildir; varsayılan kötüye kullanım izleme kayıtları belirli istisnalarla 30 güne kadar tutulabilir. Analiz kimlik tespiti veya tıbbi teşhis amacı taşımaz; profesyonel değerlendirmesinin yerine geçmez ve sonuç garantisi vermez. Başvuru ve destek: orzellapp@gmail.com.",
+        "MVP_PHOTO_RETENTION_HOURS": "24",
+        "MVP_PHOTO_AUDIT_RETENTION_DAYS": "90"
+      }
+    },
+    "worker": {
+      "environment": {
+        "MVP_PHOTO_POLICY_REVIEWED": "false",
+        "MVP_AI_ENABLED": "false",
+        "MVP_SEMANTIC_ENABLED": "false",
+        "MVP_PHOTO_POLICY_VERSION": "orzell-photo-2026-10-27-draft-1",
+        "MVP_PHOTO_NOTICE": "ORZELL App işletmecisi Umut Barut, seçtiğiniz fotoğrafı, isteğinizi, hedefinizi ve analiz sorularına verdiğiniz yanıtları saç görünümünüz hakkında danışmanlık sunmak için işler. Fotoğraf özel AWS depolamasında tutulur; analizi başlattığınızda fotoğraf ve danışmanlık için gerekli bilgiler OpenAI API hizmetine iletilir. Fotoğrafınız işletmelere veya diğer kullanıcılara otomatik olarak paylaşılmaz. ORZELL sistemlerinde fotoğraf ve danışmanlık içeriğine erişim en geç 24 saat sonunda kapatılır; içerik silme sürecine alınır. Fiziksel silmede geçici hata olursa silme yeniden denenir ve tamamlanana kadar tamamlandı olarak gösterilmez. Onay ve işlem kanıtı için 90 günlük saklama süresi uygulanır. İzninizi fotoğraf izinleri bölümünden geri çekebilirsiniz; bu işlem yeni analizi ve mevcut fotoğraf/sonuç erişimini kapatır. OpenAI tarafındaki saklama, kendi veri işleme koşullarına tabidir: https://developers.openai.com/api/docs/guides/your-data . store:false ayarı sağlayıcıda sıfır saklama garantisi değildir; varsayılan kötüye kullanım izleme kayıtları belirli istisnalarla 30 güne kadar tutulabilir. Analiz kimlik tespiti veya tıbbi teşhis amacı taşımaz; profesyonel değerlendirmesinin yerine geçmez ve sonuç garantisi vermez. Başvuru ve destek: orzellapp@gmail.com.",
+        "MVP_PHOTO_RETENTION_HOURS": "24",
+        "MVP_PHOTO_AUDIT_RETENTION_DAYS": "90"
+      }
+    }
+  }
+}
