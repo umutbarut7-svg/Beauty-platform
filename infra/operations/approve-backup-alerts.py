@@ -19,7 +19,9 @@ REGION = "eu-north-1"
 STACK = "orzell-encrypted-backup-storage-v1"
 ROLE = "BeautyPlatformPreview-RuntimeRole-qJeq1ARIaXWh"
 RECIPIENT = "orzellapp@gmail.com"  # Explicitly selected by the owner on 6 November.
-TOPIC_NAME = "ORZELL-Backup-Health-Alerts"
+# v1 was rolled back after an invalid SNS policy. Its retained topic is not adopted
+# or deleted: v2 has a distinct fixed name and remains in the same managed stack.
+TOPIC_NAME = "ORZELL-Backup-Health-Alerts-v2"
 TOPIC_ARN = "arn:aws:sns:" + REGION + ":" + ACCOUNT + ":" + TOPIC_NAME
 ALARM_ARN = "arn:aws:cloudwatch:" + REGION + ":" + ACCOUNT + ":alarm:ORZELL-DatabaseBackup-Health"
 RETENTION_URL = "https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/0a1f4cd0a9fdb36c8a0ab1ee44d93ba59d338747/infra/operations/approve-backup-retention.py"
@@ -48,11 +50,16 @@ def retention_module():
 
 
 def topic_policy():
-    return {"Version": "2012-10-17", "Statement": [
+    return {"Version": "2012-10-17", "Id": "OrzellBackupAlertsV2", "Statement": [
         {"Sid": "OnlyTheBackupAlarm", "Effect": "Allow", "Principal": {"Service": "cloudwatch.amazonaws.com"},
          "Action": "sns:Publish", "Resource": TOPIC_ARN,
          "Condition": {"ArnEquals": {"aws:SourceArn": ALARM_ARN}, "StringEquals": {"aws:SourceAccount": ACCOUNT}}},
-        {"Sid": "DenyInsecureTransport", "Effect": "Deny", "Principal": "*", "Action": "sns:*", "Resource": TOPIC_ARN,
+        # Topic resource policies accept topic actions, not every SNS API action.
+        # Keep TLS denial for every documented topic-policy action explicitly.
+        {"Sid": "DenyInsecureTransport", "Effect": "Deny", "Principal": "*", "Action": [
+            "sns:AddPermission", "sns:DeleteTopic", "sns:GetDataProtectionPolicy", "sns:GetTopicAttributes",
+            "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource", "sns:Publish",
+            "sns:PutDataProtectionPolicy", "sns:RemovePermission", "sns:SetTopicAttributes", "sns:Subscribe"], "Resource": TOPIC_ARN,
          "Condition": {"Bool": {"aws:SecureTransport": "false"}}},
     ]}
 
@@ -61,7 +68,7 @@ def desired_template(retention=None):
     retention = retention or retention_module()
     result = copy.deepcopy(retention.desired_template(retention.base_module()))
     result["Resources"]["BackupAlertTopic"] = {
-        "Type": "AWS::SNS::Topic", "DeletionPolicy": "Retain", "UpdateReplacePolicy": "Retain",
+        "Type": "AWS::SNS::Topic", "DeletionPolicy": "RetainExceptOnCreate", "UpdateReplacePolicy": "Retain",
         "Properties": {"TopicName": TOPIC_NAME, "Tags": [{"Key": "Project", "Value": "ORZELL"}]}}
     result["Resources"]["BackupAlertPolicy"] = {"Type": "AWS::SNS::TopicPolicy", "Properties": {
         "Topics": [{"Ref": "BackupAlertTopic"}], "PolicyDocument": topic_policy()}}
@@ -98,9 +105,10 @@ def aws(service, operation, *arguments, missing_topic=False):
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def stack_template(call):
+def stack_template(call, allow_reviewed_rollback=False):
     stacks = call("cloudformation", "describe-stacks", "--stack-name", STACK).get("Stacks", [])
-    if len(stacks) != 1 or stacks[0].get("StackStatus") != "UPDATE_COMPLETE":
+    accepted = ("UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE") if allow_reviewed_rollback else ("UPDATE_COMPLETE",)
+    if len(stacks) != 1 or stacks[0].get("StackStatus") not in accepted:
         raise ValueError("STACK_NOT_STABLE_NO_RETRY")
     if {x["ParameterKey"]: x["ParameterValue"] for x in stacks[0].get("Parameters", [])} != {"RuntimeRoleName": ROLE}:
         raise ValueError("STACK_ROLE_DIFFERS")
@@ -159,12 +167,12 @@ def inspect_alarm(read, retention, attached):
             raise ValueError("UNREVIEWED_NOTIFICATION_ROUTE")
 
 
-def apply(call=aws, retention=None):
+def apply(call=aws, retention=None, allow_reviewed_rollback=False):
     retention = retention or retention_module()
     identity = call("sts", "get-caller-identity")
     if identity.get("Account") != ACCOUNT:
         raise ValueError("WRONG_ACCOUNT")
-    current = stack_template(call)
+    current = stack_template(call, allow_reviewed_rollback)
     desired = desired_template(retention)
     if current == desired:
         inspect_alarm(call, retention, True)
@@ -178,7 +186,7 @@ def apply(call=aws, retention=None):
     call("cloudformation", "validate-template", "--template-body", body)
     response = call("cloudformation", "update-stack", "--stack-name", STACK, "--template-body", body,
          "--parameters", json.dumps([{"ParameterKey": "RuntimeRoleName", "UsePreviousValue": True}]),
-         "--capabilities", "CAPABILITY_NAMED_IAM", "--client-request-token", "orzell-backup-alert-email-v1")
+         "--capabilities", "CAPABILITY_NAMED_IAM", "--client-request-token", "orzell-backup-alert-email-v2")
     if not response.get("StackId", "").startswith("arn:aws:cloudformation:" + REGION + ":" + ACCOUNT + ":stack/" + STACK + "/"):
         raise ValueError("ALERT_UPDATE_UNCERTAIN_NO_RETRY")
     return {"status": "ALERT_UPDATE_REQUESTED", "notificationRouteConfigured": False,
@@ -230,9 +238,12 @@ def main():
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--print-template", action="store_true")
     parser.add_argument("--wait-and-send-test", action="store_true")
+    parser.add_argument("--resume-after-reviewed-rollback", action="store_true")
     args = parser.parse_args()
     if args.wait_and_send_test and not args.apply:
         parser.error("--wait-and-send-test requires --apply")
+    if args.resume_after_reviewed_rollback and not args.apply:
+        parser.error("--resume-after-reviewed-rollback requires --apply")
     if not args.apply and not args.print_template:
         print(json.dumps({"status": "PLAN_ONLY_NO_NETWORK", "recipient": RECIPIENT,
                           "newComputeOrKeys": False, "emailsSent": False, "productionRestoreVerified": False}))
@@ -241,7 +252,7 @@ def main():
         if args.print_template:
             print(json.dumps(desired_template(), indent=2))
         else:
-            print(json.dumps(apply(), sort_keys=True), flush=True)
+            print(json.dumps(apply(allow_reviewed_rollback=args.resume_after_reviewed_rollback), sort_keys=True), flush=True)
             if args.wait_and_send_test:
                 print(json.dumps(wait_and_test(), sort_keys=True), flush=True)
     except Exception as error:

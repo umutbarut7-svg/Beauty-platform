@@ -40,3 +40,35 @@ restore has occurred. Real restore, deletion operations/retention, independent
 review, device and photo-quality acceptances remain open. Stage 33 is NOT PASS.
 
 Primary reference: [AWS CloudWatch alarm notifications](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Notify_Users_Alarm_Changes.html).
+
+## Reviewed rollback repair, 7 November
+
+The actual read-only audit at 6 November 21:37 UTC observed
+`UPDATE_ROLLBACK_COMPLETE`, `BackupAlertPolicy CREATE_FAILED / InvalidRequest`,
+and the dependent alarm update failure. This is not an email-confirmation wait.
+The original topic policy used `sns:*`, which includes actions outside SNS topic
+resource-policy scope. The repair enumerates the eleven documented topic-policy
+actions in the TLS deny and adds a fixed policy Id. The existing source-alarm and
+account restrictions remain exact. The event diagnostic distinguishes an actual
+out-of-scope action message from other invalid configuration errors; until that
+specific observation, this is a source defect consistent with the real failure,
+not a claim that the full provider reason was read.
+
+Use the explicit `--apply --resume-after-reviewed-rollback --wait-and-send-test`
+owner command. The rollback exception accepts only `UPDATE_ROLLBACK_COMPLETE`,
+and still requires the exact original template, role binding and live original
+alarm. In-progress/failed rollback and any drift remain rejected. A distinct
+fixed `ORZELL-Backup-Health-Alerts-v2` topic avoids adopting or deleting a v1 topic
+that may have been retained outside the stack. The old topic's existence is not
+yet verified and cleanup is not performed. The new topic uses
+`RetainExceptOnCreate` so a failed first creation will not leave another retained
+unused topic. The stack, backup bucket/policies, retention and timer setup stay
+the same. No automatic apply or provisioning permission is added to GitHub.
+
+Local tests and CloudFormation schema checks validate preparation only; owner
+execution, actual stable stack/route, recipient confirmation and inbox delivery
+remain separate acceptance steps. Do not reuse the original v1 command.
+
+References: [Valid SNS topic-policy actions](https://docs.aws.amazon.com/sns/latest/dg/sns-access-policy-language-api-permissions-reference.html),
+[TLS policy example](https://docs.aws.amazon.com/sns/latest/dg/sns-security-best-practices.html),
+[RetainExceptOnCreate](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-attribute-deletionpolicy.html).
