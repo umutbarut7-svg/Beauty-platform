@@ -1,5 +1,45 @@
 # ORZELL ilerleme ve tekrar önleme kaydı
 
+## Güncel devam noktası — 6 Kasım 2026
+
+Bu bölüm aşağıdaki 25 Ekim tarihli notların güncel teslim ve açık iş durumunu
+yeniler. Geçmiş test kanıtları korunur; tamamlanan kullanıcı işlemleri tekrar
+başlangıç görevi yapılmaz.
+
+| İş                                                         | Güncel kanıt ve durum                                                                                                                                                                                              | Kalan sınır                                                                                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Sunucu: hizmet, ürün/stok, B2B, randevuya bağlı toplu sarf | [Yayın 41985890032](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41985890032) başarılı; uygulama 2e56def282c97a804a2f3d6c9b36a53b42a09df5                                                        | Yeni gerçek iş kaydı veya fiziksel cihaz kabulü yerine geçmez                                                                |
+| İç TestFlight                                              | [Yükleme 41986541356](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41986541356) başarılı; 1151 için Apple VALID / IN_BETA_TESTING ve mevcut iç grup erişimi 5 Kasım 10:32 İstanbul'da kaydedildi | 1151 fiziksel kurulumu teyitli değil; sırf sürüm değişti diye bütün eski testler tekrarlanmaz                                |
+| iPhone danışmanlık kaydı                                   | 31 Ekim: aktif liste, kayıtlı analiz/plan ve danışmanlık yeniden açıldığında tamamlanmış eşleştirme sonucu gözlendi                                                                                                | 1111 bağı kullanıcının güncelleme beyanına dayanır; kaynak fotoğraf/öneri kalitesi veya yeni sonuç yazma kabulü değildir     |
+| Gerçek şifreli veritabanı yedeği                           | [Aktivasyon 42117150578](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/42117150578): gerçek yedek yükleme/geri okuma, 30 gün saklama ve Türkiye 03:00 günlük/saatlik sağlık zamanlayıcıları aktif | İlk aktivasyon yedeği sonraki takvim çalışmasının kanıtı değildir; bağımsız gerçek restore açık                              |
+| Kurtarma anahtarı                                          | Bağımsız alıcı anahtarı üretildi ve sahibine teslim edildi; telefonda saklama kullanıcıca teyitli                                                                                                                  | Yeniden üretilmez, aynı saklama sorusu sorulmaz; özel anahtar sunucuya/CI'a aktarılmaz                                       |
+| Hesap silme PR47                                           | [Son aday](https://github.com/umutbarut7-svg/Beauty-platform/pull/47) 6ea4503a7c152ed6a257d2d2c01275fdd0c58a54; kalıcı silme, makbuz ve offline hesap karantinası test edilmiş taslak                              | Birleştirilmedi; işletme geçmişinin alan/süre kuralları, fiilî kuyruk sorumlusu/hedefi ve bağımsız incelemeci girdileri açık |
+
+**Bugünkü gerçek devam sonucu:** [PR107](https://github.com/umutbarut7-svg/Beauty-platform/pull/107)
+ana dala alındı; test edilen ağaç ile merge ağacı aynı. [Salt-okuyan denetim
+42192830567](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/42192830567)
+6 Kasım 12:09 İstanbul'da günlük yedeği doğruladı: başarı saati
+**03:00:07 İstanbul**, şifreli paket **667.424 bayt**. Depodaki güncel sürüm/boyut/
+SHA256/AES256 bilgileri yükleme makbuzuyla aynı, iki timer enabled/active ve servis
+sonuçları başarılı. CloudFormation UPDATE_COMPLETE, 30 günlük kural ve güvenlik
+policy'leri doğrulandı; gerçek CloudWatch alarm durumu **OK**. Kişiye bildirim
+rotası hâlâ yok. Veritabanı/yedek içeriği/özel anahtar okunmadı; servis veya metrik
+yazılmadı. Bu tek günün gerçek gözlemidir; kesintisiz gelecek çalışma garantisi
+değildir. Gerçek restore kabulü değildir.
+
+Sıradaki işler: sahibin ayrı anahtarıyla
+korumalı bağımsız ortamda gerçek yedeği çözme/ayrı DB'ye restore, tenant ve stok/B2B
+bütünlüğü, hesap/fotoğraf karantinası ve ölçülen kurtarma süresi; gerçek kişiye
+alarm teslimi için belirlenmiş kanal; eksik ürün/politika/cihaz kabulleri.
+Konsol alarmı e-posta/SMS teslimi değildir. 24 saatlik takvim hedefi ölçülmüş RPO
+veya sıfır veri kaybı garantisi değildir.
+
+Ortak hizmet/sarf akışı bir kez doğrulanır; katalogdaki her satır için aynı tur
+tekrarlanmaz. Önceki ücretli fotoğraf/eşleştirme/indeksleme onayları tek kullanımdır;
+yeni çağrı için önceki onay tekrar kullanılmaz. AŞAMA33 **NOT PASS**.
+
+## Tarihsel kayıt — 25 Ekim 2026
+
 25 Ekim 2026 tarihinde konuşma teyitleri, kaynak kod ve GitHub sonuçları karşılaştırıldı.
 Çalışmaya devam ederken önce bu kayıt ve ilgili değişikliğin gerçek kaynak farkı okunur.
 

@@ -1,5 +1,39 @@
 # ORZELL physical-device acceptance
 
+## Current delivery and focused acceptance — 6 November 2026
+
+The latest recorded internal delivery is **ORZELL 1.0.0 (1151)**, application
+`2e56def282c97a804a2f3d6c9b36a53b42a09df5`, signed build source
+`9c487dc425d157a2a5bb1de9bc48beab63eda90c`. The
+[upload run](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41986541356)
+completed; Apple VALID / IN_BETA_TESTING and existing internal-group access were
+recorded on 5 November at 10:32 Istanbul. Physical installation of 1151 has not
+been confirmed. The 1031 candidate and closed-gate descriptions below are
+historical; they are not the current delivery or a request to repeat every row.
+
+Prior owner confirmations of login, booking, business selection, confirmation
+and cancellation remain accepted within their recorded scope. On 31 October,
+active consultations, stored analysis/plan and reopening completed matching
+results were observed on the owner's iPhone; association with 1111 relies on the
+owner's update report because screenshots did not display a build number. These
+checks do not establish source-photo fidelity, useful recommendation quality or
+the newer result/satisfaction write paths.
+
+The delivered 1151 additions are shared service cards, product/inventory and B2B
+surfaces, and appointment-linked batch material consumption. Automated shared
+flow coverage is recorded in
+[the materials delivery](appointment-materials-publication-20261105.md).
+Test the shared behavior once; do not request a separate full test for each
+catalog entry. Physical Android acceptance remains open; emulator/simulator
+evidence cannot close it. A new paid photo/matching/indexing call requires its
+own explicit authorization; the previous one-use test must not be repeated.
+
+Use the current [progress ledger](progress-ledger.md) for outstanding gates.
+An actual new device observation is required to close a device row; updating
+this document does not create one.
+
+## Historical 1031 acceptance specification
+
 Application candidate: `589fe6ae579cf10beac4f045c9b6e26e2e13e2c0`.
 Store identity is `com.orzell.app`. Signed ORZELL 1.0.0 (1031) upload run 40178879560 passed; Apple processing and existing internal-group access were verified by run 40179728482 as VALID / IN_BETA_TESTING on 25 October 2026.
 Earlier installation/login reports for build 1011 do not certify the new candidate.
