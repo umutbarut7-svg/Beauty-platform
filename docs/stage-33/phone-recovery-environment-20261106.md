@@ -45,11 +45,35 @@ hazırlanıp doğrulanmalıdır. Bu araç gerçek veri almaya hazır olduğunu s
 Gerçek yedeğin bağımsız kurtarması ve ölçülen RTO henüz yok; AŞAMA33 NOT PASS.
 Anahtar muhafazası, 30 günlük saklama ve önceki telefon testleri tekrar istenmez.
 
+## Sahibin CloudShell sonucu — swap açık
+
+6 Kasım 19:34 İstanbul ekranında kullanıcı değişmez PR110 komutunu çalıştırdı;
+`NOT_READY / ACTIVE_SWAP_REQUIRES_REVIEW`, productionRestoreVerified=false,
+privateKeyRead=false, productionDataRead=false görüldü. Bu beklenen duruş,
+PostgreSQL provasının çalıştığı anlamına gelmez. Önceki komut aynı haliyle tekrar
+istenmez; host swap'ı kapatılmaz veya temizlenmiş sayılmaz.
+
+Yalnız bu aracın sabit yapay verilerini denemek için açık
+`--synthetic-only-allow-host-swap` seçeneği eklendi. Varsayılan swap reddi korunur.
+Seçenek herhangi bir paket/dump/anahtar yolu veya gerçek veri kabulü eklemez;
+konteynerin ağ/kimlik/mount/log/bellek sınırlarını değiştirmez. Host swap açıksa
+başarılı sentetik çıktı `SYNTHETIC_PROBE_PASSED_HOST_SWAP_REVIEW_REQUIRED`,
+hostSwapActive=true ve ACTIVE_HOST_SWAP_NOT_APPROVED_FOR_REAL_DATA engelini
+raporlar. productionRestoreVerified ve realRecoveryReady daima false kalır.
+Tmpfs içeriğinin host swap'a yazılabileceği için bu sonuç anahtarlı/gerçek
+kurtarma ortamı kabulü değildir. CI da artık swapoff çalıştırmadan aynı açık
+sentetik seçeneği kullanır. Kullanıcının yeni sonuç çıktısı henüz görülmedi.
+
+Python derlemesinin fcntl mühür sabitlerini dışa aktarmadığı durumda, mevcut
+verified-backup.py ile aynı kararlı Linux UAPI değerleri kullanılır; gerçek
+kernel mühür ekleme/okuma kontrolü atlanmaz.
+
 ## Birincil kaynaklar
 
 - [CloudShell mobil erişim ve Docker desteği](https://docs.aws.amazon.com/cloudshell/latest/userguide/working-with-aws-cloudshell.html)
 - [CloudShell kaynakları](https://docs.aws.amazon.com/cloudshell/latest/userguide/vm-specs.html)
 - [CloudShell şifreleme](https://docs.aws.amazon.com/cloudshell/latest/userguide/data-encryption.html)
+- [Docker tmpfs ve host swap sınırlaması](https://docs.docker.com/engine/storage/tmpfs/)
 
 Kaynaklar 6 Kasım 2026'da incelendi. TLS ve disk şifrelemesi, host yöneticisinden
 yalıtım veya bağımsız gerçek kurtarma kanıtı olarak sunulmaz.
