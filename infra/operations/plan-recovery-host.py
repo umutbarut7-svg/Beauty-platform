@@ -162,9 +162,11 @@ def inspect(call=aws):
         created = datetime.fromisoformat(image.get("CreationDate", "").replace("Z", "+00:00"))
         if created.tzinfo is None or created > datetime.now(timezone.utc):
             raise ValueError("PUBLIC_IMAGE_DATE_UNVERIFIED")
-        dated.append((created, image["ImageId"]))
+        kernel = tuple(int(part) for part in re.search(r"-kernel-([0-9.]+)-x86_64$", image["Name"])[1].split("."))
+        dated.append((created, kernel, image["ImageId"]))
     latest = max(value[0] for value in dated)
-    selected = {ami for created, ami in dated if created == latest}
+    newest_kernel = max(kernel for created, kernel, _ in dated if created == latest)
+    selected = {ami for created, kernel, ami in dated if created == latest and kernel == newest_kernel}
     if len(selected) != 1:
         raise ValueError("AMBIGUOUS_LATEST_PUBLIC_IMAGE")
     ami = selected.pop()
@@ -174,7 +176,8 @@ def inspect(call=aws):
     hourly = compute + storage * DISK_GB / Decimal(720) + IPV4_HOURLY
     cost = hourly * HOURS
     return {"status": "SAME_ACCOUNT_SYNTHETIC_HOST_PLAN_PRICED", "checkedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "region": REGION, "instanceType": INSTANCE, "amiId": ami, "rootDiskGiB": DISK_GB, "plannedHours": HOURS,
+        "region": REGION, "instanceType": INSTANCE, "amiId": ami, "amiSelectionRule": "LATEST_PUBLIC_RELEASE_THEN_NEWEST_KERNEL",
+        "rootDiskGiB": DISK_GB, "plannedHours": HOURS,
         "computeUsdPerHour": str(compute), "gp3UsdPerGbMonth": str(storage), "publicIpv4UsdPerHour": str(IPV4_HOURLY),
         "estimatedUsdPerHour": str(hourly.quantize(Decimal("0.000001"))), "estimatedTwoHourUsd": str(cost.quantize(Decimal("0.000001"))),
         "withinOneDollarPlanningBudget": cost <= REVIEW_BUDGET, "excludesTaxAndDataTransfer": True,

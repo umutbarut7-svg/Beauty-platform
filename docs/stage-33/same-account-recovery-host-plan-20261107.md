@@ -16,7 +16,10 @@ ambiguous price remains unverified; no new IAM permission is requested.
 The first actual plan read stopped at the public Parameter Store value request.
 The revised planner therefore uses the already authorized EC2 public image
 inventory with `--owners amazon`, explicit standard AL2023/x86_64/EBS/public
-filters, owner/name/root-device checks and a unique latest creation timestamp.
+filters and owner/name/root-device checks. Among the latest published timestamp,
+prefer the highest numeric kernel version, then require a unique image ID.
+This explicitly handles two Amazon kernel variants published together; remaining
+ambiguity still rejects instead of picking a lexical image ID.
 Minimal, paid-product and wrong-owner images reject. The template now requires
 the exact reviewed `amiId`; there is no mutable AMI default. No Parameter Store
 permission or other IAM scope was added. Provider read errors expose only an
