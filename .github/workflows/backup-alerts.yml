@@ -1,0 +1,81 @@
+name: Backup alert preparation and read-only route verification
+on:
+  pull_request:
+    paths:
+      - infra/operations/approve-backup-alerts.py
+      - infra/operations/test_backup_alerts.py
+      - infra/operations/audit-backup-foundation.py
+      - infra/operations/audit-managed-backup.py
+      - infra/operations/test_managed_backup_audit.py
+      - .github/workflows/backup-alerts.yml
+  push:
+    branches: [main]
+    paths: [.github/workflows/backup-alerts.yml]
+permissions: {}
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check fixed recipient, original backup boundaries and confirmation states
+        run: |
+          python3 -m unittest discover -s infra/operations -p test_backup_alerts.py -v
+          python3 -m unittest discover -s infra/operations -p test_backup_foundation_audit.py -v
+          python3 -m unittest discover -s infra/operations -p test_managed_backup_audit.py -v
+      - name: Validate exact updated CloudFormation schema
+        run: |
+          python3 -m pip install cfn-lint==1.59.0
+          python3 infra/operations/approve-backup-alerts.py --print-template > "$RUNNER_TEMP/backup-alerts.json"
+          cfn-lint --template "$RUNNER_TEMP/backup-alerts.json" --regions eu-north-1
+  audit:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: backup-alert-read-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read actual alarm route, recipient confirmation and storage safety
+        run: python3 infra/operations/audit-managed-backup.py
+      - name: Verify the existing bridge has no infrastructure provisioning grant
+        run: |
+          python3 - <<'PY'
+          import json, runpy, subprocess
+          bridge = runpy.run_path('infra/operations/bootstrap.py')
+          audit = runpy.run_path('infra/operations/audit-backup-foundation.py')
+          def read(operation, *extra):
+              result = subprocess.run(['aws', 'iam', operation, '--role-name', bridge['ROLE'], *extra,
+                  '--output', 'json', '--no-cli-pager', '--cli-connect-timeout', '5', '--cli-read-timeout', '20'],
+                  capture_output=True, text=True, timeout=30)
+              if result.returncode:
+                  raise SystemExit('Bridge permission inspection unavailable')
+              return json.loads(result.stdout)
+          inline = read('list-role-policies')
+          attached = read('list-attached-role-policies')
+          if (inline.get('IsTruncated') or attached.get('IsTruncated') or attached.get('AttachedPolicies')
+                  or inline.get('PolicyNames') != [bridge['POLICY_NAME']]):
+              raise SystemExit('Bridge permission scope requires review')
+          policy = read('get-role-policy', '--policy-name', bridge['POLICY_NAME']).get('PolicyDocument')
+          if audit['normalize'](policy) != audit['normalize'](bridge['POLICY']):
+              raise SystemExit('Bridge permission scope differs')
+          print(json.dumps({'existingBridgeScopeVerified': True, 'cloudProvisioningGranted': False, 'identityExpanded': False}))
+          PY

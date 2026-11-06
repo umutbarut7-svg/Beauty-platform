@@ -15,7 +15,9 @@ ROLE = "BeautyPlatformPreview-RuntimeRole-qJeq1ARIaXWh"
 ALLOWED = {("sts", "get-caller-identity"), ("cloudformation", "describe-stacks"),
            ("cloudformation", "get-template"), ("iam", "get-role-policy"),
            ("s3api", "get-bucket-policy"), ("s3api", "get-bucket-encryption"),
-           ("s3api", "get-bucket-lifecycle-configuration"), ("cloudwatch", "describe-alarms")}
+           ("s3api", "get-bucket-lifecycle-configuration"), ("cloudwatch", "describe-alarms"),
+           ("sns", "get-topic-attributes"), ("sns", "list-subscriptions-by-topic"),
+           ("sns", "get-subscription-attributes")}
 
 
 def aws(service, operation, *arguments):

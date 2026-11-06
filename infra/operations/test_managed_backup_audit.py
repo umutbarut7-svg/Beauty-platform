@@ -44,6 +44,50 @@ class ManagedAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ALARM_DIFFERS"):
             AUDIT.inspect(self.fixture.read)
 
+    def alert_fixture(self, confirmed=False):
+        import test_backup_alerts
+        alerts = test_backup_alerts.Fake(attached=True, confirmed=confirmed)
+        self.fixture.responses["get-template"]["TemplateBody"] = alerts.template
+        self.fixture.responses["describe-alarms"]["MetricAlarms"] = [alerts.alarm]
+
+        def read(service, operation, *args):
+            if service == "sns":
+                self.assertIn((service, operation), AUDIT.AUDIT.ALLOWED)
+                return alerts.call(service, operation, *args)
+            return self.fixture.read(service, operation, *args)
+        return alerts, read
+
+    def test_approved_pending_email_is_not_reported_as_confirmed_or_delivered(self):
+        alerts, read = self.alert_fixture()
+        report = AUDIT.inspect(read)
+        self.assertFalse(report["notificationRouteConfigured"])
+        self.assertFalse(report["notificationDeliveryVerified"])
+        self.assertEqual(report["notificationRouteStatus"], "PENDING_EMAIL_CONFIRMATION")
+        self.assertEqual(alerts.writes(), [])
+
+    def test_approved_confirmed_route_is_not_inbox_delivery_proof(self):
+        alerts, read = self.alert_fixture(confirmed=True)
+        report = AUDIT.inspect(read)
+        self.assertTrue(report["notificationRouteConfigured"])
+        self.assertFalse(report["notificationDeliveryVerified"])
+        self.assertEqual(alerts.writes(), [])
+
+    def test_approved_template_does_not_override_disabled_or_redirected_live_alarm(self):
+        for key, value in [("ActionsEnabled", False), ("AlarmActions", []), ("OKActions", ["other"])]:
+            self.setUp()
+            alerts, read = self.alert_fixture(confirmed=True)
+            alerts.alarm[key] = value
+            with self.assertRaisesRegex(ValueError, "DISABLED|NOTIFICATION"):
+                AUDIT.inspect(read)
+            self.assertEqual(alerts.writes(), [])
+
+    def test_an_extra_actual_recipient_is_rejected(self):
+        alerts, read = self.alert_fixture(confirmed=True)
+        alerts.subscriptions.append(copy.deepcopy(alerts.subscriptions[0]))
+        with self.assertRaisesRegex(ValueError, "EXACTLY_ONE"):
+            AUDIT.inspect(read)
+        self.assertEqual(alerts.writes(), [])
+
 
 if __name__ == "__main__":
     unittest.main()
