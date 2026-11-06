@@ -57,6 +57,43 @@ def inspect(read=AUDIT.aws):
     return report
 
 
+def failure_diagnostics(read=AUDIT.aws):
+    """Bounded observations after a failed gate; never turn them into readiness."""
+    report = {"status": "MANAGED_BACKUP_DIAGNOSTIC_ONLY", "productionReady": False,
+              "notificationDeliveryVerified": False, "stackStatus": "UNVERIFIED",
+              "notificationRouteStatus": "UNVERIFIED"}
+    try:
+        identity = read("sts", "get-caller-identity")
+        prefix = "arn:aws:sts::" + MANAGED.ACCOUNT + ":assumed-role/BeautyPlatformGitHubAudit/"
+        if identity.get("Account") != MANAGED.ACCOUNT or not identity.get("Arn", "").startswith(prefix):
+            return report
+        stacks = read("cloudformation", "describe-stacks", "--stack-name", RETENTION.STACK).get("Stacks", [])
+        if len(stacks) != 1:
+            return report
+        stack = stacks[0]
+        parameters = {item["ParameterKey"]: item["ParameterValue"] for item in stack.get("Parameters", [])}
+        if parameters != {"RuntimeRoleName": ALERTS.ROLE}:
+            return report
+        state = stack.get("StackStatus", "")
+        if not isinstance(state, str) or not re.fullmatch(
+                r"(?:CREATE|UPDATE|DELETE|ROLLBACK|UPDATE_ROLLBACK|IMPORT|IMPORT_ROLLBACK)_"
+                r"(?:IN_PROGRESS|FAILED|COMPLETE|COMPLETE_CLEANUP_IN_PROGRESS)", state):
+            return report
+        report["stackStatus"] = state
+        actual = read("cloudformation", "get-template", "--stack-name", RETENTION.STACK).get("TemplateBody")
+        actual = json.loads(actual) if isinstance(actual, str) else actual
+        if actual == ALERTS.desired_template(RETENTION):
+            # The route can be pending while CloudFormation still updates.
+            # This observation does not bypass the failed full storage/alarm gate.
+            report["notificationRouteStatus"] = ALERTS.inspect_route(read)["notificationRouteStatus"]
+        elif actual == RETENTION.desired_template(RETENTION.base_module()):
+            report["notificationRouteStatus"] = "NOT_INSTALLED"
+    except Exception:
+        # Provider errors, stack reasons, endpoints and credentials are never emitted.
+        pass
+    return report
+
+
 if __name__ == "__main__":
     try:
         request = json.loads(Path(".github/operations/managed-backup-activation.json").read_text())
@@ -74,4 +111,5 @@ if __name__ == "__main__":
             summary.write("## Managed backup cloud readiness\n\n```json\n" + json.dumps(report, indent=2) + "\n```\n")
     except Exception as error:
         print(json.dumps({"status": "MANAGED_CLOUD_NOT_READY", "reason": str(error) if isinstance(error, ValueError) else type(error).__name__}))
+        print(json.dumps(failure_diagnostics(), sort_keys=True))
         raise SystemExit(1)

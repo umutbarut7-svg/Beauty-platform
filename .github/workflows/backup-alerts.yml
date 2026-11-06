@@ -54,7 +54,7 @@ jobs:
           mask-aws-account-id: true
           output-credentials: false
           disable-retry: true
-      - name: Read actual alarm route, recipient confirmation and storage safety
+      - name: Read alarm route and storage safety with bounded failure diagnostics
         run: python3 infra/operations/audit-managed-backup.py
       - name: Verify the existing bridge has no infrastructure provisioning grant
         run: |

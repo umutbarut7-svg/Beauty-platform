@@ -88,6 +88,62 @@ class ManagedAuditTests(unittest.TestCase):
             AUDIT.inspect(read)
         self.assertEqual(alerts.writes(), [])
 
+    def test_failed_gate_reports_pending_route_during_stack_update_without_passing(self):
+        alerts, read = self.alert_fixture()
+        self.fixture.responses["describe-stacks"]["Stacks"][0]["StackStatus"] = "UPDATE_IN_PROGRESS"
+        with self.assertRaisesRegex(ValueError, "STACK_NOT_CREATE_COMPLETE"):
+            AUDIT.inspect(read)
+        report = AUDIT.failure_diagnostics(read)
+        self.assertEqual(report["stackStatus"], "UPDATE_IN_PROGRESS")
+        self.assertEqual(report["notificationRouteStatus"], "PENDING_EMAIL_CONFIRMATION")
+        self.assertFalse(report["productionReady"])
+        self.assertFalse(report["notificationDeliveryVerified"])
+        self.assertNotIn("notificationRouteConfigured", report)
+        self.assertEqual(alerts.writes(), [])
+
+    def test_rollback_status_is_visible_but_never_ready(self):
+        self.fixture.responses["describe-stacks"]["Stacks"][0]["StackStatus"] = "UPDATE_ROLLBACK_COMPLETE"
+        report = AUDIT.failure_diagnostics(self.fixture.read)
+        self.assertEqual(report["stackStatus"], "UPDATE_ROLLBACK_COMPLETE")
+        self.assertEqual(report["notificationRouteStatus"], "NOT_INSTALLED")
+        self.assertFalse(report["productionReady"])
+
+    def test_wrong_identity_or_role_cannot_supply_diagnostics(self):
+        for field in ("identity", "role"):
+            self.setUp()
+            if field == "identity":
+                self.fixture.responses["get-caller-identity"]["Account"] = "other"
+            else:
+                self.fixture.responses["describe-stacks"]["Stacks"][0]["Parameters"] = []
+            report = AUDIT.failure_diagnostics(self.fixture.read)
+            self.assertEqual(report["stackStatus"], "UNVERIFIED")
+            self.assertEqual(report["notificationRouteStatus"], "UNVERIFIED")
+
+    def test_changed_template_or_route_cannot_be_reported_as_approved(self):
+        alerts, read = self.alert_fixture(confirmed=True)
+        alerts.subscriptions.append(copy.deepcopy(alerts.subscriptions[0]))
+        self.assertEqual(AUDIT.failure_diagnostics(read)["notificationRouteStatus"], "UNVERIFIED")
+        self.fixture.responses["get-template"]["TemplateBody"] = {"unexpected": "private value"}
+        self.assertEqual(AUDIT.failure_diagnostics(read)["notificationRouteStatus"], "UNVERIFIED")
+        self.assertEqual(alerts.writes(), [])
+
+    def test_confirmed_route_is_not_readiness_or_inbox_delivery(self):
+        alerts, read = self.alert_fixture(confirmed=True)
+        report = AUDIT.failure_diagnostics(read)
+        self.assertEqual(report["notificationRouteStatus"], "CONFIRMED_NOT_DELIVERY_PROOF")
+        self.assertFalse(report["productionReady"])
+        self.assertFalse(report["notificationDeliveryVerified"])
+        self.assertEqual(alerts.writes(), [])
+
+    def test_provider_error_and_arbitrary_stack_status_are_not_exposed(self):
+        def unavailable(*args):
+            raise ValueError("secret-provider-value")
+        self.assertNotIn("secret-provider-value", str(AUDIT.failure_diagnostics(unavailable)))
+        self.fixture.responses["describe-stacks"]["Stacks"][0]["StackStatus"] = "private-stack-reason"
+        report = AUDIT.failure_diagnostics(self.fixture.read)
+        self.assertNotIn("private-stack-reason", str(report))
+        self.assertEqual(report["stackStatus"], "UNVERIFIED")
+
 
 if __name__ == "__main__":
     unittest.main()
