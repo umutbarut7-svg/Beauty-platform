@@ -18,10 +18,17 @@ def module(name, filename):
 AUDIT = module("foundation_audit", "audit-backup-foundation.py")
 RETENTION = module("approved_retention", "approve-backup-retention.py")
 MANAGED = module("managed_backup", "managed-database-backup.py")
+ALERTS = module("approved_alerts", "approve-backup-alerts.py")
 
 
 def inspect(read=AUDIT.aws):
     desired = RETENTION.desired_template(RETENTION.base_module())
+    actual = read("cloudformation", "get-template", "--stack-name", RETENTION.STACK).get("TemplateBody")
+    actual = json.loads(actual) if isinstance(actual, str) else actual
+    alert_template = ALERTS.desired_template(RETENTION)
+    alerts_attached = actual == alert_template
+    if alerts_attached:
+        desired = alert_template
     report = AUDIT.inspect(read, expected_template=desired, accepted_statuses=("UPDATE_COMPLETE",))
     lifecycle = read("s3api", "get-bucket-lifecycle-configuration", "--bucket", MANAGED.BUCKET,
                      "--expected-bucket-owner", MANAGED.ACCOUNT)
@@ -34,10 +41,19 @@ def inspect(read=AUDIT.aws):
     for field in ["AlarmName", "Namespace", "MetricName", "Dimensions", "Statistic", "Period", "EvaluationPeriods", "DatapointsToAlarm", "ComparisonOperator", "Threshold", "TreatMissingData"]:
         if alarm.get(field) != expected[field]:
             raise ValueError("BACKUP_HEALTH_ALARM_DIFFERS")
-    if any(alarm.get(field, []) for field in ["AlarmActions", "OKActions", "InsufficientDataActions"]):
-        raise ValueError("UNREVIEWED_NOTIFICATION_ROUTE")
+    for field in ["AlarmActions", "OKActions", "InsufficientDataActions"]:
+        expected_actions = [ALERTS.TOPIC_ARN] if alerts_attached and field != "InsufficientDataActions" else []
+        if alarm.get(field, []) != expected_actions:
+            raise ValueError("UNREVIEWED_NOTIFICATION_ROUTE")
+    if alerts_attached and alarm.get("ActionsEnabled") is not True:
+        raise ValueError("ALERT_ACTIONS_DISABLED")
     report.update({"status": "MANAGED_BACKUP_CLOUD_READY", "retentionDays": 30, "noncurrentCleanupDays": 1,
                    "alarmState": alarm.get("StateValue", "UNKNOWN"), "notificationRouteConfigured": False})
+    if alerts_attached:
+        report.update(ALERTS.inspect_route(read))
+    else:
+        report.update({"subscriptionConfirmed": False, "notificationDeliveryVerified": False,
+                       "notificationRouteStatus": "NOT_INSTALLED"})
     return report
 
 
