@@ -13,14 +13,15 @@ import subprocess
 ACCOUNT = "926642724499"
 REGION = "eu-north-1"
 STACK = "orzell-recovery-rehearsal-v1"
-AMI_PARAMETER = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+IMAGE_FILTERS = [{"Name": "name", "Values": ["al2023-ami-2023.*-kernel-*-x86_64"]},
+                 {"Name": "state", "Values": ["available"]}, {"Name": "architecture", "Values": ["x86_64"]},
+                 {"Name": "root-device-type", "Values": ["ebs"]}, {"Name": "is-public", "Values": ["true"]}]
 INSTANCE = "t3.medium"
 DISK_GB = 20
 HOURS = 2
 IPV4_HOURLY = Decimal("0.005")
 REVIEW_BUDGET = Decimal("1.00")
-READS = {("sts", "get-caller-identity"), ("ssm", "get-parameter"),
-         ("ec2", "describe-images"), ("pricing", "get-products")}
+READS = {("sts", "get-caller-identity"), ("ec2", "describe-images"), ("pricing", "get-products")}
 SESSION_ACTIONS = ["ssm:UpdateInstanceInformation", "ssmmessages:CreateControlChannel",
                    "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
 PROBE_URL = "https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/3bf45d331d16ba633d41f5e06ef959d6e421587d/infra/operations/phone-recovery-rehearsal.py"
@@ -93,7 +94,7 @@ def template():
                 "Tags": [{"Key": "Project", "Value": "ORZELLRecoveryRehearsal"}, {"Key": "DataScope", "Value": "SyntheticOnly"}]}}
     }
     return {"AWSTemplateFormatVersion": "2010-09-09", "Description": "Paid same-account synthetic recovery host candidate; no real-key handoff installed.",
-        "Parameters": {"AmiId": {"Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>", "Default": AMI_PARAMETER}},
+        "Parameters": {"AmiId": {"Type": "AWS::EC2::Image::Id", "Description": "Exact Amazon AL2023 x86_64 AMI ID from the reviewed cost plan; no mutable default"}},
         "Rules": {"FixedAccountAndRegion": {"Assertions": [
             {"Assert": {"Fn::Equals": [{"Ref": "AWS::AccountId"}, ACCOUNT]}, "AssertDescription": "Reviewed account only"},
             {"Assert": {"Fn::Equals": [{"Ref": "AWS::Region"}, REGION]}, "AssertDescription": "Reviewed Stockholm region only"}]}},
@@ -108,7 +109,10 @@ def aws(service, operation, *args):
     result = subprocess.run(["aws", service, operation, *args, "--region", region, "--output", "json", "--no-cli-pager",
         "--cli-connect-timeout", "5", "--cli-read-timeout", "20"], capture_output=True, text=True, timeout=35)
     if result.returncode:
-        raise ValueError("HOST_PLAN_READ_UNAVAILABLE_" + service.upper() + "_" + operation.upper().replace("-", "_"))
+        match = re.search(r"\(([A-Za-z]+)\)", result.stderr)
+        code = match[1] if match and match[1] in {"AccessDenied", "AccessDeniedException", "UnauthorizedOperation",
+            "ExpiredToken", "ThrottlingException", "RequestLimitExceeded", "ValidationError"} else "Unavailable"
+        raise ValueError("HOST_PLAN_READ_UNAVAILABLE_" + service.upper() + "_" + operation.upper().replace("-", "_") + "_" + code.upper())
     return json.loads(result.stdout)
 
 
@@ -142,14 +146,28 @@ def rate(call, attributes, unit):
 def inspect(call=aws):
     if call("sts", "get-caller-identity").get("Account") != ACCOUNT:
         raise ValueError("WRONG_ACCOUNT")
-    ami = call("ssm", "get-parameter", "--name", AMI_PARAMETER).get("Parameter", {}).get("Value", "")
-    if not re.fullmatch(r"ami-[0-9a-f]{8,17}", ami):
-        raise ValueError("PUBLIC_AMI_PARAMETER_REQUIRED")
-    images = call("ec2", "describe-images", "--image-ids", ami, "--owners", "amazon").get("Images", [])
-    if (len(images) != 1 or images[0].get("ImageId") != ami or images[0].get("State") != "available"
-            or images[0].get("Architecture") != "x86_64" or images[0].get("RootDeviceType") != "ebs"
-            or images[0].get("RootDeviceName") != "/dev/xvda" or not images[0].get("Public")):
-        raise ValueError("AMAZON_LINUX_IMAGE_BINDING_REQUIRED")
+    # Public EC2 image inventory needs no Parameter Store value-read permission.
+    page = call("ec2", "describe-images", "--owners", "amazon", "--filters", json.dumps(IMAGE_FILTERS))
+    images = page.get("Images", [])
+    if page.get("NextToken") or not images:
+        raise ValueError("COMPLETE_PUBLIC_IMAGE_LIST_REQUIRED")
+    dated = []
+    for image in images:
+        if (not re.fullmatch(r"ami-[0-9a-f]{8,17}", image.get("ImageId", "")) or image.get("ImageOwnerAlias") != "amazon"
+                or not re.fullmatch(r"al2023-ami-2023\.\d+\.\d{8}\.\d+-kernel-\d+(?:\.\d+){1,3}-x86_64", image.get("Name", ""))
+                or image.get("State") != "available" or image.get("Architecture") != "x86_64"
+                or image.get("RootDeviceType") != "ebs" or image.get("RootDeviceName") != "/dev/xvda"
+                or image.get("Public") is not True or image.get("ProductCodes")):
+            raise ValueError("AMAZON_LINUX_IMAGE_BINDING_REQUIRED")
+        created = datetime.fromisoformat(image.get("CreationDate", "").replace("Z", "+00:00"))
+        if created.tzinfo is None or created > datetime.now(timezone.utc):
+            raise ValueError("PUBLIC_IMAGE_DATE_UNVERIFIED")
+        dated.append((created, image["ImageId"]))
+    latest = max(value[0] for value in dated)
+    selected = {ami for created, ami in dated if created == latest}
+    if len(selected) != 1:
+        raise ValueError("AMBIGUOUS_LATEST_PUBLIC_IMAGE")
+    ami = selected.pop()
     compute = rate(call, {"regionCode": REGION, "instanceType": INSTANCE, "operatingSystem": "Linux", "tenancy": "Shared",
         "preInstalledSw": "NA", "capacitystatus": "Used", "operation": "RunInstances", "licenseModel": "No License required"}, "Hrs")
     storage = rate(call, {"regionCode": REGION, "productFamily": "Storage", "volumeApiName": "gp3"}, "GB-Mo")
