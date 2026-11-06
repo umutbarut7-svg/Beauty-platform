@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import io
+import subprocess
 from unittest.mock import patch
 
 
@@ -55,7 +56,7 @@ class FakeDocker:
 
 class PhoneRecoveryTests(unittest.TestCase):
     def run_probe(self, docker, pull=False):
-        with patch.object(PHONE.shutil, "disk_usage") as usage:
+        with patch.object(PHONE.shutil, "disk_usage") as usage, patch.object(PHONE, "progress"):
             usage.return_value.free = 3 * 1024**3
             return PHONE.rehearse(docker, pull)
 
@@ -136,7 +137,7 @@ class PhoneRecoveryTests(unittest.TestCase):
             usage.return_value.free = 3 * 1024**3
             self.assertEqual(PHONE.main(), 0)
             host.assert_called_once_with(allow_synthetic_swap=True)
-            report = json.loads(output.getvalue())
+            report = json.loads(output.getvalue().splitlines()[-1])
         self.assertEqual(report["status"], "SYNTHETIC_PROBE_PASSED_HOST_SWAP_REVIEW_REQUIRED")
         self.assertTrue(report["hostSwapActive"])
         self.assertFalse(report["productionRestoreVerified"])
@@ -144,6 +145,20 @@ class PhoneRecoveryTests(unittest.TestCase):
         self.assertFalse(report["privateKeyRead"])
         self.assertFalse(report["productionDataRead"])
         self.assertIn("ACTIVE_HOST_SWAP_NOT_APPROVED_FOR_REAL_DATA", report["productionRecoveryBlockers"])
+
+    def test_timeout_reports_only_operation_without_raw_exception_data(self):
+        with patch.object(PHONE.subprocess, "run", side_effect=subprocess.TimeoutExpired(
+                "synthetic-sensitive-placeholder", 1, output="not-for-log", stderr="not-for-log")), \
+                patch("sys.stdout", new_callable=io.StringIO) as output:
+            with self.assertRaisesRegex(PHONE.Rejected, "^DOCKER_PULL_TIMEOUT$"):
+                PHONE.Docker("/tmp/public-config")("pull", PHONE.IMAGE)
+        self.assertEqual(json.loads(output.getvalue()), {"step": "DOCKER_PULL"})
+
+    def test_missing_docker_binary_is_classified_without_raw_path(self):
+        with patch.object(PHONE.subprocess, "run", side_effect=FileNotFoundError(2, "not-for-log")), \
+                patch.object(PHONE, "progress"):
+            with self.assertRaisesRegex(PHONE.Rejected, "^DOCKER_INFO_OSERROR_2$"):
+                PHONE.Docker("/tmp/public-config")("info")
 
     def test_docker_cli_drops_inherited_cloud_credentials_and_remote_context(self):
         with patch.dict(PHONE.os.environ, {"AWS_SECRET_ACCESS_KEY": "synthetic", "DOCKER_HOST": "tcp://bad:2375"}):

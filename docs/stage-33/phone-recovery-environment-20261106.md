@@ -68,6 +68,25 @@ Python derlemesinin fcntl mühür sabitlerini dışa aktarmadığı durumda, mev
 verified-backup.py ile aynı kararlı Linux UAPI değerleri kullanılır; gerçek
 kernel mühür ekleme/okuma kontrolü atlanmaz.
 
+## Yenilenmiş terminal ve ayrıntılı adım kaydı
+
+19:44 sayfa yenilenmesinde önceki çıktı kayboldu. 19:52 salt-okuyan kontrolde
+prova Python işlemi ve bu araca etiketli konteyner yoktu. Sonuç bilinmediği için
+başarı sayılmadı. Sonraki sentetik deneme `nohup` ile başlatılıp yalnız sentetik
+stdout/stderr sahibin `orzell-prova.log` dosyasına yönlendirildi. 19:55 ekranında
+NOT_READY/ENVIRONMENT_CHECK_FAILED ve çıkış kodu1 görüldü; gerçek veri/anahtar
+okunmadı. 19:57 ayrı salt-okuyan tanıda BELLEK_OK, DOCKER_OK ve BOS_ALAN_GB4
+görüldü. Bu ön koşullar PostgreSQL provasının tamamlandığı anlamına gelmez;
+önceki hatanın sonraki adımı henüz bilinmiyor.
+
+Araç artık Docker çağrıları ve doğrulama adımlarından önce sabit adları JSON
+satırlarıyla hemen yazar. Timeout hatası örneğin DOCKER_PULL_TIMEOUT veya
+DOCKER_START_TIMEOUT olarak ayrılır. Diğer genel hatalarda yalnız exception
+türü ve sayısal errno verilir; ham hata, komut argümanı, ortam değişkeni veya
+kimlik yayımlanmaz. Bu sayede kalıcı sentetik logun son satırları nerede
+durulduğunu gösterir. Son satır sonuç JSON'udur; ilerleme satırları başarı
+kanıtı değildir. İzolasyon/anahtar/gerçek kurtarma kısıtları aynı kalır.
+
 ## Birincil kaynaklar
 
 - [CloudShell mobil erişim ve Docker desteği](https://docs.aws.amazon.com/cloudshell/latest/userguide/working-with-aws-cloudshell.html)
