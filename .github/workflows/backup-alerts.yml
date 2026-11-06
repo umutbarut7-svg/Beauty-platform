@@ -54,6 +54,42 @@ jobs:
           mask-aws-account-id: true
           output-credentials: false
           disable-retry: true
+      - name: Read bounded stack progress and classified failure events without changing it
+        run: |
+          python3 - <<'PY'
+          import json, re, subprocess
+          stack = 'orzell-encrypted-backup-storage-v1'
+          def read(operation, *extra):
+              try:
+                  result = subprocess.run(['aws', 'cloudformation', operation, '--stack-name', stack, *extra,
+                      '--region', 'eu-north-1', '--output', 'json', '--no-cli-pager',
+                      '--cli-connect-timeout', '5', '--cli-read-timeout', '20'], capture_output=True, text=True, timeout=30)
+                  return json.loads(result.stdout) if result.returncode == 0 else {}
+              except (subprocess.TimeoutExpired, ValueError):
+                  return {}
+          stacks = read('describe-stacks').get('Stacks', [])
+          status = stacks[0].get('StackStatus', 'UNKNOWN') if len(stacks) == 1 else 'UNAVAILABLE'
+          if not re.fullmatch('[A-Z_]{1,80}', status):
+              status = 'UNKNOWN'
+          known = {stack, 'BackupBucket', 'BackupBucketPolicy', 'BackupWriterPolicy', 'BackupHealthAlarm',
+                   'BackupAlertTopic', 'BackupAlertPolicy', 'BackupAlertEmail'}
+          failures = []
+          for event in read('describe-stack-events', '--max-items', '20').get('StackEvents', []):
+              state = event.get('ResourceStatus', '')
+              resource = event.get('LogicalResourceId', '')
+              if not state.endswith('_FAILED') or resource not in known or len(failures) >= 4:
+                  continue
+              reason = event.get('ResourceStatusReason', '')
+              category = ('ACCESS_DENIED' if re.search('AccessDenied|not authorized|Unauthorized', reason, re.I)
+                  else 'NAME_CONFLICT' if re.search('AlreadyExists|already exists', reason, re.I)
+                  else 'INVALID_CONFIGURATION' if re.search('InvalidRequest|InvalidParameter|invalid parameter', reason, re.I)
+                  else 'REVIEW_REQUIRED')
+              code = re.search(r'HandlerErrorCode:\s*([A-Za-z]{1,60})', reason)
+              failures.append({'resource': resource, 'state': state, 'category': category,
+                               'handlerCode': code.group(1) if code else 'UNAVAILABLE'})
+          print(json.dumps({'stackStatus': status, 'recentFailures': failures, 'mutationsPerformed': False,
+                            'notificationDeliveryVerified': False}, sort_keys=True))
+          PY
       - name: Read actual alarm route, recipient confirmation and storage safety
         run: python3 infra/operations/audit-managed-backup.py
       - name: Verify the existing bridge has no infrastructure provisioning grant
