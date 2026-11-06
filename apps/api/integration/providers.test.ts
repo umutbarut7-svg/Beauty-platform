@@ -2,7 +2,7 @@
  * OpenAI transport is an explicit contract double: this is NOT live provider acceptance. */
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { type Prisma, PrismaClient } from "@prisma/client";
 import {
   S3Client,
   CreateBucketCommand,
@@ -13,6 +13,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { PrivatePhotoStore } from "../src/mvp/providers/private-photo-store.js";
 import { OpenAiBeautyProvider } from "../src/mvp/providers/openai-beauty.provider.js";
 import { VisualService, MvpExternalGuard } from "../src/mvp/visual.service.js";
+import { AccountErasureService } from "../src/auth/account-erasure.service.js";
+import { AccountDeletionService } from "../src/auth/account-deletion.service.js";
 import { PhotoMaintenanceService } from "../src/mvp/photo-maintenance.service.js";
 import { SemanticService } from "../src/mvp/semantic.service.js";
 import { VisualMatchesService } from "../src/mvp/visual-matches.service.js";
@@ -311,6 +313,479 @@ describe("platform-owned private photo journey with real DB/S3 and explicit Open
       }),
     ).toBe(1);
   }, 30000);
+  it("rolls back photo withdrawal and account freeze together when the transactional audit fails", async () => {
+    vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "true");
+    const user = await owner();
+    const consent = await db.mvpPhotoConsent.create({
+      data: {
+        ownerId: user.id,
+        policyVersion: "synthetic-ci-not-approved-for-users",
+        noticeHash: "f".repeat(64),
+        expiresAt: new Date(Date.now() + 86400000),
+        auditExpiresAt: new Date(Date.now() + 90 * 86400000),
+      },
+    });
+    const photo = await db.mvpPhoto.create({
+      data: {
+        ownerId: user.id,
+        consentId: consent.id,
+        objectKey: `private/mvp/${randomUUID()}`,
+        mime: "image/jpeg",
+        bytes: 1,
+        uploadExpiresAt: new Date(Date.now() + 120000),
+        expiresAt: consent.expiresAt,
+      },
+    });
+    const analysis = await db.mvpPhotoAnalysis.create({
+      data: {
+        ownerId: user.id,
+        photoId: photo.id,
+        intent: "original",
+        target: "original",
+        answers: ["original"],
+        output: { original: true },
+        expiresAt: consent.expiresAt,
+      },
+    });
+    const request = await db.accountDeletionRequest.create({
+      data: { userId: user.id },
+    });
+    const session = await db.refreshSession.create({
+      data: {
+        userId: user.id,
+        id: randomUUID(),
+        tokenHash: "synthetic",
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+    const failing = new AccountDeletionService({
+      $transaction: (
+        operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+        options: { isolationLevel: Prisma.TransactionIsolationLevel },
+      ) =>
+        db.$transaction(
+          (tx) =>
+            operation(
+              new Proxy(tx, {
+                get(target, property, receiver) {
+                  if (property === "securityEvent")
+                    return {
+                      create: async () => {
+                        throw new Error("Synthetic audit persistence failure");
+                      },
+                    };
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+            ),
+          options,
+        ),
+    } as never);
+    await expect(failing.beginProcessing(request.id, user.id)).rejects.toThrow(
+      "Synthetic audit persistence failure",
+    );
+    expect(
+      (
+        await db.accountDeletionRequest.findUniqueOrThrow({
+          where: { id: request.id },
+        })
+      ).processingAt,
+    ).toBeNull();
+    expect(
+      (await db.refreshSession.findUniqueOrThrow({ where: { id: session.id } }))
+        .revokedAt,
+    ).toBeNull();
+    expect(
+      (
+        await db.mvpPhotoConsent.findUniqueOrThrow({
+          where: { id: consent.id },
+        })
+      ).revokedAt,
+    ).toBeNull();
+    expect(
+      (await db.mvpPhoto.findUniqueOrThrow({ where: { id: photo.id } }))
+        .revokedAt,
+    ).toBeNull();
+    expect(
+      await db.mvpPhotoAnalysis.findUniqueOrThrow({
+        where: { id: analysis.id },
+      }),
+    ).toMatchObject({
+      intent: "original",
+      target: "original",
+      answers: ["original"],
+      output: { original: true },
+    });
+    expect(
+      await db.mvpPrivacyEvent.count({
+        where: { ownerId: user.id, action: "photo.consent.withdrawn" },
+      }),
+    ).toBe(0);
+  });
+  it("rolls back final account erasure when completion auditing fails", async () => {
+    vi.stubEnv("ACCOUNT_DELETION_ERASURE_ENABLED", "true");
+    const user = await owner();
+    await db.customer.create({ data: { userId: user.id } });
+    const request = await db.accountDeletionRequest.create({
+      data: { userId: user.id, processingAt: new Date() },
+    });
+    const failing = new AccountErasureService({
+      $transaction: (
+        operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+        options: { isolationLevel: Prisma.TransactionIsolationLevel },
+      ) =>
+        db.$transaction(
+          (tx) =>
+            operation(
+              new Proxy(tx, {
+                get(target, property, receiver) {
+                  if (property === "securityEvent")
+                    return new Proxy(target.securityEvent, {
+                      get(events, key) {
+                        if (key === "create")
+                          return async () => {
+                            throw new Error(
+                              "Synthetic completion audit failure",
+                            );
+                          };
+                        return Reflect.get(events, key);
+                      },
+                    });
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+            ),
+          options,
+        ),
+    } as never);
+    await expect(
+      failing.finalize(request.id, "synthetic-operator"),
+    ).rejects.toThrow("Synthetic completion audit failure");
+    expect(await db.user.findUnique({ where: { id: user.id } })).not.toBeNull();
+    const unchanged = await db.accountDeletionRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    expect(unchanged.userId).toBe(user.id);
+    expect(unchanged.completedAt).toBeNull();
+    const erasure = new AccountErasureService(db as never);
+    expect(await erasure.finalize(request.id, "synthetic-operator")).toEqual({
+      status: "COMPLETED",
+      deletionCompleted: true,
+    });
+    expect(await db.user.findUnique({ where: { id: user.id } })).toBeNull();
+  });
+  it("withdraws all account photos during deletion, rejects late writes and retries real object cleanup", async () => {
+    vi.stubEnv("ACCOUNT_DELETION_PROCESSING_ENABLED", "true");
+    vi.stubEnv("ACCOUNT_DELETION_ERASURE_ENABLED", "true");
+    const user = await owner();
+    const other = await owner();
+    let release!: (value: Response) => void;
+    let entered!: () => void;
+    const called = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const visual = service(
+      vi.fn().mockImplementation(async () => {
+        entered();
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }),
+    );
+    const consent = await visual.consent(user, {
+      policyVersion: "synthetic-ci-not-approved-for-users",
+      accepted: true,
+    });
+    const otherConsent = await visual.consent(other, {
+      policyVersion: "synthetic-ci-not-approved-for-users",
+      accepted: true,
+    });
+    const photo = await visual.upload(user, consent.id, bytes, "image/png");
+    const otherPhoto = await visual.upload(
+      other,
+      otherConsent.id,
+      bytes,
+      "image/png",
+    );
+    const session = await visual.create(user, {
+      photoId: photo.id,
+      intent: "bakım",
+      target: "parlaklık",
+    });
+    const pending = visual.analyze(user, session.id, [], 0).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await Promise.race([
+      called,
+      pending.then((error) => {
+        throw error ?? new Error("Provider was not paused");
+      }),
+    ]);
+    const deletion = new AccountDeletionService(db as never);
+    const request = await db.accountDeletionRequest.create({
+      data: { userId: user.id },
+    });
+    try {
+      // Saved matching fields were added after the original erasure candidate.
+      // They must be removed in the processing transaction, before a worker sweep.
+      await db.mvpPhotoAnalysis.update({
+        where: { id: session.id },
+        data: {
+          matchingStatus: "READY",
+          matchingRequestId: randomUUID(),
+          matchingOutput: [{ businessId: "synthetic-saved-business" }],
+        },
+      });
+      expect(
+        await deletion.beginProcessing(request.id, other.id),
+      ).toMatchObject({ status: "PROCESSING", deletionCompleted: false });
+      release(response());
+      expect(await pending).toMatchObject({
+        message: expect.stringContaining("UNAVAILABLE"),
+      });
+      expect(
+        await db.mvpPhotoAnalysis.findUniqueOrThrow({
+          where: { id: session.id },
+        }),
+      ).toMatchObject({
+        status: "REVOKED",
+        intent: "",
+        target: "",
+        answers: [],
+        output: null,
+        matchingStatus: null,
+        matchingRequestId: null,
+        matchingOutput: null,
+      });
+      expect(
+        (
+          await db.mvpPhotoConsent.findUniqueOrThrow({
+            where: { id: consent.id },
+          })
+        ).revokedAt,
+      ).not.toBeNull();
+      expect(
+        (await db.mvpPhoto.findUniqueOrThrow({ where: { id: photo.id } }))
+          .revokedAt,
+      ).not.toBeNull();
+      // These calls represent requests authorized before the freeze, queued on the owner lock.
+      await expect(
+        visual.consent(user, {
+          policyVersion: "synthetic-ci-not-approved-for-users",
+          accepted: true,
+        }),
+      ).rejects.toThrow("UNAVAILABLE");
+      await expect(
+        visual.upload(user, consent.id, bytes, "image/png"),
+      ).rejects.toThrow("UNAVAILABLE");
+      await expect(
+        visual.create(user, {
+          photoId: photo.id,
+          intent: "late",
+          target: "late",
+        }),
+      ).rejects.toThrow("UNAVAILABLE");
+      await deletion.beginProcessing(request.id, other.id);
+      expect(
+        await db.mvpPrivacyEvent.count({
+          where: { ownerId: user.id, action: "photo.consent.withdrawn" },
+        }),
+      ).toBe(1);
+      await db.mvpPhoto.update({
+        where: { id: photo.id },
+        data: { uploadExpiresAt: new Date(Date.now() - 180000) },
+      });
+      const cleanup = new PhotoMaintenanceService(db as never, store);
+      const unavailable = vi
+        .spyOn(store, "erase")
+        .mockRejectedValueOnce(new Error("Synthetic storage outage"));
+      await cleanup.sweep();
+      const retained = await db.mvpPhoto.findUniqueOrThrow({
+        where: { id: photo.id },
+      });
+      expect(retained.deletedAt).toBeNull();
+      expect(retained.objectKey).toBeTruthy();
+      expect(
+        await db.mvpPrivacyEvent.count({
+          where: {
+            ownerId: user.id,
+            resourceId: photo.id,
+            action: "photo.object.erased",
+          },
+        }),
+      ).toBe(0);
+      unavailable.mockRestore();
+      // Cleanup must not depend on enabling the customer-facing photo feature.
+      vi.stubEnv("MVP_PHOTO_POLICY_REVIEWED", "false");
+      await cleanup.sweep();
+      const erased = await db.mvpPhoto.findUniqueOrThrow({
+        where: { id: photo.id },
+      });
+      expect(erased.deletedAt).not.toBeNull();
+      await expect(
+        s3.send(
+          new GetObjectCommand({
+            Bucket: "stage33-private-fixtures",
+            Key: erased.objectKey,
+          }),
+        ),
+      ).rejects.toThrow();
+      const untouched = await db.mvpPhoto.findUniqueOrThrow({
+        where: { id: otherPhoto.id },
+      });
+      expect(untouched.revokedAt).toBeNull();
+      expect(untouched.deletedAt).toBeNull();
+      await s3.send(
+        new GetObjectCommand({
+          Bucket: "stage33-private-fixtures",
+          Key: untouched.objectKey,
+        }),
+      );
+      expect(
+        await db.user.findUnique({ where: { id: user.id } }),
+      ).not.toBeNull();
+      expect(await deletion.status(user.id)).toMatchObject({
+        status: "PROCESSING",
+        deletionCompleted: false,
+      });
+      const erasure = new AccountErasureService(db as never);
+      expect(await erasure.finalize(request.id, other.id)).toEqual({
+        status: "COMPLETED",
+        deletionCompleted: true,
+      });
+      expect(await db.user.findUnique({ where: { id: user.id } })).toBeNull();
+      const proofs = await db.accountDeletionEvidence.findMany({
+        where: { requestId: request.id },
+      });
+      expect(proofs.length).toBeGreaterThan(0);
+      expect(
+        proofs.some(
+          (proof) =>
+            proof.kind === "PHOTO_CONSENT" &&
+            proof.expiresAt.getTime() > Date.now(),
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(proofs)).not.toContain(user.id);
+      expect(JSON.stringify(proofs)).not.toContain(user.email);
+      expect(JSON.stringify(proofs)).not.toContain(erased.objectKey);
+      await db.accountDeletionEvidence.updateMany({
+        where: { requestId: request.id },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      await cleanup.sweep();
+      expect(
+        await db.accountDeletionEvidence.count({
+          where: { requestId: request.id },
+        }),
+      ).toBe(0);
+      expect(
+        await db.user.findUnique({ where: { id: other.id } }),
+      ).not.toBeNull();
+    } finally {
+      release(response());
+      await pending;
+      vi.restoreAllMocks();
+      vi.stubEnv("MVP_PHOTO_POLICY_REVIEWED", "true");
+    }
+  }, 30000);
+  it("blocks erasure on current inventory and B2B identity references without changing business records", async () => {
+    vi.stubEnv("ACCOUNT_DELETION_ERASURE_ENABLED", "true");
+    const user = await owner();
+    const other = await owner();
+    const business = await db.business.create({
+      data: { name: "Erasure inventory fixture", slug: randomUUID() },
+    });
+    const supplier = await db.business.create({
+      data: { name: "Erasure supplier fixture", slug: randomUUID() },
+    });
+    const product = await db.catalogProduct.create({
+      data: {
+        businessId: supplier.id,
+        sku: "SYNTHETIC-ERASURE-PRODUCT",
+        name: "Synthetic erasure product",
+        price: "20.00",
+        currency: "TRY",
+        unit: "UNIT",
+        stockQuantity: "10.000",
+      },
+    });
+    const operation = await db.inventoryOperation.create({
+      data: {
+        businessId: business.id,
+        actorId: user.id,
+        keyHash: randomUUID(),
+        requestHash: randomUUID(),
+        type: "MOVEMENT",
+        response: { kind: "APPOINTMENT_CONSUMPTION", syntheticReceipt: true },
+      },
+    });
+    const quote = await db.b2BQuoteRequest.create({
+      data: {
+        buyerBusinessId: business.id,
+        supplierBusinessId: supplier.id,
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        unit: product.unit,
+        quantity: "2.000",
+        buyerNote: "Synthetic review-only fixture",
+        requestedBy: user.id,
+        respondedBy: other.id,
+        keyHash: randomUUID(),
+        requestHash: randomUUID(),
+      },
+    });
+    const request = await db.accountDeletionRequest.create({
+      data: { userId: user.id, processingAt: new Date() },
+    });
+    const erasure = new AccountErasureService(db as never);
+    const inspection = await erasure.inspect(request.id);
+    expect(inspection.blockers).toEqual([
+      "B2BQuoteRequest",
+      "InventoryOperation",
+    ]);
+    expect(JSON.stringify(inspection)).not.toContain(user.id);
+    await expect(erasure.finalize(request.id, other.id)).rejects.toMatchObject({
+      response: { blockers: ["B2BQuoteRequest", "InventoryOperation"] },
+    });
+    expect(await db.user.findUnique({ where: { id: user.id } })).not.toBeNull();
+    expect(
+      await db.inventoryOperation.findUnique({ where: { id: operation.id } }),
+    ).toEqual(operation);
+    expect(
+      await db.b2BQuoteRequest.findUnique({ where: { id: quote.id } }),
+    ).toEqual(quote);
+    expect(
+      await db.catalogProduct.findUnique({ where: { id: product.id } }),
+    ).toEqual(product);
+    expect(
+      (
+        await db.accountDeletionRequest.findUniqueOrThrow({
+          where: { id: request.id },
+        })
+      ).completedAt,
+    ).toBeNull();
+
+    // The supplier responder is a separate loose identity reference, not an FK.
+    const otherRequest = await db.accountDeletionRequest.create({
+      data: { userId: other.id, processingAt: new Date() },
+    });
+    expect((await erasure.inspect(otherRequest.id)).blockers).toEqual([
+      "B2BQuoteRequest",
+    ]);
+    await expect(
+      erasure.finalize(otherRequest.id, user.id),
+    ).rejects.toMatchObject({
+      response: { blockers: ["B2BQuoteRequest"] },
+    });
+    expect(
+      await db.user.findUnique({ where: { id: other.id } }),
+    ).not.toBeNull();
+    expect(
+      await db.b2BQuoteRequest.findUnique({ where: { id: quote.id } }),
+    ).toEqual(quote);
+  });
   it("fails closed with missing policy/provider and scrubs expired analysis text", async () => {
     const user = await owner();
     const transport = vi.fn().mockResolvedValue(response());
