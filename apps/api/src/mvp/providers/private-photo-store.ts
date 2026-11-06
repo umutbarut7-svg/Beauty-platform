@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   GetPublicAccessBlockCommand,
   GetBucketVersioningCommand,
 } from "@aws-sdk/client-s3";
@@ -194,6 +195,24 @@ export class PrivatePhotoStore {
       await this.client().send(
         new DeleteObjectCommand({ Bucket: this.bucket(), Key: this.key(key) }),
       );
+      try {
+        await this.client().send(
+          new HeadObjectCommand({ Bucket: this.bucket(), Key: this.key(key) }),
+        );
+      } catch (error) {
+        // Only an authoritative missing-object response confirms erasure.
+        // Access denied, timeouts and other failures must remain retryable.
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "$metadata" in error &&
+          (error.$metadata as { httpStatusCode?: number })?.httpStatusCode ===
+            404
+        )
+          return;
+        throw error;
+      }
+      throw new Error("PrivateObjectStillPresent");
     } catch {
       throw new ServiceUnavailableException("PRIVATE_PHOTO_ERASURE_PENDING");
     }
