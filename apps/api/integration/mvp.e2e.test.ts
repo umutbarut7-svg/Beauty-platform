@@ -755,6 +755,44 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
         ).processingAt,
       ).toBeNull();
 
+      // A restored owner cannot sign in or administer the business. Their
+      // membership and an unprocessed deletion request are not a handoff.
+      await db.user.update({
+        where: { id: b.user.id },
+        data: { restoreQuarantinedAt: new Date() },
+      });
+      const sessionsBeforeBlockedBegin = await db.refreshSession.findMany({
+        where: { userId: a.user.id },
+        orderBy: { id: "asc" },
+      });
+      expect((await begin(ar.id)).status).toBe(409);
+      expect(
+        (
+          await db.accountDeletionRequest.findUniqueOrThrow({
+            where: { id: ar.id },
+          })
+        ).processingAt,
+      ).toBeNull();
+      expect(
+        await db.refreshSession.findMany({
+          where: { userId: a.user.id },
+          orderBy: { id: "asc" },
+        }),
+      ).toEqual(sessionsBeforeBlockedBegin);
+      expect((await processingRequest("/auth/me", a.accessToken)).status).toBe(
+        200,
+      );
+      expect((await processingRequest("/auth/me", b.accessToken)).status).toBe(
+        401,
+      );
+      expect(
+        await db.businessMember.count({ where: { businessId: tenant.id } }),
+      ).toBe(2);
+      await db.user.update({
+        where: { id: b.user.id },
+        data: { restoreQuarantinedAt: null },
+      });
+
       const results = await Promise.all([begin(ar.id), begin(br.id)]);
       expect(results.map((r) => r.status).sort()).toEqual([202, 409]);
       const index = results.findIndex((r) => r.status === 202);

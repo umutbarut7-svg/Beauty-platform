@@ -122,6 +122,7 @@ export class AccountDeletionService {
                   role: "BUSINESS_OWNER",
                   userId: { not: request.userId },
                   user: {
+                    restoreQuarantinedAt: null,
                     OR: [
                       { accountDeletionRequest: { is: null } },
                       {

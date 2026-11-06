@@ -39,6 +39,13 @@ does not introduce a deletion or indefinite-retention policy for these records.
 
 ## Delivery gates remain open
 
+The replacement-owner guard also excludes restored/quarantined accounts. A
+membership whose account cannot authenticate must not allow the last available
+owner to enter deletion processing. The real HTTP/PostgreSQL ownership scenario
+checks rejection without changing the requesting owner's sessions, request or
+business memberships, then retains the existing concurrent-owner test once the
+replacement is available again.
+
 Processing and final erasure flags remain false by default. This is a review
 candidate, not a live migration, service release, TestFlight upload or actual
 account deletion. Before delivery, review business/history field treatment and
