@@ -102,7 +102,7 @@ export class CatalogServicesController {
   }
 }
 
-@Controller("businesses/:businessId/staff/:memberId/services")
+@Controller("businesses/:businessId/members/:memberId/services")
 export class StaffServicesController {
   constructor(private readonly catalog: CatalogService) {}
   @Post() assign(

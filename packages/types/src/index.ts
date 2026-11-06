@@ -1,4 +1,6 @@
+export * from "./mvp-visual.js";
 /** A lightweight response shared by platform health checks. */
+export * from "./mvp-client.js";
 export interface HealthStatus {
   readonly service: string;
   readonly status: "ok";

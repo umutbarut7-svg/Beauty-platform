@@ -13,6 +13,7 @@ import { SafeExceptionFilter } from "./safe-exception.filter.js";
 import { AuditService } from "./audit.service.js";
 import { SecurityMonitoringService } from "./security-monitoring.service.js";
 import { AbuseProtectionService } from "./abuse-protection.service.js";
+import { RedisWakeupService } from "./redis-wakeup.service.js";
 
 @Global()
 @Module({
@@ -20,6 +21,7 @@ import { AbuseProtectionService } from "./abuse-protection.service.js";
   controllers: [HealthController],
   providers: [
     MetricsService,
+    RedisWakeupService,
     AuditService,
     SecurityMonitoringService,
     AbuseProtectionService,
@@ -30,6 +32,7 @@ import { AbuseProtectionService } from "./abuse-protection.service.js";
     { provide: APP_FILTER, useClass: SafeExceptionFilter },
   ],
   exports: [
+    RedisWakeupService,
     MetricsService,
     AuditService,
     SecurityMonitoringService,

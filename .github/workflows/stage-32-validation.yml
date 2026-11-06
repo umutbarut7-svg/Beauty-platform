@@ -18,10 +18,20 @@ jobs:
     timeout-minutes: 30
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
+      EXPO_PUBLIC_API_URL: http://localhost:3001
 
     services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:0.8.7-pg17-trixie
         env:
           POSTGRES_DB: beauty_platform_ci
           POSTGRES_USER: postgres
@@ -99,6 +109,9 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Export Android and iOS JavaScript and Hermes bundles
+        run: pnpm --filter @beauty-platform/mobile exec expo export --platform all --output-dir /tmp/stage33-platform-bundles --max-workers 2
+
       - name: Run workspace tests
         run: pnpm test
 
@@ -113,3 +126,32 @@ jobs:
 
       - name: Check whitespace errors
         run: git diff --check
+
+      - name: Install Chromium for Stage 33 web E2E
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Start isolated S3-compatible storage for adapter tests
+        run: |
+          docker run --detach --name stage33-private-storage -p 127.0.0.1:9000:9000 -e MINIO_ROOT_USER=stage33-test-root -e MINIO_ROOT_PASSWORD=stage33-isolated-test-password -e MINIO_KMS_SECRET_KEY=ci-key:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= cgr.dev/chainguard/minio@sha256:32c504bea4574d8f29d719b37bc0dad920ecf3e22b81dc5cea0bb105af2ce10f server /data
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs stage33-private-storage
+          exit 1
+
+      - name: Stage 33 real HTTP, Expo web, Next.js and passport worker
+        env:
+          STAGE32_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
+          STAGE33_TEST_REDIS_URL: redis://127.0.0.1:6379
+          STAGE33_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+        run: pnpm --filter @beauty-platform/api test:stage33:integration
+
+      - name: Preserve Stage 33 browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: stage33-browser-diagnostics
+          path: /tmp/stage33-*.png
+          if-no-files-found: ignore
+          retention-days: 3

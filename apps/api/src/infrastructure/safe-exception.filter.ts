@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/consistent-type-imports */
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
-import { Catch, HttpException, HttpStatus, Logger } from "@nestjs/common";
+import {
+  Catch,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Logger,
+  Optional,
+} from "@nestjs/common";
+import { HttpAdapterHost } from "@nestjs/core";
 import { requestContext } from "./request-context.js";
 import { SecurityMonitoringService } from "./security-monitoring.service.js";
 
@@ -12,7 +20,12 @@ interface ReplyLike {
 @Catch()
 export class SafeExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(SafeExceptionFilter.name);
-  constructor(private readonly security: SecurityMonitoringService) {}
+  constructor(
+    private readonly security: SecurityMonitoringService,
+    @Optional()
+    @Inject(HttpAdapterHost)
+    private readonly adapters?: HttpAdapterHost,
+  ) {}
   async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const reply = host.switchToHttp().getResponse<ReplyLike>();
     if (exception instanceof HttpException) {
@@ -31,7 +44,7 @@ export class SafeExceptionFilter implements ExceptionFilter {
       const details = Array.isArray(rawMessage) ? rawMessage : undefined;
       const message =
         typeof rawMessage === "string" ? rawMessage : exception.message;
-      reply.status(status).send({
+      this.respond(reply, status, {
         code: this.code(status),
         message,
         requestId: requestContext.get()?.requestId,
@@ -41,11 +54,18 @@ export class SafeExceptionFilter implements ExceptionFilter {
     }
     const requestId = requestContext.get()?.requestId;
     this.logger.error({ event: "unhandled_exception", requestId });
-    reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
+    this.respond(reply, HttpStatus.INTERNAL_SERVER_ERROR, {
       code: "INTERNAL_ERROR",
       message: "Internal server error",
       requestId,
     });
+  }
+  private respond(reply: ReplyLike, status: number, body: unknown) {
+    if (this.adapters?.httpAdapter) {
+      this.adapters.httpAdapter.reply(reply, body, status);
+    } else {
+      reply.status(status).send(body);
+    }
   }
   private code(status: number) {
     if (status === 400) return "VALIDATION_ERROR";

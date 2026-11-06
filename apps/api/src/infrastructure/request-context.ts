@@ -34,7 +34,8 @@ interface RequestLike {
   requestId?: string;
 }
 interface ResponseLike {
-  header(name: string, value: string): void;
+  header?(name: string, value: string): void;
+  setHeader?(name: string, value: string): unknown;
 }
 
 @Injectable()
@@ -45,7 +46,9 @@ export class RequestContextMiddleware implements NestMiddleware {
     const requestId =
       candidate && validRequestId.test(candidate) ? candidate : randomUUID();
     req.requestId = requestId;
-    res.header("x-request-id", requestId);
+    // Nest Fastify middleware receives a native ServerResponse, not FastifyReply.
+    if (res.setHeader) res.setHeader("x-request-id", requestId);
+    else res.header?.("x-request-id", requestId);
     storage.run(
       {
         requestId,
