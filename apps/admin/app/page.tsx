@@ -48,7 +48,13 @@ export default function HomePage() {
   }
   return (
     <main>
-      <p className="eyebrow">BEAUTY PLATFORM · OPERATIONS</p>
+      <div className="brand" role="img" aria-label="ORZELL">
+        <span className="brand-emblem" aria-hidden="true" />
+        <span className="brand-letters" aria-hidden="true">
+          RZELL
+        </span>
+      </div>
+      <p className="eyebrow">ORZELL · PLATFORM YÖNETİMİ</p>
       <h1>Yönetim merkezi</h1>
       <p>İşletme durumunu ve kayda dayalı finansal görünümü inceleyin.</p>
       {busy && <p role="status">Yükleniyor…</p>}
