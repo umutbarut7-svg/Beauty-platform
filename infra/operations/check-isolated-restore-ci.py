@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 import zipfile
+from contextlib import ExitStack
+import io
 
 
 SPEC = importlib.util.spec_from_file_location("isolated_restore", Path(__file__).with_name("restore-backup-isolated.py"))
@@ -119,7 +121,37 @@ def main():
                        max_plaintext_bytes=RESTORE.MAX_DUMP, decrypt_timeout_seconds=30)
         # Only generated synthetic material. CI is NOT a real-data host approval.
         with patch.object(memory, "host_checks"):
-            report = RESTORE.recover_and_restore(context, expected, 180, acknowledge_invalidation=True)
+            try:
+                report = RESTORE.recover_and_restore(context, expected, 180, acknowledge_invalidation=True)
+            except ValueError as failure:
+                if str(failure) == "OFFLINE_RESTORE_FAILED_SCHEMA":
+                    # Diagnostics are restricted to this locally generated CI
+                    # fixture. No owner-input mode or production data route.
+                    observed = []
+                    original_script = RESTORE.script
+                    def diagnostic_script(value):
+                        body = original_script(value)
+                        marker = "stage=schema\ntest \"$(fingerprint)\" = '" + value + "'"
+                        return body.replace(marker, "stage=schema\nquery /work/catalog.sql /work/catalog.json\ncat /work/catalog.json\nexit 0")
+                    class DiagnosticDocker(RESTORE.Docker):
+                        def __call__(self, *args, **kwargs):
+                            output = super().__call__(*args, **kwargs)
+                            if args[0] == "start":
+                                observed.extend(json.loads(output))
+                                return RESTORE.MARKER
+                            return output
+                    with ExitStack() as stack, tempfile.TemporaryDirectory() as config, patch.object(RESTORE, "script", side_effect=diagnostic_script):
+                        descriptor = memory.VERIFIED.snapshot_stream(stack, io.BytesIO(dump), max_bytes=RESTORE.MAX_DUMP)
+                        RESTORE._restore_sealed_dump(DiagnosticDocker(config), descriptor, expected, 180)
+                    reference = json.loads(psql(RESTORE.CATALOG))
+                    canonical = lambda v: json.dumps(v, sort_keys=True, ensure_ascii=True)
+                    expected_set = {canonical(v) for v in reference}
+                    observed_set = {canonical(v) for v in observed}
+                    missing = [json.loads(v)[:3] for v in sorted(expected_set - observed_set)]
+                    extra = [json.loads(v)[:3] for v in sorted(observed_set - expected_set)]
+                    print(json.dumps({"generatedFixtureCatalogDiff": True, "referenceItems": len(reference),
+                                      "targetItems": len(observed), "missing": missing[:20], "extra": extra[:20]}))
+                raise
             try:
                 RESTORE.recover_and_restore(context, "0" * 64, 180, acknowledge_invalidation=True)
             except ValueError as exc:

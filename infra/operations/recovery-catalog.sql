@@ -3,7 +3,7 @@
 SET search_path = pg_catalog, public;
 WITH app_namespaces AS (
   SELECT oid, nspname FROM pg_namespace
-  WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'
+  WHERE nspname !~ '^pg_' AND nspname <> 'information_schema'
 ), items AS (
   SELECT jsonb_build_array('namespace', nspname) AS value FROM app_namespaces
   UNION ALL
