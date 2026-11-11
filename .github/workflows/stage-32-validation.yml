@@ -127,12 +127,8 @@ jobs:
       - name: Check whitespace errors
         run: git diff --check
 
-      - name: Use HTTPS for existing official Ubuntu mirrors
-        run: |
-          python3 -m unittest discover -s scripts -p test_ci_ubuntu_https.py -v
-          sudo python3 scripts/ci-ubuntu-https.py
-      - name: Install Chromium for Stage 33 web E2E
-        run: pnpm exec playwright install chromium --with-deps
+      - name: Verify the preinstalled Google Chrome channel
+        run: google-chrome --version
 
       - name: Start isolated S3-compatible storage for adapter tests
         run: |
@@ -146,6 +142,7 @@ jobs:
 
       - name: Stage 33 real HTTP, Expo web, Next.js and passport worker
         env:
+          STAGE33_CHROME_CHANNEL: chrome
           STAGE32_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beauty_platform_ci?schema=public
           STAGE33_TEST_REDIS_URL: redis://127.0.0.1:6379
           STAGE33_TEST_S3_ENDPOINT: http://127.0.0.1:9000

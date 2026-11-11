@@ -52,17 +52,26 @@ real business exchange or an implemented order/payment settlement flow.
 Stage 33 remains NOT PASS. Completed booking and notification-delivery tests
 must not be repeated merely because this page route was added.
 
-## CI mirror repair
+## CI browser runtime repair
 
 The first admin job 130596169855 was cancelled at its ten-minute deadline before
 browser execution. The log shows repeated ignored package downloads from
 `http://azure.archive.ubuntu.com/ubuntu`, not a failed application assertion.
-The same image's browser setup affects application and regression workflows.
-The HTTPS InRelease endpoint returned HTTP 200 from this environment.
-`scripts/ci-ubuntu-https.py` upgrades only existing official Ubuntu HTTP source
-URLs in four known source files before Playwright dependency installation. It
-preserves repository signing, distribution/component selections and third-party
-sources; it adds no repository, key or certificate bypass. Two local boundary
-checks cover signature/unrelated-source preservation, missing files, lookalike
-hosts and idempotence. Those tests passed. The three affected workflows run this
-preparation; their application/browser assertions remain unchanged.
+An initial HTTPS mirror preparation passed its local boundaries and the real
+HTTPS package endpoint returned HTTP 206 with a valid Debian archive header,
+but browser setup still stalled on the GitHub runner. It is not a passed gate.
+
+The final admin/application review jobs use the official Playwright 1.64.1 Noble
+image, pinned to registry digest
+`sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f`.
+The OCI index returned HTTP 200 and its exact bytes match Docker-Content-Digest.
+It supplies both browsers and their system dependencies; no apt/browser download
+or certificate/signature bypass runs in these jobs. A package-version assertion
+requires reviewing the pinned image when Playwright changes. This follows
+https://playwright.dev/docs/docker .
+
+The database/service regression job stays on its existing host and uses the
+runner's installed Google Chrome via Playwright's supported chrome channel,
+verified before integration tests. Local/default runs retain bundled Chromium.
+All browser/application assertions and database/service setup remain unchanged.
+The temporary mirror-rewrite helpers were removed from the final source.
