@@ -9,7 +9,6 @@ hukuki metin, rol ataması veya canlı süreç kabulü değildir.
 [Süre ve imha kaydı incelemesi](deletion-timeframes-review-20261111.md),
 90 günlük fotoğraf kanıtı ile ayrı imha işlem kaydını birbirinden ayırır.
 
-
 ## 11 Kasım 2026 — doğrulama ve günlük sorumlu kararı
 
 Günlük hesap silme talebi takip sorumlusu **Umut Barut** olarak kullanıcı

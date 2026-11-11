@@ -9,7 +9,6 @@ hukuki metin, rol ataması veya canlı süreç kabulü değildir.
 [Süre ve imha kaydı incelemesi](deletion-timeframes-review-20261111.md),
 90 günlük fotoğraf kanıtı ile ayrı imha işlem kaydını birbirinden ayırır.
 
-
 ## 11 November compatibility update
 
 The candidate now incorporates delivery commit
