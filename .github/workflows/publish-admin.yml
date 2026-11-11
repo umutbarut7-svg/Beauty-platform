@@ -1,0 +1,57 @@
+name: ORZELL admin-only publication
+on:
+  pull_request:
+    paths:
+      - infra/operations/publish-admin.py
+      - infra/operations/dispatch-admin.py
+      - infra/operations/test_admin_publication.py
+      - .github/workflows/publish-admin.yml
+      - .github/operations/admin-release.json
+  push:
+    branches: [main]
+    paths: [.github/operations/admin-release.json]
+permissions: {}
+concurrency:
+  group: preview-server-operations
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s infra/operations -p test_admin_publication.py -v
+      - name: Compile the reviewed publisher and private envelope
+        run: python3 -m py_compile infra/operations/publish-admin.py infra/operations/dispatch-admin.py
+  publish:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: preview-admin-${{ github.run_id }}
+          role-duration-seconds: 1800
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Publish only the immutable reviewed admin image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_PAGER: ""
+        run: python3 infra/operations/dispatch-admin.py

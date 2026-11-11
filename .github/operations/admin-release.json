@@ -1,0 +1,29 @@
+{
+  "request_id": "orzell-admin-publication-20261111-1",
+  "mode": "admin-only-publication",
+  "artifact": {
+    "id": 13869596962,
+    "run": 43051974621,
+    "head": "587548a67549c54d47046a779cf382726f2cfd77",
+    "bytes": 254897412,
+    "sha256": "e3c3b6de937ea452cc094b3b482c420bf950327074cba5331477c371356e2894"
+  },
+  "manifest": {
+    "source": "61f97f0ed996844917be036a77e36d9aad999a94",
+    "sourceTree": "20e98849b6e0c8ac29a00132c60b2cc04f6aac34",
+    "apiUrl": "https://preview.13-51-112-228.sslip.io/api",
+    "image": "sha256:2a8bed2e62811748b09c9bf88e46a16bdd76ad56e0cc13f1463a419ed38b9ab4",
+    "imageBytes": 755547652,
+    "logoSha256": "16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4",
+    "archive": {
+      "name": "admin-image.tar.gz",
+      "bytes": 254896493,
+      "sha256": "6adec581b2cac3cac26dfa638b7460c66ccc967dc959b62fd676bd957897ef61"
+    },
+    "rehearsal": "PASS",
+    "network": "none",
+    "publicPorts": false,
+    "providerRequests": 0,
+    "liveDeployment": false
+  }
+}
