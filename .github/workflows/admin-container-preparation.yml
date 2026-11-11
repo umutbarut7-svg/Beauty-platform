@@ -1,0 +1,56 @@
+name: ORZELL admin-only container rehearsal
+on:
+  pull_request:
+    paths:
+      - infra/preview/Dockerfile.admin
+      - infra/preview/Dockerfile.admin.dockerignore
+      - infra/operations/rehearse-admin-release.py
+      - .github/workflows/admin-container-preparation.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 61f97f0ed996844917be036a77e36d9aad999a94
+          path: application
+          persist-credentials: false
+      - name: Verify the exact merged source and its five successful acceptance groups
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          base='https://api.github.com/repos/umutbarut7-svg/Beauty-platform/'
+          def get(path):
+              req=urllib.request.Request(base+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req,timeout=20) as r: return json.load(r)
+          source=get('git/commits/61f97f0ed996844917be036a77e36d9aad999a94')
+          assert source['tree']['sha']=='20e98849b6e0c8ac29a00132c60b2cc04f6aac34'
+          assert any(p['sha']=='94b6dd25a158cdd475e3b8005f8d263561304bf3' for p in source['parents'])
+          for run in [43046157094,43046157104,43046157195,43046157095,43046157079]:
+              value=get('actions/runs/'+str(run))
+              assert value['head_sha']=='94b6dd25a158cdd475e3b8005f8d263561304bf3' and value['status']=='completed' and value['conclusion']=='success'
+          print('Verified exact merged application and existing successful gates; no tests repeated')
+          PY
+      - name: Prepare reviewed admin build files
+        run: |
+          mkdir -p application/infra/preview
+          cp harness/infra/preview/Dockerfile.admin* application/infra/preview/
+      - name: Build and exercise the admin-only image without AWS access
+        run: python3 harness/infra/operations/rehearse-admin-release.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: orzell-admin-release-${{ github.run_id }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0

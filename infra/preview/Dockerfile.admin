@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+FROM node:24-bookworm-slim AS build
+RUN npm install -g pnpm@10.28.1
+WORKDIR /repo
+COPY . .
+ARG ADMIN_API_URL
+ARG APPLICATION_SOURCE
+ARG APPLICATION_TREE
+RUN test "$ADMIN_API_URL" = "https://preview.13-51-112-228.sslip.io/api" \
+    && test "$APPLICATION_SOURCE" = "61f97f0ed996844917be036a77e36d9aad999a94" \
+    && test "$APPLICATION_TREE" = "20e98849b6e0c8ac29a00132c60b2cc04f6aac34"
+ENV NEXT_PUBLIC_API_URL=$ADMIN_API_URL NEXT_TELEMETRY_DISABLED=1
+RUN pnpm install --frozen-lockfile \
+    && pnpm --filter @beauty-platform/types build \
+    && pnpm --filter @beauty-platform/admin exec next build --webpack \
+    && pnpm --filter @beauty-platform/admin --prod deploy --legacy --frozen-lockfile /out/admin \
+    && mkdir -p /out/admin/.next /out/admin/public \
+    && cp -a apps/admin/.next/. /out/admin/.next/ \
+    && cp -a apps/admin/public/. /out/admin/public/
+
+FROM node:24-bookworm-slim
+ARG ADMIN_API_URL
+ARG APPLICATION_SOURCE
+ARG APPLICATION_TREE
+LABEL org.opencontainers.image.revision=$APPLICATION_SOURCE \
+      org.orzell.admin.source-tree=$APPLICATION_TREE \
+      org.orzell.admin.api-base=$ADMIN_API_URL
+ENV NODE_ENV=production
+WORKDIR /application
+COPY --from=build --chown=node:node /out/admin/ ./
+USER node
+EXPOSE 3000
+CMD ["node", "node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]
