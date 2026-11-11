@@ -1,0 +1,26 @@
+name: Bounded in-memory recovery safety
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/recovery-memory-safety.yml
+      - infra/operations/recover-backup-memory.py
+      - infra/operations/test_memory_backup.py
+      - infra/operations/recover-backup-package.py
+      - infra/operations/verified-backup.py
+      - infra/operations/backup-manifest.py
+      - infra/operations/encrypted-backup.py
+
+permissions:
+  contents: read
+
+jobs:
+  memory-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject invalid trust, partial authentication, limits and leaked plaintext
+        run: python3 -m unittest discover -s infra/operations -p test_memory_backup.py -v
