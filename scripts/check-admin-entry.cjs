@@ -26,7 +26,8 @@ async function review(engine, name) {
         page.on("pageerror", (error) => errors.push(error.message));
         const unexpected = [];
         let role = "CUSTOMER",
-          expired = false;
+          expired = false,
+          financialReady = false;
         await page.route("**/*", async (route) => {
           const request = route.request(),
             url = new URL(request.url());
@@ -66,7 +67,14 @@ async function review(engine, name) {
                   },
                 ];
           } else if (url.pathname.endsWith("/financial/summary")) {
-            value = { status: "INSUFFICIENT_DATA" };
+            value = financialReady
+              ? {
+                  status: "AVAILABLE",
+                  currency: "TRY",
+                  grossRevenueMinor: "900719925474099199",
+                  netRevenueMinor: "-1",
+                }
+              : { status: "INSUFFICIENT_DATA" };
           } else {
             unexpected.push(url.pathname);
             return route.abort();
@@ -143,6 +151,14 @@ async function review(engine, name) {
               { exact: true },
             ),
           ).toBeVisible();
+          financialReady = true;
+          await page
+            .getByRole("button", { name: "Ledger özetini incele", exact: true })
+            .click();
+          await expect(
+            page.getByText("₺9.007.199.254.740.991,99", { exact: true }),
+          ).toBeVisible();
+          await expect(page.getByText("-₺0,01", { exact: true })).toBeVisible();
           expired = true;
           await load.click();
           await expect(

@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
-import { ApiError, MvpApiClient } from "@beauty-platform/types";
+import {
+  ApiError,
+  MvpApiClient,
+  formatMinorUnits,
+} from "@beauty-platform/types";
 import { VerificationReview } from "./VerificationReview";
 type Business = { id: string; name: string; isVerified: boolean };
 type Revenue = {
@@ -192,13 +196,19 @@ export default function HomePage() {
               {revenue &&
                 (revenue.status === "AVAILABLE" ? (
                   <dl>
-                    <dt>Brüt gelir · minor units</dt>
+                    <dt>Brüt gelir</dt>
                     <dd>
-                      {revenue.grossRevenueMinor} {revenue.currency}
+                      {formatMinorUnits(
+                        revenue.grossRevenueMinor,
+                        revenue.currency,
+                      )}
                     </dd>
-                    <dt>Net gelir · minor units</dt>
+                    <dt>Net gelir</dt>
                     <dd>
-                      {revenue.netRevenueMinor} {revenue.currency}
+                      {formatMinorUnits(
+                        revenue.netRevenueMinor,
+                        revenue.currency,
+                      )}
                     </dd>
                   </dl>
                 ) : (
