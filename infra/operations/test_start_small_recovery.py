@@ -1,5 +1,7 @@
 import copy
+from contextlib import nullcontext
 from decimal import Decimal
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -92,6 +94,22 @@ def module():
 
 
 class SmallRecoveryTests(unittest.TestCase):
+    def test_immutable_planner_pin_and_actual_loader(self):
+        body = (HERE / 'plan-recovery-host.py').read_bytes()
+        self.assertEqual(hashlib.sha256(body).hexdigest(), SMALL.PLANNER_SHA)
+        class Response:
+            def geturl(self):
+                return SMALL.PLANNER_URL
+            def read(self, limit):
+                return body[:limit]
+        with patch.object(SMALL.urllib.request, 'urlopen', return_value=nullcontext(Response())):
+            loaded = SMALL.planner()
+            self.assertEqual(loaded['template']()['Resources']['RecoveryHost']['Properties']['InstanceType'], 't3.small')
+        body += b'\n'
+        with patch.object(SMALL.urllib.request, 'urlopen', return_value=nullcontext(Response())):
+            with self.assertRaisesRegex(ValueError, 'PINNED_PLANNER_REQUIRED'):
+                SMALL.planner()
+
     def test_offline_default_does_not_fetch_or_call_aws(self):
         with patch.object(SMALL, 'planner', side_effect=AssertionError), patch.object(SMALL, 'aws', side_effect=AssertionError), patch.object(sys, 'argv', ['small']):
             self.assertEqual(SMALL.main(), 0)

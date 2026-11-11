@@ -48,7 +48,7 @@ host step only; Stage33 remains NOT PASS.
 
 ## Validation and execution boundary
 
-Fifteen new local tests passed: existing/in-progress stack, orphan project host,
+Sixteen new local tests passed: existing/in-progress stack, orphan project host,
 pagination, wrong account, account plan, both eligibility gates, unrounded cost,
 canonical-template drift, preflight race, pre-create receipt, ambiguous create
 latch, endpoint/retry binding, exact absence/error redaction and operation allowlist.
@@ -68,3 +68,10 @@ Primary sources checked 11 November:
 - https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instance-types.html
 - https://docs.aws.amazon.com/cli/latest/reference/freetier/get-account-plan-state.html
 - https://docs.aws.amazon.com/general/latest/gr/billing.html
+
+The first candidate accidentally pinned an extra local trailing newline in the
+public planner. A real unauthenticated download caught this before execution.
+The corrected pin is 7dd983a7905f04f49a24d44331368dd0f97fd2698785c93fb50a8cb9684e1206
+and matches both the immutable Git blob and public HTTPS response. The sixteenth
+test loads the exact checkout bytes through the actual pinned loader and rejects
+one extra byte. No key or resource was involved.
