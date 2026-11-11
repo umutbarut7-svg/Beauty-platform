@@ -1,0 +1,23 @@
+name: Recovery infrastructure metadata safety
+on:
+  pull_request:
+    paths:
+      - infra/operations/audit-recovery-infrastructure.py
+      - infra/operations/test_recovery_infrastructure_audit.py
+      - .github/workflows/recovery-infrastructure-safety.yml
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject mismatched resources and secret or write operations
+        run: python3 -m unittest discover -s infra/operations -p test_recovery_infrastructure_audit.py -v
+      - name: Compile and verify offline default
+        run: |
+          python3 -m py_compile infra/operations/audit-recovery-infrastructure.py
+          python3 infra/operations/audit-recovery-infrastructure.py
