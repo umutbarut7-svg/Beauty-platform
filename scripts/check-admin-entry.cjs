@@ -112,7 +112,7 @@ async function review(engine, name) {
               .click();
           };
           await login();
-          await expect(page.getByRole("alert")).toContainText(
+          await expect(page.getByRole("main").getByRole("alert")).toContainText(
             "Platform yöneticisi yetkisi gerekiyor",
           );
           await expect(
