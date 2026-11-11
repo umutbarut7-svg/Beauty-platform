@@ -1,0 +1,90 @@
+name: Read-only synthetic recovery host inventory
+on:
+  pull_request:
+    paths:
+      - infra/operations/inspect-recovery-hosts.py
+      - infra/operations/test_recovery_host_inventory.py
+      - .github/workflows/recovery-host-inventory.yml
+  push:
+    branches: [main]
+    paths: [.github/operations/recovery-host-inspection.json]
+permissions: {}
+jobs:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s infra/operations -p test_recovery_host_inventory.py -v
+  inspect:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformPreviewOperations
+          aws-region: eu-north-1
+          role-session-name: recovery-inventory-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read fixed synthetic recovery metadata only
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          assert json.loads(pathlib.Path('.github/operations/recovery-host-inspection.json').read_text())=={'request_id':'orzell-recovery-inventory-20261111-1','mode':'read-only-tagged-host-inventory'}
+          PY
+          python3 infra/operations/inspect-recovery-hosts.py
+  stack:
+    if: github.repository == 'umutbarut7-svg/Beauty-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::926642724499:role/BeautyPlatformGitHubAudit
+          aws-region: eu-north-1
+          role-session-name: recovery-stack-${{ github.run_id }}
+          role-duration-seconds: 900
+          mask-aws-account-id: true
+          output-credentials: false
+          disable-retry: true
+      - name: Read the exact recovery stack status without changing resources
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          account='926642724499';region='eu-north-1';name='orzell-recovery-rehearsal-v1'
+          def read(*args):
+              return subprocess.run(['aws',*args,'--region',region,'--no-cli-pager','--output','json','--cli-connect-timeout','5','--cli-read-timeout','20'],capture_output=True,text=True,timeout=35)
+          p=read('sts','get-caller-identity')
+          if p.returncode: raise SystemExit('RECOVERY_STACK_IDENTITY_UNAVAILABLE')
+          identity=json.loads(p.stdout)
+          assert identity.get('Account')==account and identity.get('Arn','').startswith('arn:aws:sts::'+account+':assumed-role/BeautyPlatformGitHubAudit/')
+          p=read('cloudformation','describe-stacks','--stack-name',name)
+          if p.returncode:
+              if '(ValidationError)' in p.stderr and ('Stack with id '+name+' does not exist') in p.stderr:
+                  print(json.dumps({'status':'NO_CURRENT_RECOVERY_STACK_BY_NAME','resourceCleanupVerified':False,'productionRestoreVerified':False,'writesPerformed':False}))
+              else:
+                  print(json.dumps({'status':'RECOVERY_STACK_READ_UNAVAILABLE','writesPerformed':False}))
+                  raise SystemExit(1)
+          else:
+              values=json.loads(p.stdout).get('Stacks',[])
+              assert len(values)==1
+              stack=values[0]
+              assert stack.get('StackName')==name and stack.get('StackId','').startswith('arn:aws:cloudformation:'+region+':'+account+':stack/'+name+'/')
+              print(json.dumps({'status':'RECOVERY_STACK_METADATA_OBSERVED','stackId':stack['StackId'],'stackStatus':stack['StackStatus'],'resourceCleanupVerified':False,'productionRestoreVerified':False,'writesPerformed':False}))
+          PY
