@@ -3,6 +3,7 @@ import fcntl
 import importlib.util
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import unittest
@@ -136,8 +137,17 @@ class MemoryBackupTests(unittest.TestCase):
             self.assertFalse(any(c.kwargs.get("private") for c in snap.call_args_list))
 
     def test_resigned_corrupt_ciphertext_still_requires_successful_gcm_authentication(self):
+        # Corrupt the final 16-byte CMS authentication tag itself. A midpoint
+        # flip in a small CMS fixture can hit the RSA-wrapped content key,
+        # which would only prove key-unwrapping failure, not AEAD rejection.
+        structure = subprocess.check_output(
+            ["openssl", "asn1parse", "-inform", "DER", "-in", str(self.ciphertext)], text=True)
+        tags = re.findall(r"^\s*(\d+):d=\d+\s+hl=(\d+)\s+l=\s*16\s+prim:\s+OCTET STRING", structure, re.M)
+        self.assertTrue(tags)
+        offset, header = map(int, tags[-1])
         data = bytearray(self.ciphertext.read_bytes())
-        data[len(data) // 2] ^= 1
+        self.assertEqual(data[offset:offset + header], b"\x04\x10")
+        data[offset + header + 15] ^= 1
         self.ciphertext.write_bytes(data)
         self.manifest.unlink()
         self.sign()
