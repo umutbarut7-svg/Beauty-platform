@@ -1,85 +1,149 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+  --background: #f6f1e9;
+  --surface: #fffcf7;
+  --text: #382c26;
+  --muted: #78675c;
+  --border: #dfd1c1;
+  --accent: #825b49;
+  --accent-text: #fffcf7;
+  --focus: #a47760;
+  --alert: #f3e4d6;
   font-family: Arial, sans-serif;
-  background: #faf7f8;
-  color: #271f22;
+  background: var(--background);
+  color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b090f;
+    --surface: #17121f;
+    --text: #f1e8fb;
+    --muted: #b7a6c8;
+    --border: #44334f;
+    --accent: #d4b4f2;
+    --accent-text: #21112e;
+    --focus: #c99cf0;
+    --alert: #38233c;
+  }
+}
+* {
+  box-sizing: border-box;
 }
 body {
   margin: 0;
 }
 main {
-  max-width: 48rem;
-  margin: 20vh auto;
-  padding: 2rem;
+  width: min(100%, 68rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  background: #000;
+  border: 1px solid #44334f;
+  border-radius: 12px;
+}
+/* Exact original JPEG, cropped in CSS like the existing mobile wordmark. */
+.brand-emblem {
+  display: block;
+  width: 64px;
+  height: 55.32px;
+  background-image: url("/orzell-original-reference.jpg");
+  background-size: 136.03px 136.03px;
+  background-position: -36.88px -7.05px;
+  background-repeat: no-repeat;
+}
+.brand-letters {
+  color: #d8b4ec;
+  font-size: 30px;
+  letter-spacing: 4px;
+  font-weight: 300;
+  margin-left: 4px;
 }
 .eyebrow {
-  color: #9a4964;
+  color: var(--accent);
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
-}
-h1 {
-  font-size: clamp(2rem, 7vw, 4.5rem);
-  letter-spacing: -0.05em;
-  margin: 0.5rem 0;
-}
-main > p:last-child {
-  color: #695c61;
-  line-height: 1.6;
-}
-main {
-  margin: 4rem auto;
-  max-width: 64rem;
+  letter-spacing: 0.15em;
 }
 h1 {
   font-size: clamp(2rem, 5vw, 3.8rem);
+  letter-spacing: -0.04em;
+  margin: 0.5rem 0;
+}
+main > p {
+  color: var(--muted);
+  line-height: 1.6;
 }
 form,
 section {
   margin: 2rem 0;
-  padding: 1.75rem;
-  background: #fffdf9;
-  border: 1px solid #e5ded6;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 16px;
 }
 label {
   display: block;
   margin: 1rem 0;
 }
-input {
+input,
+textarea {
   display: block;
   padding: 0.8rem;
   margin-top: 0.5rem;
-  width: min(90%, 26rem);
-  border: 1px solid #bfcbbf;
+  width: min(100%, 26rem);
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text);
   border-radius: 8px;
   font: inherit;
 }
+textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  margin-right: 0.5rem;
+  accent-color: var(--accent);
+}
 button {
-  background: #264e3d;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-text);
   border: 0;
   border-radius: 8px;
   padding: 0.85rem 1.1rem;
   margin: 0.4rem 0.6rem 0.4rem 0;
   cursor: pointer;
   font: inherit;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 button:disabled {
   opacity: 0.5;
   cursor: wait;
 }
 button:focus-visible,
-input:focus-visible {
-  outline: 3px solid #ba754e;
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 [role="alert"] {
   padding: 1rem;
-  color: #703b26;
-  background: #f3e8db;
+  color: var(--text);
+  background: var(--alert);
+  border-radius: 8px;
 }
 dt {
   font-weight: bold;
   margin-top: 1rem;
+}
+dd {
+  margin-left: 0;
+  overflow-wrap: anywhere;
 }
