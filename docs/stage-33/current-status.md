@@ -1,5 +1,17 @@
 # Aşama 33 — güncel kabul ve kalan işler
 
+## 11 Kasım 2026 — doğrulama ve günlük sorumlu kararı
+
+Günlük hesap silme talebi takip sorumlusu **Umut Barut** olarak kullanıcı
+beyanıyla belirlendi. Bu karar rol ataması veya canlı silme aktivasyonu değildir.
+Kamuya bildirilecek süre, alan bazında işletme geçmişi işlemi/saklama kararı ve
+bağımsız inceleme hâlâ açık. Günlük prosedür ve şemadan çıkarılmış karar tablosu
+[işletim kaydında](account-deletion-operations-20261111.md) bulunur.
+
+Uygulama adayı `6664e6fd4d2e793a13c011be212ae3d3fce95fa5` için yedi otomatik
+kontrol grubu başarıyla tamamlandı. Sonuçlar commit ile eşleştirildi; testler
+tekrar çalıştırılmadı. PR109 taslaktır; Aşama 33 **NOT PASS**.
+
 27 Ekim 2026. Bu belge eski kabul tablosundaki tarihsel NOT RUN/BLOCKED kayıtlarını güncel kanıtlarla ayırır. Bir kod değişikliği için önceki sürümün test sonucu kullanılmaz. Son kodun kesin CI sonucu [PR #47](https://github.com/umutbarut7-svg/Beauty-platform/pull/47) içinde SHA ve run bazında tutulur.
 
 ## Doğrulanmış olanlar

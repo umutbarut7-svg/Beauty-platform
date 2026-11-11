@@ -12,17 +12,21 @@ changed by this update.
 The admin browser review additionally checks that a non-admin cannot see the
 operator queue, a signed-in admin can inspect a synthetic pending request and
 its inventory blocker, and an expired queue request removes the queue, account
-email and business selection. It performs no begin/finalize operation. Validation
-results for this candidate are recorded on PR109 after the run completes.
+email and business selection. It performs no begin/finalize operation. All seven automated
+validation groups completed successfully for application candidate
+`6664e6fd4d2e793a13c011be212ae3d3fce95fa5`; exact run IDs and operational
+boundaries are recorded in [the operator runbook](account-deletion-operations-20261111.md).
+The runs were read and matched to this commit, not re-executed.
 
 The 11 November admin-only live release contains the delivery source above;
 it does not include this draft or enable account erasure. Earlier personal
 backup-alert delivery was accepted and does not need repeating. Read-only
 recovery inspection on 11 November found no active narrowly tagged rehearsal
 host or current recovery stack; this is not a production restore or complete
-residual-resource cleanup proof. Production recovery, actual queue operator and
-published deadline, business-history treatment and independent review remain
-open. Processing and erasure flags stay disabled.
+residual-resource cleanup proof. The owner designated Umut Barut as the daily queue operator on 11 November.
+This does not grant a SUPER_ADMIN role or establish live queue access.
+Production recovery, a published deadline, business-history treatment and
+independent review remain open. Processing and erasure flags stay disabled.
 
 ## Candidate scope
 
@@ -73,7 +77,7 @@ replacement is available again.
 Processing and final erasure flags remain false by default. This is a review
 candidate, not a live migration, service release, TestFlight upload or actual
 account deletion. Before delivery, review business/history field treatment and
-retention, actual queue responsibility/deadline, and independent review. Migrations
+retention, verified operator access and a published deadline, and independent review. Migrations
 must precede the API and worker rollout; existing database backups are pinned to
 the delivered application's image and require review when that image changes.
 

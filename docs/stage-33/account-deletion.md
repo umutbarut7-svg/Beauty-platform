@@ -1,6 +1,6 @@
 # Account deletion: intake, inspection, erasure and completion receipt
 
-This implementation is a candidate in PR #47, not an enabled production deletion service. Both ACCOUNT_DELETION_PROCESSING_ENABLED and ACCOUNT_DELETION_ERASURE_ENABLED default to false. Apply the additive migrations before rolling out the new API/worker image; authentication reads the quarantine column and maintenance reads the evidence table. No live migration, account mutation, message, provider call, TestFlight update or store submission is performed by this change.
+The current integration is the draft candidate in PR #109; PR #47 is historical. This is not an enabled production deletion service. Both ACCOUNT_DELETION_PROCESSING_ENABLED and ACCOUNT_DELETION_ERASURE_ENABLED default to false. Apply the additive migrations before rolling out the new API/worker image; authentication reads the quarantine column and maintenance reads the evidence table. No live migration, account mutation, message, provider call, TestFlight update or store submission is performed by this change.
 
 ## User path
 
@@ -9,6 +9,11 @@ An authenticated user confirms HESABIMI SIL and verifies the current password to
 The login screen can read the receipt after the account has been removed. The capability grants access only to requested/processing/completed status and timestamps. It is not a login credential, never appears in a URL, and reveals no email, owner ID, record body or storage key. There is no automatic email/push delivery claim. The UI instructs the user to keep the code safely.
 
 ## Operator path and ownership
+
+On 11 November 2026 the owner designated **Umut Barut** to check the queue daily.
+This records operational responsibility only. SUPER_ADMIN access, the published
+processing deadline and independent/record-class review are not implied.
+See the [daily procedure and field decision register](account-deletion-operations-20261111.md).
 
 The Next.js platform-admin queue lists pending requests, pages results and inspects blockers. Operators must have the current database SUPER_ADMIN role and type ISLEME AL to begin, then KALICI SIL to finalize. The flags remain closed until an operated policy/queue exists. Sole business owners must transfer ownership first. Serializable transactions prevent two owners being frozen together and leaving a business without an available owner. SUPER_ADMIN subjects and restored/quarantined accounts require separate review.
 
