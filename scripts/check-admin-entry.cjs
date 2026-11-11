@@ -7,6 +7,7 @@ const path = require("node:path");
 const { chromium, webkit, expect } = require("@playwright/test");
 const origin = "http://127.0.0.1:3106";
 const apiOrigin = "https://api.example.test";
+const accountDeletion = process.env.ORZELL_REVIEW_ACCOUNT_DELETION === "true";
 const output = process.argv[2] ?? "/tmp/orzell-admin-entry";
 async function review(engine, name) {
   const browser = await engine.launch({
@@ -50,6 +51,43 @@ async function review(engine, name) {
               accessToken: "synthetic-token",
               refreshToken: "synthetic-refresh",
               user: { id: "synthetic-user", role },
+            };
+          } else if (
+            accountDeletion &&
+            url.pathname === "/auth/account-deletion/pending"
+          ) {
+            assert.equal(request.method(), "GET");
+            assert.equal(
+              request.headers().authorization,
+              "Bearer synthetic-token",
+            );
+            status = expired ? 401 : 200;
+            value = expired
+              ? {}
+              : {
+                  items: [
+                    {
+                      id: "synthetic-deletion",
+                      requestedAt: "2026-11-11T00:00:00Z",
+                      processingAt: null,
+                      user: {
+                        id: "synthetic-account",
+                        email: "delete-me@example.test",
+                      },
+                    },
+                  ],
+                  nextCursor: null,
+                };
+          } else if (
+            accountDeletion &&
+            url.pathname ===
+              "/auth/account-deletion/synthetic-deletion/inspection"
+          ) {
+            assert.equal(request.method(), "GET");
+            value = {
+              status: "REQUESTED",
+              blockers: ["InventoryOperation"],
+              pendingPhotos: 1,
             };
           } else if (url.pathname === "/businesses") {
             assert.equal(
@@ -129,6 +167,12 @@ async function review(engine, name) {
               exact: true,
             }),
           ).toHaveCount(0);
+          await expect(
+            page.getByRole("region", {
+              name: "Hesap silme kuyruğu",
+              exact: true,
+            }),
+          ).toHaveCount(0);
           role = "SUPER_ADMIN";
           await login();
           const load = page.getByRole("button", {
@@ -159,13 +203,55 @@ async function review(engine, name) {
             page.getByText("₺9.007.199.254.740.991,99", { exact: true }),
           ).toBeVisible();
           await expect(page.getByText("-₺0,01", { exact: true })).toBeVisible();
-          expired = true;
-          await load.click();
+          if (accountDeletion) {
+            await page
+              .getByRole("button", {
+                name: "Silme taleplerini yükle",
+                exact: true,
+              })
+              .click();
+            await page
+              .getByRole("button", {
+                name: "delete-me@example.test · Talep alındı",
+                exact: true,
+              })
+              .click();
+            await expect(
+              page.getByText("InventoryOperation", { exact: true }),
+            ).toBeVisible();
+            await expect(
+              page.getByRole("button", {
+                name: "Silme işlemini başlat",
+                exact: true,
+              }),
+            ).toBeDisabled();
+            expired = true;
+            await page
+              .getByRole("button", {
+                name: "Silme taleplerini yükle",
+                exact: true,
+              })
+              .click();
+          } else {
+            expired = true;
+            await load.click();
+          }
           await expect(
             page.getByRole("button", { name: "Giriş yap", exact: true }),
           ).toBeVisible();
           await expect(
             page.getByRole("heading", { name: "Temsilî işletme", exact: true }),
+          ).toHaveCount(0);
+          await expect(
+            page.getByRole("region", {
+              name: "Hesap silme kuyruğu",
+              exact: true,
+            }),
+          ).toHaveCount(0);
+          await expect(
+            page.getByText("delete-me@example.test · Talep alındı", {
+              exact: true,
+            }),
           ).toHaveCount(0);
           const storage = await page.evaluate(() => [
             localStorage.length,

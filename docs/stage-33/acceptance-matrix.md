@@ -1,5 +1,7 @@
 # Adım bazlı MVP kabul matrisi
 
+> Güncel kabul ve kalan işler: [27 Ekim durum kaydı](current-status.md). Aşağıdaki eski run/NOT RUN kayıtları tarihsel kanıttır; bugünün genel durumu olarak kullanılmaz.
+
 Kaynak sıralaması aynen korunmuştur. IMPLEMENTED kod bağlantısıdır; tek başına UI/native/provider kabulü değildir. CI sonucu [validation raporunda](validation.md) ayrı kaydedilir. Run #23 kritik web yolculuğunu ve gerçek DB/worker/Redis kapılarını geçti; native ve bütün setup ekranlarının kabulü bununla tamamlanmış sayılmaz. BLOCKED satırlar tüm Aşama 33 PASS sonucunu engeller. Kullanıcı, verification ve pretenant fotoğraf politikası bulunmadığını ve bağımsız işlerin sürmesini ayrıca teyit etti.
 
 | ID  | Kaynak adım     | Dosya / API / model                                                        | UI                                                                 | Yetki ve state                                                                 | Test / kabul koşulu                                                                                     | Durum / eksik                                                              |

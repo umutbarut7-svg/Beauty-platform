@@ -5,6 +5,7 @@ import {
   MvpApiClient,
   formatMinorUnits,
 } from "@beauty-platform/types";
+import { AccountDeletionQueue } from "./AccountDeletionQueue";
 import { VerificationReview } from "./VerificationReview";
 type Business = { id: string; name: string; isVerified: boolean };
 type Revenue = {
@@ -137,6 +138,7 @@ export default function HomePage() {
               Çıkış yap
             </button>
           </nav>
+          <AccountDeletionQueue api={api} busy={busy} run={run} />
           <section aria-label="İşletmeler">
             <h2>İşletmeler</h2>
             {!businesses.length && (

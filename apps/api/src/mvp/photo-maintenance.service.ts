@@ -12,6 +12,9 @@ export class PhotoMaintenanceService {
   ) {}
   async sweep() {
     const now = new Date();
+    await this.db.accountDeletionEvidence.deleteMany({
+      where: { expiresAt: { lte: now } },
+    });
     await this.db.mvpPhotoAnalysis.updateMany({
       where: {
         expiresAt: { lte: now },

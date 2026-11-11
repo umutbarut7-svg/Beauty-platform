@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -82,6 +84,9 @@ jobs:
 
       - name: Verify representative-data migration upgrade
         run: apps/api/prisma/verify-stage32-upgrade.sh
+
+      - name: Verify account-erasure upgrade preserves the delivered inventory and B2B schema
+        run: bash scripts/check-account-erasure-current-upgrade.sh
 
       - name: Build shared types
         run: pnpm --filter @beauty-platform/types build
