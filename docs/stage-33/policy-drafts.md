@@ -1,5 +1,11 @@
 # Fotoğraf ve işletme doğrulaması — inceleme taslağı
 
+**11 Kasım süre kapsamı notu:** İlk inceleme hedefi kullanıcı seçimiyle **3 iş günü**.
+Fotoğraf izin/işleme kanıtının 90 günü, ayrı imha işlem kayıtlarının genel
+saklama süresi değildir. [Güncel süre incelemesi](deletion-timeframes-review-20261111.md)
+kamuya verilecek metin ve bildirim düzeniyle birlikte incelenmelidir; mevcut
+reviewed bayrakları bu notla açılmaz.
+
 Bu metin henüz etkinleştirilmiş bir politika değildir.
 
 **24 Ekim 2026 işletmeci beyanı:** kullanıcı, ORZELL App için bireysel hukuki

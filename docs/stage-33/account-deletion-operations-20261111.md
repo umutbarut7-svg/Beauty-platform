@@ -6,6 +6,8 @@ Kullanıcı “Ben takip edeceğim” yanıtıyla günlük kuyruk takip sorumlul
 Umut Barut'a verdi. İşletmeci adı, canlı SUPER_ADMIN rolü veya bağımsız
 incelemeci ataması yerine geçmez. Rol/hesap değiştirilmedi. Bu kayıt bir
 kamuya açıklanmış tamamlanma süresi veya otomatik silme politikası oluşturmaz.
+Kullanıcı bu devamda ilk inceleme hedefini **3 iş günü** olarak seçti. Günlük
+kontrol sürer; bu hedef bütün verilerin üç iş gününde silindiği anlamına gelmez.
 
 Güncel aday PR109 taslak durumundadır. ACCOUNT_DELETION_PROCESSING_ENABLED ve
 ACCOUNT_DELETION_ERASURE_ENABLED varsayılan olarak false kalır. Canlı admin
@@ -35,8 +37,11 @@ Aşağıdaki günlük prosedür, kuyruk ayrıca incelenip yayımlandıktan sonra
 7. Oturum süresi dolarsa yeniden giriş yap. Başka hesabın veya işletmenin
    talep ayrıntılarını önceki oturumdan kullanma.
 
-Kontrolün her gün yapılacağı kararlaştırıldı. Kontrol saati, kamuya açıklanacak
-işlem süresi ve bağımsız incelemeci henüz belirlenmedi. Bu prosedürün gerçek
+Kontrolün her gün yapılacağı ve ilk inceleme hedefinin **3 iş günü** olacağı
+kararlaştırıldı. Kontrol saati, iş günü/tatil takviminin teknik uygulaması,
+kamuya açıklanacak nihai işlem metni ve bağımsız incelemeci henüz belirlenmedi.
+Başvuru sonuçlandırma süresi ve imha kayıtlarının kapsamı
+[ayrı inceleme notunda](deletion-timeframes-review-20261111.md) açıklanır. Bu prosedürün gerçek
 kuyrukta işletildiği veya herhangi bir hesabın silindiği iddia edilmez.
 
 ## Alan bazında inceleme girdisi

@@ -1,5 +1,15 @@
 # Account erasure compatibility with the current ORZELL application
 
+## 11 Kasım ek karar — ilk inceleme 3 iş günü
+
+Umut, günlük kuyruk kontrolünde ilk inceleme hedefini **3 iş günü** olarak
+seçti. Bu karar tekrar sorulmaz. Günlük sorumlu yine Umut Barut'tur; kontrol
+sıklığı günlük kalır. Bu hedef kalıcı silmenin tamamlanma sözü, yayımlanmış
+hukuki metin, rol ataması veya canlı süreç kabulü değildir.
+[Süre ve imha kaydı incelemesi](deletion-timeframes-review-20261111.md),
+90 günlük fotoğraf kanıtı ile ayrı imha işlem kaydını birbirinden ayırır.
+
+
 ## 11 November compatibility update
 
 The candidate now incorporates delivery commit
