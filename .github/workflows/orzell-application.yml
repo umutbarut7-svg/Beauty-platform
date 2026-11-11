@@ -38,6 +38,10 @@ jobs:
       - run: pnpm --filter @beauty-platform/mobile typecheck
       - run: pnpm exec vitest run apps/mobile/src packages/types/src/mvp-client.test.ts
       - run: pnpm --filter @beauty-platform/mobile exec expo export --platform web --output-dir dist --max-workers 2
+      - name: Use HTTPS for existing official Ubuntu mirrors
+        run: |
+          python3 -m unittest discover -s scripts -p test_ci_ubuntu_https.py -v
+          sudo python3 scripts/ci-ubuntu-https.py
       - run: pnpm exec playwright install chromium webkit --with-deps
       - name: Exercise isolated customer and business screens
         run: node scripts/check-orzell-application.cjs apps/mobile/dist /tmp/orzell-application-review
