@@ -30,6 +30,10 @@ jobs:
       - run: pnpm --filter @beauty-platform/admin lint
       - run: pnpm --filter @beauty-platform/admin exec next build --webpack
       - run: pnpm --filter @beauty-platform/admin typecheck
+      - name: Use HTTPS for existing official Ubuntu mirrors
+        run: |
+          python3 -m unittest discover -s scripts -p test_ci_ubuntu_https.py -v
+          sudo python3 scripts/ci-ubuntu-https.py
       - run: pnpm exec playwright install chromium webkit --with-deps
       - run: node scripts/check-admin-entry.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -51,3 +51,18 @@ already have isolated browser/API checks; an empty live list is not proof of a
 real business exchange or an implemented order/payment settlement flow.
 Stage 33 remains NOT PASS. Completed booking and notification-delivery tests
 must not be repeated merely because this page route was added.
+
+## CI mirror repair
+
+The first admin job 130596169855 was cancelled at its ten-minute deadline before
+browser execution. The log shows repeated ignored package downloads from
+`http://azure.archive.ubuntu.com/ubuntu`, not a failed application assertion.
+The same image's browser setup affects application and regression workflows.
+The HTTPS InRelease endpoint returned HTTP 200 from this environment.
+`scripts/ci-ubuntu-https.py` upgrades only existing official Ubuntu HTTP source
+URLs in four known source files before Playwright dependency installation. It
+preserves repository signing, distribution/component selections and third-party
+sources; it adds no repository, key or certificate bypass. Two local boundary
+checks cover signature/unrelated-source preservation, missing files, lookalike
+hosts and idempotence. Those tests passed. The three affected workflows run this
+preparation; their application/browser assertions remain unchanged.
