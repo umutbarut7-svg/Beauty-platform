@@ -120,6 +120,21 @@ class MemoryBackupTests(unittest.TestCase):
     def test_wrong_private_key_authenticates_nothing(self):
         self.rejected("BACKUP_AUTHENTICATION_OR_TRANSFORM_FAILED", private_key=self.root / "attacker.key")
 
+    def test_weak_pinned_recipient_is_rejected_before_private_key_read(self):
+        cert, key = self.path / "weak.crt", self.path / "weak.key"
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                        "-keyout", str(key), "-out", str(cert), "-subj", "/CN=synthetic-weak", "-days", "1"],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.manifest.unlink()
+        MEMORY.MANIFEST.sign(self.ciphertext, self.manifest, self.root / "signer.pub", self.root / "signer.key",
+                             cert, self.args["backup_id"], self.args["application_sha"], self.args["boundary"],
+                             "2026-11-05T08:30:00Z")
+        self.write_package()
+        with patch.object(MEMORY.VERIFIED, "snapshot", wraps=MEMORY.VERIFIED.snapshot) as snap:
+            self.rejected("RSA_3072_OR_STRONGER_REQUIRED", certificate=cert,
+                          expected_recipient=MEMORY.MANIFEST.fingerprint(cert, certificate=True))
+            self.assertFalse(any(c.kwargs.get("private") for c in snap.call_args_list))
+
     def test_resigned_corrupt_ciphertext_still_requires_successful_gcm_authentication(self):
         data = bytearray(self.ciphertext.read_bytes())
         data[len(data) // 2] ^= 1

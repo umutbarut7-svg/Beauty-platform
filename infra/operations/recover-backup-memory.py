@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import resource
 import selectors
 import signal
@@ -150,6 +151,12 @@ def verified_dump(package, public_key, certificate, private_key, expected_signer
         cert = VERIFIED.snapshot(stack, certificate, max_bytes=PACKAGE.MAX_KEY)
         if MANIFEST.fingerprint(cert, certificate=True) != expected_recipient:
             raise ValueError("UNTRUSTED_RECIPIENT_CERTIFICATE")
+        with FILES.regular_file(cert) as stream:
+            profile = FILES.openssl(["x509", "-in", f"/proc/self/fd/{stream.fileno()}", "-text", "-noout"],
+                                    pass_fds=[stream.fileno()]).decode("ascii")
+        bits = re.search(r"Public-Key: \((\d+) bit\)", profile)
+        if "Public Key Algorithm: rsaEncryption" not in profile or not bits or int(bits[1]) < 3072:
+            raise ValueError("RSA_3072_OR_STRONGER_REQUIRED")
         key = VERIFIED.snapshot(stack, private_key, private=True, max_bytes=PACKAGE.MAX_KEY)
         password = VERIFIED.snapshot(stack, passphrase, private=True, max_bytes=PACKAGE.MAX_KEY) if passphrase is not None else None
         descriptor = decrypt_memory(entries["backup.cms"], cert, key, password,
