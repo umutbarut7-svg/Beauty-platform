@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
-import { ApiError, MvpApiClient } from "@beauty-platform/types";
+import {
+  ApiError,
+  MvpApiClient,
+  formatMinorUnits,
+} from "@beauty-platform/types";
 import { AccountDeletionQueue } from "./AccountDeletionQueue";
 import { VerificationReview } from "./VerificationReview";
 type Business = { id: string; name: string; isVerified: boolean };
@@ -49,7 +53,13 @@ export default function HomePage() {
   }
   return (
     <main>
-      <p className="eyebrow">BEAUTY PLATFORM · OPERATIONS</p>
+      <div className="brand" role="img" aria-label="ORZELL">
+        <span className="brand-emblem" aria-hidden="true" />
+        <span className="brand-letters" aria-hidden="true">
+          RZELL
+        </span>
+      </div>
+      <p className="eyebrow">ORZELL · PLATFORM YÖNETİMİ</p>
       <h1>Yönetim merkezi</h1>
       <p>İşletme durumunu ve kayda dayalı finansal görünümü inceleyin.</p>
       {busy && <p role="status">Yükleniyor…</p>}
@@ -188,13 +198,19 @@ export default function HomePage() {
               {revenue &&
                 (revenue.status === "AVAILABLE" ? (
                   <dl>
-                    <dt>Brüt gelir · minor units</dt>
+                    <dt>Brüt gelir</dt>
                     <dd>
-                      {revenue.grossRevenueMinor} {revenue.currency}
+                      {formatMinorUnits(
+                        revenue.grossRevenueMinor,
+                        revenue.currency,
+                      )}
                     </dd>
-                    <dt>Net gelir · minor units</dt>
+                    <dt>Net gelir</dt>
                     <dd>
-                      {revenue.netRevenueMinor} {revenue.currency}
+                      {formatMinorUnits(
+                        revenue.netRevenueMinor,
+                        revenue.currency,
+                      )}
                     </dd>
                   </dl>
                 ) : (

@@ -1,5 +1,29 @@
 # Account erasure compatibility with the current ORZELL application
 
+## 11 November compatibility update
+
+The candidate now incorporates delivery commit
+`61f97f0ed996844917be036a77e36d9aad999a94`, including `/login`, the original
+ORZELL identity and both system themes, and shared exact minor-unit formatting.
+The admin import conflict was resolved by preserving both `AccountDeletionQueue`
+and `formatMinorUnits`. No deletion-service, schema or mobile-photo behavior was
+changed by this update.
+
+The admin browser review additionally checks that a non-admin cannot see the
+operator queue, a signed-in admin can inspect a synthetic pending request and
+its inventory blocker, and an expired queue request removes the queue, account
+email and business selection. It performs no begin/finalize operation. Validation
+results for this candidate are recorded on PR109 after the run completes.
+
+The 11 November admin-only live release contains the delivery source above;
+it does not include this draft or enable account erasure. Earlier personal
+backup-alert delivery was accepted and does not need repeating. Read-only
+recovery inspection on 11 November found no active narrowly tagged rehearsal
+host or current recovery stack; this is not a production restore or complete
+residual-resource cleanup proof. Production recovery, actual queue operator and
+published deadline, business-history treatment and independent review remain
+open. Processing and erasure flags stay disabled.
+
 ## Candidate scope
 
 The original account-erasure candidate PR47 (`6ea4503a7c152ed6a257d2d2c01275fdd0c58a54`)
@@ -55,6 +79,6 @@ the delivered application's image and require review when that image changes.
 
 On 6 November the owner confirmed **only a phone is currently available**.
 Independent production recovery remains blocked on a protected separate recovery
-environment; no private recovery key is moved to CI or the live host. Personal
-alarm delivery and real-device/photo-quality acceptance are also still open.
+environment; no private recovery key is moved to CI or the live host. Real-device/photo-quality acceptance is also still open. The historical
+alarm-delivery gap was closed later; see the dated update above.
 Stage 33 remains **NOT PASS**.

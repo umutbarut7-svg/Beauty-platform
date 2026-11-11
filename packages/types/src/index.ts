@@ -237,3 +237,5 @@ export interface AgentResponse {
   result: unknown | null;
   meta: { noMatch: boolean; capability?: "AVAILABLE" | "NOT_AVAILABLE" };
 }
+
+export { formatMinorUnits } from "./money.js";

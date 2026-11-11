@@ -1607,7 +1607,12 @@ describe("Stage 33 real Customer/Business HTTP + PostgreSQL journey", () => {
     });
     mobile.listen(8081, "127.0.0.1");
     await once(mobile, "listening");
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      ...(process.env.STAGE33_CHROME_CHANNEL === "chrome"
+        ? { channel: "chrome" }
+        : {}),
+    });
     const page = await browser.newPage();
     // Never let a wrongly configured export send synthetic credentials to a remote API.
     await page.route("**/*", (route) =>
