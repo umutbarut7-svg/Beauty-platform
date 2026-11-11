@@ -64,6 +64,7 @@ SHA256 before explicit --create-reviewed-synthetic-host invocation. No new accou
 account-plan upgrade, recovery-key upload or IAM permission expansion is requested.
 
 Primary sources checked 11 November:
+
 - https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instance-types.html
 - https://docs.aws.amazon.com/cli/latest/reference/freetier/get-account-plan-state.html
 - https://docs.aws.amazon.com/general/latest/gr/billing.html
