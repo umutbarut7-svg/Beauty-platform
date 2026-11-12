@@ -11,7 +11,10 @@ WITH app_namespaces AS (
   FROM pg_class c JOIN app_namespaces n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
   UNION ALL
-  SELECT jsonb_build_array('column', n.nspname, c.relname, a.attnum, a.attname,
+  -- pg_dump omits dropped columns, so physical attnum holes disappear.
+  -- Compare the order of surviving columns, retaining names/types/defaults.
+  SELECT jsonb_build_array('column', n.nspname, c.relname,
+    row_number() OVER (PARTITION BY c.oid ORDER BY a.attnum), a.attname,
     format_type(a.atttypid, a.atttypmod), a.attnotnull, a.attidentity, a.attgenerated,
     pg_get_expr(d.adbin, d.adrelid), co.collname)
   FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
@@ -28,7 +31,10 @@ WITH app_namespaces AS (
   SELECT jsonb_build_array('index', n.nspname, c.relname, pg_get_indexdef(i.indexrelid))
   FROM pg_index i JOIN pg_class c ON c.oid = i.indrelid JOIN app_namespaces n ON n.oid = c.relnamespace
   UNION ALL
-  SELECT jsonb_build_array('enum', n.nspname, t.typname, e.enumsortorder, e.enumlabel)
+  -- ADD VALUE BEFORE/AFTER creates fractional internal sort numbers; restore
+  -- renumbers them. Labels and their relative order are the schema contract.
+  SELECT jsonb_build_array('enum', n.nspname, t.typname,
+    row_number() OVER (PARTITION BY t.oid ORDER BY e.enumsortorder), e.enumlabel)
   FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid JOIN app_namespaces n ON n.oid = t.typnamespace
   UNION ALL
   SELECT jsonb_build_array('function', n.nspname, p.proname, pg_get_functiondef(p.oid))
@@ -45,3 +51,4 @@ WITH app_namespaces AS (
   FROM public._prisma_migrations
 )
 SELECT COALESCE(jsonb_agg(value ORDER BY value::text COLLATE "C"), '[]'::jsonb)::text FROM items;
+

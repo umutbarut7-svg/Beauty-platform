@@ -241,8 +241,10 @@ def _restore_sealed_dump(docker, descriptor, expected_schema, timeout):
     finally:
         # A new unpredictable tool-generated name is the only removal target.
         docker("rm", "--force", "--volumes", name)
-    if docker("ps", "--all", "--filter", "name=^/" + name + "$", "--format", "{{.ID}}"):
-        raise ValueError("TEMPORARY_DATABASE_CLEANUP_NOT_VERIFIED")
+        # Check absence on failures as well as success. A failed restore must
+        # not bypass verification that its temporary database was removed.
+        if docker("ps", "--all", "--filter", "name=^/" + name + "$", "--format", "{{.ID}}"):
+            raise ValueError("TEMPORARY_DATABASE_CLEANUP_NOT_VERIFIED")
     return {"status": "OFFLINE_RESTORE_QUARANTINED", "temporaryDatabaseRemoved": True,
             "network": "none", "publicPorts": False, "reopenAuthorized": False, "realRecoveryReady": False}
 
@@ -272,3 +274,4 @@ if __name__ == "__main__":
     print(json.dumps({"status": "OFFLINE_NO_ACTION", "privateKeyRead": False, "productionDataRead": False,
                       "productionRestoreVerified": False, "realRecoveryReady": False}))
     raise SystemExit(0 if len(sys.argv) == 1 else 2)
+

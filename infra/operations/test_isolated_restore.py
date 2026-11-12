@@ -106,6 +106,27 @@ class IsolatedRestoreTests(unittest.TestCase):
                 RESTORE.inspect_container(candidate, self.docker.name, self.docker.image["Id"], self.docker.body,
                                           self.docker.image["Config"]["Env"])
 
+    def test_failed_restore_still_verifies_absence_and_detects_residual_target(self):
+        original = self.docker.__call__
+
+        def failure(*args, **kwargs):
+            if args[0] == "start":
+                raise ValueError("OFFLINE_RESTORE_FAILED_SCHEMA")
+            return original(*args, **kwargs)
+
+        with self.assertRaisesRegex(ValueError, "^OFFLINE_RESTORE_FAILED_SCHEMA$"):
+            RESTORE._restore_sealed_dump(failure, self.fd, "b" * 64, 10)
+        self.assertTrue(self.docker.removed)
+        self.assertEqual(self.docker.calls[-1][0], "ps")
+
+        def residue(*args, **kwargs):
+            if args[0] == "ps":
+                return "residual-target"
+            return failure(*args, **kwargs)
+
+        with self.assertRaisesRegex(ValueError, "^TEMPORARY_DATABASE_CLEANUP_NOT_VERIFIED$"):
+            RESTORE._restore_sealed_dump(residue, self.fd, "b" * 64, 10)
+
     def test_independent_schema_acknowledgement_and_budget_required_before_key_read(self):
         with patch.object(RESTORE.MEMORY, "verified_dump") as opened:
             for args in (({}, "invalid", 10, True), ({}, "b" * 64, 10, False),
@@ -142,3 +163,4 @@ class IsolatedRestoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
