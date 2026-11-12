@@ -2,8 +2,10 @@
 """Generated fixture only: actual signed CMS -> RAM -> isolated PostgreSQL."""
 
 from datetime import datetime, timedelta, timezone
+from contextlib import ExitStack
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -80,7 +82,31 @@ def main():
         raise ValueError("SYNTHETIC_PASSWORD_FIXTURE_REQUIRED")
     command(["node", "-e", "const b=require('./application/apps/api/node_modules/bcryptjs'); if(b.compareSync('synthetic-fixture-password','!orzell-recovery-disabled!')) process.exit(1);"])
     psql(FIXTURE.replace("previous-hash", password_hash))
+    psql(Path(__file__).with_name("recovery-domain-fixture.sql").read_text())
     preserved_before = psql(RESTORE.PRESERVED)
+    domain_before = psql(RESTORE.DOMAIN_PRESERVED)
+    if psql(RESTORE.DOMAIN_CHECK) != b"t\n":
+        raise ValueError("GENERATED_DOMAIN_FIXTURE_REJECTED")
+    domain_probes = {
+        "stockBalance": 'UPDATE "CatalogProduct" SET "stockQuantity"=9.75 WHERE id=\'fixture-ml\';',
+        "manualReceipt": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{quantityAfter}\',\'"9"\') WHERE id=\'fixture-in-ml\';',
+        "crossTenantImport": 'UPDATE "InventoryOperation" SET response=\'{"ids":["supplier-product"]}\' WHERE id=\'fixture-import\';',
+        "crossTenantAppointment": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{appointmentId}\',\'"supplier-appointment"\') WHERE id=\'fixture-parent\';',
+        "scalarItems": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{items}\',\'42\') WHERE id=\'fixture-parent\';',
+        "emptyItems": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{items}\',\'[]\') WHERE id=\'fixture-parent\';',
+        "duplicateLine": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{items}\',jsonb_build_array(response->\'items\'->0,response->\'items\'->0)) WHERE id=\'fixture-parent\';',
+        "missingMovement": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{items,0,movementId}\',\'"absent"\') WHERE id=\'fixture-parent\';',
+        "orphanChild": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{parentOperationId}\',\'"absent"\') WHERE id=\'fixture-child-ml\';',
+        "childKey": 'UPDATE "InventoryOperation" SET "keyHash"=repeat(\'f\',64) WHERE id=\'fixture-child-ml\';',
+        "materialAmount": 'UPDATE "InventoryOperation" SET response=jsonb_set(response,\'{quantity}\',\'"1.5"\') WHERE id=\'fixture-child-ml\';',
+        "b2bActor": 'UPDATE "B2BQuoteRequest" SET "requestedBy"=\'absent\' WHERE id=\'fixture-quote\';',
+        "nonfiniteQuote": 'UPDATE "B2BQuoteRequest" SET "quotedUnitPrice"=\'NaN\'::numeric WHERE id=\'fixture-quote\';',
+    }
+    for probe, mutation in domain_probes.items():
+        if psql("BEGIN;\n" + mutation + "\n" + RESTORE.DOMAIN_CHECK + "\nROLLBACK;\n") != b"f\n":
+            raise ValueError("DOMAIN_DRIFT_PROBE_FAILED")
+        if psql(RESTORE.DOMAIN_PRESERVED) != domain_before:
+            raise ValueError("DOMAIN_PROBE_MODIFIED_SOURCE")
     for prefix in ("", "SET orzell.restore_quarantine='confirmed-offline'; SET orzell.auth_quarantine='confirmed-offline-reset'; SET orzell.restore_database='wrong';\n"):
         try:
             psql(prefix + RESTORE.QUARANTINE)
@@ -140,12 +166,31 @@ def main():
                     raise
             else:
                 raise ValueError("SCHEMA_DRIFT_WAS_ACCEPTED")
+        # New negative boundary: valid schema with inconsistent business data
+        # must fail inside the actual offline target and still remove that target.
+        try:
+            psql('UPDATE "CatalogProduct" SET "stockQuantity"=9.75 WHERE id=\'fixture-ml\';')
+            bad_dump = command(["docker", "exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", DATABASE])
+        finally:
+            psql('UPDATE "CatalogProduct" SET "stockQuantity"=8.75 WHERE id=\'fixture-ml\';')
+        with ExitStack() as stack, tempfile.TemporaryDirectory(prefix="generated-domain-failure-") as config:
+            descriptor = memory.VERIFIED.snapshot_stream(stack, io.BytesIO(bad_dump), max_bytes=RESTORE.MAX_DUMP)
+            try:
+                RESTORE._restore_sealed_dump(RESTORE.Docker(config), descriptor, expected, 180)
+            except ValueError as exc:
+                if str(exc) != "OFFLINE_RESTORE_FAILED_DOMAIN":
+                    raise
+            else:
+                raise ValueError("DOMAIN_DRIFT_WAS_ACCEPTED")
         if psql(RESTORE.PRESERVED) != preserved_before:
             raise ValueError("SOURCE_FIXTURE_WAS_MODIFIED")
+        if psql(RESTORE.DOMAIN_PRESERVED) != domain_before:
+            raise ValueError("SOURCE_DOMAIN_FIXTURE_WAS_MODIFIED")
         remaining = command(["docker", "ps", "--all", "--filter", "label=" + RESTORE.LABEL, "--format", "{{.ID}}"])
         if remaining.strip():
             raise ValueError("FAILED_TARGET_WAS_NOT_REMOVED")
         report.update(status="SYNTHETIC_SIGNED_ISOLATED_RESTORE_PASSED", schemaReferenceSha256=expected,
+                      domainMismatchRejected=True, domainDriftProbes=list(domain_probes),
                       schemaMismatchRejected=True, schemaDriftProbes=list(schema_probes), sourceUnchanged=True, privateKeyRead=False, productionDataRead=False,
                       productionRestoreVerified=False, realRecoveryReady=False, physicalObjectErasureVerified=False)
         Path("isolated-restore-evidence.json").write_text(json.dumps(report, indent=2) + "\n")

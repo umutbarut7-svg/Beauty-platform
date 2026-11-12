@@ -9,6 +9,8 @@ on:
       - infra/operations/check-isolated-restore-ci.py
       - infra/operations/recovery-catalog.sql
       - infra/operations/recovery-quarantine-check.sql
+      - infra/operations/recovery-domain-check.sql
+      - infra/operations/recovery-domain-fixture.sql
       - infra/operations/quarantine-recovery-access.sql
       - infra/operations/recover-backup-memory.py
       - infra/operations/recover-backup-package.py

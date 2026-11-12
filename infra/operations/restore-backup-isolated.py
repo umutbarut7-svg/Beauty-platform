@@ -31,6 +31,13 @@ ROOT = Path(__file__).parent
 CATALOG = (ROOT / "recovery-catalog.sql").read_text()
 QUARANTINE = (ROOT / "quarantine-recovery-access.sql").read_text()
 CHECK = (ROOT / "recovery-quarantine-check.sql").read_text()
+DOMAIN_CHECK = (ROOT / "recovery-domain-check.sql").read_text()
+DOMAIN_PRESERVED = "SELECT COALESCE(jsonb_agg(value ORDER BY value::text COLLATE \"C\"), '[]'::jsonb)::text FROM (\n" + "\nUNION ALL ".join(
+    'SELECT jsonb_build_array(\'' + table + '\', to_jsonb(r)) AS value FROM public."' + table + '" r'
+    for table in ("BusinessMember", "Customer", "BusinessCustomer", "Staff", "Location", "ServiceCategory", "Service",
+                  "Appointment", "AppointmentStatusHistory", "CatalogProduct", "InventoryOperation", "InventoryMovement",
+                  "SupplierProfile", "B2BQuoteRequest")
+) + "\n) preserved;\n"
 PRESERVED = r'''
 SELECT COALESCE(jsonb_agg(value ORDER BY value::text COLLATE "C"), '[]'::jsonb)::text FROM (
   SELECT jsonb_build_array('user', id, email, role, "createdAt") AS value FROM public."User"
@@ -95,10 +102,20 @@ ORZELL_PRESERVED
 cat > /work/replay.sql <<'ORZELL_REPLAY'
 @@REPLAY@@
 ORZELL_REPLAY
+cat > /work/domain-check.sql <<'ORZELL_DOMAIN_CHECK'
+@@DOMAIN_CHECK@@
+ORZELL_DOMAIN_CHECK
+cat > /work/domain-preserved.sql <<'ORZELL_DOMAIN_PRESERVED'
+@@DOMAIN_PRESERVED@@
+ORZELL_DOMAIN_PRESERVED
 query() { psql -X -qAt -h /work -d restored -v ON_ERROR_STOP=1 --file="$1" > "$2" 2>/dev/null; }
+domain_check() { PGOPTIONS='-c default_transaction_read_only=on' psql -X -qAt -h /work -d restored -v ON_ERROR_STOP=1 --file=/work/domain-check.sql 2>/dev/null; }
 fingerprint() { query /work/catalog.sql /work/catalog.json; sha256sum /work/catalog.json > /work/catalog.sha; cut -d ' ' -f 1 /work/catalog.sha; }
 stage=schema
 test "$(fingerprint)" = '@@EXPECTED@@'
+stage=domain
+test "$(domain_check)" = t
+query /work/domain-preserved.sql /work/domain-before.json
 query /work/preserved.sql /work/preserved-before.json
 stage=quarantine
 psql -X -q -h /work -d restored -v ON_ERROR_STOP=1 --file=/work/quarantine.sql >/dev/null 2>&1
@@ -114,6 +131,10 @@ query /work/replay.sql /work/replay-after.json
 cmp -s /work/replay-before.json /work/replay-after.json
 query /work/preserved.sql /work/preserved-after.json
 cmp -s /work/preserved-before.json /work/preserved-after.json
+stage=domain
+test "$(domain_check)" = t
+query /work/domain-preserved.sql /work/domain-after.json
+cmp -s /work/domain-before.json /work/domain-after.json
 test "$(fingerprint)" = '@@EXPECTED@@'
 stage=shutdown
 pg_ctl -D /work/db -m fast -t 20 -w stop >/dev/null 2>&1
@@ -121,7 +142,8 @@ trap - EXIT
 printf 'ORZELL_OFFLINE_RESTORE_QUARANTINED\n'
 '''
     for name, value in {"CATALOG": CATALOG, "QUARANTINE": QUARANTINE, "CHECK": CHECK,
-                        "PRESERVED": PRESERVED, "REPLAY": REPLAY, "EXPECTED": expected}.items():
+                        "PRESERVED": PRESERVED, "REPLAY": REPLAY, "DOMAIN_CHECK": DOMAIN_CHECK,
+                        "DOMAIN_PRESERVED": DOMAIN_PRESERVED, "EXPECTED": expected}.items():
         body = body.replace("@@" + name + "@@", value)
     return body
 
@@ -156,7 +178,7 @@ def bounded(arguments, environment, timeout=30, stdin=None, cap=256 * 1024):
             raise ValueError("RESTORE_COMMAND_DEADLINE") from None
         if status:
             # Never return PostgreSQL errors, row values, arguments or raw output.
-            stage = re.search(rb"^ORZELL_OFFLINE_FAILED_(environment|initdb|input|restore|schema|quarantine|check|replay|shutdown)$", output, re.M)
+            stage = re.search(rb"^ORZELL_OFFLINE_FAILED_(environment|initdb|input|restore|schema|domain|quarantine|check|replay|shutdown)$", output, re.M)
             if stage:
                 raise ValueError("OFFLINE_RESTORE_FAILED_" + stage[1].decode("ascii").upper())
             raise ValueError("ISOLATED_RESTORE_COMMAND_FAILED")
@@ -246,6 +268,7 @@ def _restore_sealed_dump(docker, descriptor, expected_schema, timeout):
         if docker("ps", "--all", "--filter", "name=^/" + name + "$", "--format", "{{.ID}}"):
             raise ValueError("TEMPORARY_DATABASE_CLEANUP_NOT_VERIFIED")
     return {"status": "OFFLINE_RESTORE_QUARANTINED", "temporaryDatabaseRemoved": True,
+            "domainIntegrityChecked": True, "domainRecordsPreservedAcrossQuarantine": True,
             "network": "none", "publicPorts": False, "reopenAuthorized": False, "realRecoveryReady": False}
 
 
