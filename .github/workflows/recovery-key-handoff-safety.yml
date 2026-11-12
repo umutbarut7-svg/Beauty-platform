@@ -1,0 +1,35 @@
+name: Offline protected recovery key handoff
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/recovery-key-handoff-safety.yml
+      - infra/operations/recovery-key-handoff.py
+      - infra/operations/wrap-recovery-handoff.mjs
+      - infra/operations/test_recovery_key_handoff.py
+      - infra/operations/recover-backup-memory.py
+      - infra/operations/recover-backup-package.py
+      - infra/operations/verified-backup.py
+      - infra/operations/backup-manifest.py
+      - infra/operations/encrypted-backup.py
+
+permissions:
+  contents: read
+
+jobs:
+  handoff-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Check local crypto runtime without credentials
+        run: python3 -c 'import cryptography; print(cryptography.__version__)'
+      - name: Generated Web Crypto handoff and existing signed CMS integration
+        run: python3 -m unittest discover -s infra/operations -p test_recovery_key_handoff.py -v
+      - name: Verify default CLI performs no operation
+        run: python3 infra/operations/recovery-key-handoff.py
