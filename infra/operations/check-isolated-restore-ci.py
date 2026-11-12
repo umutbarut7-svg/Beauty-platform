@@ -127,30 +127,32 @@ def main():
                 if str(failure) == "OFFLINE_RESTORE_FAILED_SCHEMA":
                     # Diagnostics are restricted to this locally generated CI
                     # fixture. No owner-input mode or production data route.
+                    diagnostic_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + r'''
+SELECT COALESCE(jsonb_object_agg(kind, jsonb_build_array(n, hash)), '{}'::jsonb)::text FROM (
+  SELECT value->>0 AS kind, count(*) AS n,
+    md5(string_agg(value::text, E'\n' ORDER BY value::text COLLATE "C")) AS hash
+  FROM items GROUP BY value->>0
+) summaries;
+'''
                     observed = []
                     original_script = RESTORE.script
                     def diagnostic_script(value):
                         body = original_script(value)
                         marker = "stage=schema\ntest \"$(fingerprint)\" = '" + value + "'"
-                        return body.replace(marker, "stage=schema\nquery /work/catalog.sql /work/catalog.json\ncat /work/catalog.json\nexit 0")
+                        return body.replace(RESTORE.CATALOG, diagnostic_catalog).replace(marker, "stage=schema\nquery /work/catalog.sql /work/catalog.json\ncat /work/catalog.json\nexit 0")
                     class DiagnosticDocker(RESTORE.Docker):
                         def __call__(self, *args, **kwargs):
                             output = super().__call__(*args, **kwargs)
                             if args[0] == "start":
-                                observed.extend(json.loads(output))
+                                observed.append(json.loads(output))
                                 return RESTORE.MARKER
                             return output
                     with ExitStack() as stack, tempfile.TemporaryDirectory() as config, patch.object(RESTORE, "script", side_effect=diagnostic_script):
                         descriptor = memory.VERIFIED.snapshot_stream(stack, io.BytesIO(dump), max_bytes=RESTORE.MAX_DUMP)
                         RESTORE._restore_sealed_dump(DiagnosticDocker(config), descriptor, expected, 180)
-                    reference = json.loads(psql(RESTORE.CATALOG))
-                    canonical = lambda v: json.dumps(v, sort_keys=True, ensure_ascii=True)
-                    expected_set = {canonical(v) for v in reference}
-                    observed_set = {canonical(v) for v in observed}
-                    missing = [json.loads(v)[:3] for v in sorted(expected_set - observed_set)]
-                    extra = [json.loads(v)[:3] for v in sorted(observed_set - expected_set)]
-                    print(json.dumps({"generatedFixtureCatalogDiff": True, "referenceItems": len(reference),
-                                      "targetItems": len(observed), "missing": missing[:20], "extra": extra[:20]}))
+                    reference = json.loads(psql(diagnostic_catalog))
+                    print(json.dumps({"generatedFixtureCatalogDiff": True,
+                                      "reference": reference, "target": observed[0]}))
                 raise
             try:
                 RESTORE.recover_and_restore(context, "0" * 64, 180, acknowledge_invalidation=True)
