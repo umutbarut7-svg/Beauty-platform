@@ -23,6 +23,9 @@ SPEC.loader.exec_module(RESTORE)
 SPEC = importlib.util.spec_from_file_location("protected_restore", Path(__file__).with_name("restore-protected-handoff.py"))
 BRIDGE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BRIDGE)
+SPEC = importlib.util.spec_from_file_location("owner_session", Path(__file__).with_name("run-recovery-session.py"))
+SESSION = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(SESSION)
 APPLICATION = "2e56def282c97a804a2f3d6c9b36a53b42a09df5"
 DATABASE = "orzell_recovery_fixture"
 FIXTURE = r'''
@@ -180,10 +183,14 @@ process.stdout.write(Buffer.from(capsule));
                 capsule = command(["node", "--input-type=module", "-e", wrap_program], input=json.dumps({
                     "challenge": base64.b64encode(handoff.challenge).decode(), "pin": handoff.challenge_sha256,
                     "key": base64.b64encode((root / "recipient.key").read_bytes()).decode()}).encode())
-                report = BRIDGE.restore_protected(handoff, capsule, root / "package.zip", root / "signer.pub",
-                    max_package_bytes=16*1024*1024, max_cipher_bytes=16*1024*1024,
-                    max_plaintext_bytes=RESTORE.MAX_DUMP, decrypt_timeout_seconds=30,
-                    restore_timeout_seconds=180, acknowledge_invalidation=True)
+                encoded = base64.b64encode(capsule).decode()
+                frame = ('ORZELL-CAPSULE-V1\n'+'\n'.join(encoded[i:i+256] for i in range(0,len(encoded),256))+'\nEND-ORZELL-CAPSULE\n').encode()
+                reports = []
+                report = SESSION.drive_session(BRIDGE, handoff, root / "package.zip", root / "signer.pub",
+                    package_bytes=(root / "package.zip").stat().st_size, context=handoff_context,
+                    reader=lambda deadline: SESSION.decode_frame(frame), output=reports.append)
+                if report["actualBackupRestoredToIsolatedDatabase"] or report["productionDataRead"]:
+                    raise ValueError("SYNTHETIC_SESSION_MISLABELLED")
                 if handoff._private is not None or handoff._used is not True:
                     raise ValueError("HANDOFF_SESSION_NOT_CLOSED")
         with patch.object(memory, "host_checks"):
