@@ -82,4 +82,3 @@ yenileme ve yeniden kayıt politikası; sonraki silme/geri çekilme uzlaşması;
 fiziksel nesne erasure; bağımsız inceleme ve EC2/stack kaynak temizliği.
 Bu bileşen EC2 veya mevcut 120 dakikalık timer üzerinde değişiklik yapmaz.
 AŞAMA 33 **NOT PASS**.
-
