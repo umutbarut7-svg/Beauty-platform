@@ -3,8 +3,6 @@
 
 No private key path or private-key argument exists. Default is offline.
 """
-import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,8 +15,8 @@ ACCOUNT = "926642724499"
 REGION = "eu-north-1"
 STACK = "arn:aws:cloudformation:eu-north-1:926642724499:stack/orzell-protected-runtime-v1/bda12ce0-decb-11f1-999e-0affea9001a7"
 INSTANCE = "i-014e0cd851bcd4169"
-SOURCE = "@@SOURCE@@"
-RUNNER_SHA256 = "@@RUNNER_SHA256@@"
+SOURCE = "ee77763668110e82ea14bc5f13f392ae77e588f7"
+RUNNER_SHA256 = "b2a364c12d76ec57e2f8c240da93a40802f44793f4aeaec5c734c1e55fda1bcc"
 PACKAGE_SHA256 = "0125b3789379511b52c8a61dbb24f2b847d34626f2a51562fe2a0bc2fa2d1221"
 
 
@@ -45,6 +43,7 @@ def start():
     if not re.fullmatch(r"[0-9a-f]{40}", SOURCE) or not re.fullmatch(r"[0-9a-f]{64}", RUNNER_SHA256):
         raise ValueError("IMMUTABLE_REVIEWED_RUNNER_REQUIRED")
     import boto3
+    from botocore.config import Config
     session = boto3.Session(region_name=REGION)
     if session.client('sts').get_caller_identity()['Account'] != ACCOUNT:
         raise ValueError("OWNER_ACCOUNT_MISMATCH")
@@ -57,7 +56,7 @@ def start():
     instances = session.client('ec2').describe_instances(InstanceIds=[INSTANCE])['Reservations']
     if len(instances) != 1 or len(instances[0]['Instances']) != 1 or instances[0]['Instances'][0]['State']['Name'] != 'running':
         raise ValueError("APPROVED_RUNTIME_NOT_RUNNING_NO_RECREATE")
-    url = session.client('s3').generate_presigned_url('get_object', Params={
+    url = session.client('s3', config=Config(signature_version='s3v4')).generate_presigned_url('get_object', Params={
         'Bucket':'orzell-backups-926642724499-eu-north-1',
         'Key':'encrypted/v1/daily/2026-11-12/orzell-database-20261112.zip',
         'VersionId':'bGbetc6wxE4Ru1KA_7zmspAnlu5.CTfE'}, ExpiresIn=180)
