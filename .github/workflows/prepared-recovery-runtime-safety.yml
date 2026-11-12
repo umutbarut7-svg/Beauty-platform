@@ -1,0 +1,27 @@
+name: Prepared recovery runtime operator safety
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/prepared-recovery-runtime-safety.yml
+      - infra/operations/prepare-protected-recovery-host.py
+      - infra/operations/test_prepared_recovery_host.py
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate source pins, scope, cost and submission boundaries
+        run: python3 -m unittest discover -s infra/operations -p test_prepared_recovery_host.py -v
+      - name: Lint the exact candidate template without AWS credentials
+        run: |
+          python3 -m pip install cfn-lint==1.59.0
+          python3 infra/operations/prepare-protected-recovery-host.py --print-template > "$RUNNER_TEMP/prepared-runtime.json"
+          cfn-lint --template "$RUNNER_TEMP/prepared-runtime.json" --regions eu-north-1
