@@ -1,0 +1,59 @@
+name: Recovery handoff phone preview
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/recovery-handoff-ui-preview.yml
+      - infra/operations/recovery-handoff-ui/**
+      - infra/operations/build-recovery-handoff-ui.py
+      - infra/operations/check-recovery-handoff-ui.mjs
+      - infra/operations/synthetic-handoff-ui-fixture.py
+      - infra/operations/test_recovery_handoff_ui_build.py
+      - infra/operations/wrap-recovery-handoff.mjs
+      - infra/operations/recovery-key-handoff.py
+      - infra/operations/recover-backup-memory.py
+      - docs/stage-33/recovery-handoff-phone-preview-20261112.md
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-phone-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: mcr.microsoft.com/playwright@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+      - name: Install isolated browser and crypto test dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/handoff-venv"
+          "$RUNNER_TEMP/handoff-venv/bin/python" -m pip install cryptography==50.0.2
+          npm install --prefix "$RUNNER_TEMP/handoff-browser-tools" --no-save --ignore-scripts playwright@1.64.1
+      - name: Check deterministic review and synthetic-only builds
+        run: python -m unittest discover -s infra/operations -p test_recovery_handoff_ui_build.py -v
+      - name: Generated-only Chromium and WebKit capsule round trip
+        run: |
+          export HANDOFF_PYTHON="$RUNNER_TEMP/handoff-venv/bin/python"
+          export HANDOFF_PLAYWRIGHT_MODULE="$RUNNER_TEMP/handoff-browser-tools/node_modules/playwright/index.mjs"
+          export HANDOFF_UI_OUTPUT="$RUNNER_TEMP/synthetic-handoff-ui"
+          export HANDOFF_BROWSERS=chromium,webkit
+          node infra/operations/check-recovery-handoff-ui.mjs
+      - name: Retain generated-only browser evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: synthetic-handoff-phone-preview
+          path: |
+            ${{ runner.temp }}/synthetic-handoff-ui/*.png
+            ${{ runner.temp }}/synthetic-handoff-ui/evidence.json
+          retention-days: 3
+          if-no-files-found: warn

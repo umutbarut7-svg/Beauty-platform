@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="@@CSP@@" />
+    <title>ORZELL · Kurtarma aktarımı önizlemesi</title>
+    <style>
+      /*@@STYLE@@*/
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="brand">ORZELL</p>
+        <p class="eyebrow">KURTARMA AKTARIMI</p>
+        <h1>Dosyanın kontrolü sende.</h1>
+        <p class="intro">Yapay dosyalarla şifreli aktarım akışını incele.</p>
+      </header>
+      <p class="notice" id="mode-notice">@@MODE_NOTICE@@</p>
+      <section aria-labelledby="session-heading">
+        <div class="step-heading">
+          <span class="number">01</span>
+          <h2 id="session-heading">Oturumu doğrula</h2>
+        </div>
+        <label for="challenge">Genel oturum dosyası</label>
+        <input
+          id="challenge"
+          type="file"
+          accept="application/json,.json"
+          aria-describedby="challenge-help"
+        />
+        <p class="help" id="challenge-help">
+          Kurtarma ortamından alınan genel oturum dosyası. Anahtar dosyasını
+          burada seçme.
+        </p>
+        <label for="pin">Bağımsız doğrulama kodu</label>
+        <input
+          id="pin"
+          type="text"
+          inputmode="text"
+          maxlength="64"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          placeholder="64 karakterlik SHA256 kodu"
+          aria-describedby="pin-help"
+        />
+        <p class="help" id="pin-help">
+          Ayrı ve kimliği doğrulanmış kanaldan aldığın kod. Oturum dosyasından
+          türetilmiş bir kod kullanma.
+        </p>
+        <button id="review" type="button">Oturumu doğrula</button>
+        <div id="summary" class="summary" hidden>
+          <dl>
+            <div>
+              <dt>Yedek</dt>
+              <dd id="backup-id"></dd>
+            </div>
+            <div>
+              <dt>Kaynak</dt>
+              <dd id="source-id"></dd>
+            </div>
+            <div>
+              <dt>Geçerlilik</dt>
+              <dd id="expiry"></dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+      <section aria-labelledby="private-heading">
+        <div class="step-heading">
+          <span class="number">02</span>
+          <h2 id="private-heading">Yapay dosyayı şifrele</h2>
+        </div>
+        <fieldset id="confirmation" disabled>
+          <label class="check"
+            ><input id="synthetic-confirm" type="checkbox" /><span
+              >Yalnız yapay deneme dosyaları kullanacağımı doğruluyorum.</span
+            ></label
+          >
+        </fieldset>
+        <fieldset id="private-fields" disabled>
+          <label for="key-file">Yapay anahtar dosyası</label
+          ><input id="key-file" type="file" accept=".pem,.key" />
+          <label for="password"
+            >Dosya parolası <span class="optional">varsa</span></label
+          ><input
+            id="password"
+            type="password"
+            maxlength="1024"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="encrypt" type="button">
+            Şifreli deneme paketini hazırla
+          </button>
+        </fieldset>
+      </section>
+      <section id="result" hidden aria-labelledby="result-heading">
+        <div class="step-heading">
+          <span class="number">03</span>
+          <h2 id="result-heading">Şifreli paket hazır</h2>
+        </div>
+        <p>İndirilen dosya yalnız şifreli kapsüldür.</p>
+        <button id="download" type="button">Şifreli paketi indir</button>
+      </section>
+      <p id="status" role="status" aria-live="polite">
+        Genel oturum dosyasını ve bağımsız kodu seçerek başla.
+      </p>
+      <button class="secondary" id="reset" type="button">
+        Oturumu temizle
+      </button>
+      <footer>
+        Bu önizleme gerçek kurtarma anahtarı teslimine veya üretim verisinin
+        geri yüklenmesine açılmamıştır.
+      </footer>
+    </main>
+    <script type="module">
+      /*@@SCRIPT@@*/
+    </script>
+  </body>
+</html>
