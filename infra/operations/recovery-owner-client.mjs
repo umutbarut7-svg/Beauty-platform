@@ -13,6 +13,34 @@ export const OWNER_CONTEXT = {
   snapshotBoundary: "LIVE_DAILY_SNAPSHOT",
 };
 
+/** Extract only public challenge fields copied from the owner's AWS output.
+ * Terminal prefixes and a cut-off trailing status are harmless; duplicate
+ * fields, missing quotes and invalid values are rejected. Cryptographic review
+ * still checks the separately authenticated AWS pin and fixed snapshot.
+ */
+export function parseOwnerReceipt(text) {
+  if (typeof text !== "string" || text.length > 20000)
+    throw new Error("PUBLIC_RECEIPT_LIMIT");
+  const field = (name, pattern) => {
+    const labels = [...text.matchAll(new RegExp('"' + name + '"\\s*:', "g"))];
+    const values = [
+      ...text.matchAll(
+        new RegExp('"' + name + '"\\s*:\\s*"(' + pattern + ')"', "g"),
+      ),
+    ];
+    if (labels.length !== 1 || values.length !== 1)
+      throw new Error("ONE_PUBLIC_AWS_RECEIPT_REQUIRED");
+    return values[0][1];
+  };
+  return {
+    encoded: field("challengeBase64", "[A-Za-z0-9+/=\\s]{1,15000}").replace(
+      /\s/g,
+      "",
+    ),
+    pin: field("challengeSha256", "[0-9a-f]{64}"),
+  };
+}
+
 export async function reviewOwnerChallenge(encoded, pin) {
   if (
     typeof encoded !== "string" ||

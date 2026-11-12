@@ -104,6 +104,15 @@ for(const value of [pem+'\n'+pem,'no PEM','x'.repeat(32769)]){
 }
 const frame=frameCapsule(new Uint8Array(39000));
 assert(frame.split('\n').slice(1,-2).every(v=>v.length<=256));
+const receipt='OK\n'+JSON.stringify({challengeBase64:'YWJj',challengeSha256:'a'.repeat(64)});
+assert(parseOwnerReceipt(receipt).encoded==='YWJj');
+assert(parseOwnerReceipt(receipt).pin==='a'.repeat(64));
+assert(parseOwnerReceipt(receipt.replace('YWJj','YW\nJj')).encoded==='YWJj');
+for(const input of [receipt+receipt,receipt.replace('challengeSha256','missing'),
+  receipt.replace('YWJj','YW!Jj'),receipt.replace('a'.repeat(64),'a'.repeat(63)),
+  'x'.repeat(20001),receipt+'\n"challengeBase64": "unterminated']){
+ let rejected=false;try{parseOwnerReceipt(input)}catch{rejected=true}assert(rejected);
+}
 '''
         with tempfile.NamedTemporaryFile(mode='w',suffix='.mjs') as script:
             script.write(code);script.flush()

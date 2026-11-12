@@ -25,20 +25,28 @@ let epoch = 0, review = null, expiry = null;
 function resetPrivate() { epoch++; $('key').value=''; $('password').value=''; $('capsule').value=''; $('copy').disabled=true; }
 function invalidate() { resetPrivate(); review=null; clearTimeout(expiry); $('private').disabled=true; $('context').textContent=''; }
 function message(text) { $('status').textContent=text; }
-for(const id of ['challenge','pin']) $(id).addEventListener('input', () => { invalidate(); message('Oturumu yeniden doğrula.'); });
-$('reset').addEventListener('click', () => { invalidate(); $('challenge').value=''; $('pin').value=''; message('Oturum bilgileri temizlendi.'); });
+$('challenge').addEventListener('input', () => { invalidate(); message('Oturumu yeniden doğrula.'); });
+$('reset').addEventListener('click', () => { invalidate(); $('challenge').value=''; message('Oturum bilgileri temizlendi.'); });
 addEventListener('pagehide', invalidate);
 $('review').addEventListener('click', async () => {
   invalidate(); const generation=epoch;
   try {
     if (!isSecureContext || !crypto.subtle) throw new Error('HTTPS_REQUIRED');
-    const next=await reviewOwnerChallenge($('challenge').value.trim(),$('pin').value.trim());
+    const receipt=parseOwnerReceipt($('challenge').value);
+    const next=await reviewOwnerChallenge(receipt.encoded,receipt.pin);
     if(generation!==epoch) return;
     review=next; $('private').disabled=false;
-    $('context').textContent='Yedek: '+next.request.context.backupId+'\nSüre sonu: '+next.request.expiresAt+'\nKapsam: izole geri yükleme ve erişim karantinası';
+    $('context').textContent='Yedek: '+next.request.context.backupId+'\nTürkiye saatiyle süre sonu: '+new Date(next.expires).toLocaleTimeString('tr-TR',{timeZone:'Europe/Istanbul',hour12:false})+'\nKapsam: izole geri yükleme ve erişim karantinası';
     expiry=setTimeout(() => { invalidate(); message('Oturum süresi doldu. Anahtar seçimi temizlendi.'); },Math.max(0,next.expires-Date.now()));
     message('Oturum ve sabit yedek bağları doğrulandı. Anahtar dosyanı şimdi seçebilirsin.');
-  } catch { message('Oturum doğrulanamadı. CloudShell çıktısındaki challengeBase64 ve challengeSha256 alanlarını kontrol et.'); }
+  } catch (error) {
+    if(generation!==epoch) return;
+    message(error.message==='HANDOFF_EXPIRED_OR_INVALID_LIFETIME'
+      ? 'Bu oturumun süresi dolmuş. CloudShell’de yeni oturum açıp yeni çıktıyı yapıştır.'
+      : error.message==='HANDOFF_CHALLENGE_PIN_MISMATCH'
+        ? 'Kopyalanan çıktı değişmiş veya eksik. Kendi CloudShell oturumundaki son çıktıyı yeniden kopyala.'
+        : 'Tek bir güncel CloudShell çıktısını tamamıyla yapıştır. Uzun ve kısa kodu ayrı ayrı seçmene gerek yok.');
+  }
 });
 for(const id of ['key','password']) $(id).addEventListener('input', () => { epoch++; $('capsule').value=''; $('copy').disabled=true; });
 $('encrypt').addEventListener('click', async () => {
@@ -68,10 +76,10 @@ $('copy').addEventListener('click', async () => {
 PAGE = '''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="@@CSP@@"><title>ORZELL · Kurtarma aktarımı</title><style>@@STYLE@@</style></head><body><main>
 <div class="brand">ORZELL / ÖZEL İŞLEM</div><h1>Güvenli kurtarma aktarımı</h1>
 <p>Anahtar dosyan bu sayfada, telefonunda şifrelenir. CloudShell'e yalnız şifreli kapsülü aktar. Gerçek anahtarı sohbete veya terminale yapıştırma.</p>
-<section class="box"><h2>1. Bekleyen oturumu doğrula</h2><small>Bilgileri kendi AWS SSM oturumunun çıktısından al.</small><label for="challenge">challengeBase64</label><textarea id="challenge" maxlength="11000" spellcheck="false" autocomplete="off"></textarea>
-<label for="pin">challengeSha256</label><input id="pin" maxlength="64" spellcheck="false" autocomplete="off"><button id="review">Oturumu doğrula</button><div id="context"></div></section>
+<section class="box"><h2>1. Bekleyen oturumu doğrula</h2><small>Yeni sürüm: tek yapıştırma. Kendi CloudShell oturumundaki {"backupId": ...} ile başlayan son çıktıyı bütünüyle kopyala. Kodları ayrı ayrı ayırma.</small><label for="challenge">CloudShell çıktısı</label><textarea id="challenge" maxlength="20000" spellcheck="false" autocomplete="off"></textarea>
+<button id="review">Oturumu doğrula</button><div id="context"></div></section>
 <section class="box"><h2>2. Telefonda şifrele</h2><fieldset id="private" disabled><label for="key">ORZELL-Kurtarma-Anahtari.txt veya PEM</label><input id="key" type="file" accept=".txt,.pem"><label for="password">Anahtar parolası (varsa)</label><input id="password" type="password" autocomplete="off"><button id="encrypt">Şifreli kapsül oluştur</button></fieldset><small>Dosya ve parola sunucuya gönderilmez. Tarayıcı belleğinin tüm kopyalarını fiziksel olarak silme garantisi yoktur; iş bittiğinde sayfayı kapat.</small></section>
-<section class="box"><h2>3. Şifreli kapsülü aktar</h2><textarea id="capsule" readonly aria-label="Şifreli kapsül" spellcheck="false"></textarea><button id="copy" disabled>Kapsülü kopyala</button><button id="reset" class="secondary">Temizle</button></section><p id="status" role="status" aria-live="polite">Önce kendi CloudShell oturumunu başlat, ardından iki oturum alanını buraya aktar.</p>
+<section class="box"><h2>3. Şifreli kapsülü aktar</h2><textarea id="capsule" readonly aria-label="Şifreli kapsül" spellcheck="false"></textarea><button id="copy" disabled>Kapsülü kopyala</button><button id="reset" class="secondary">Temizle</button></section><p id="status" role="status" aria-live="polite">Önce kendi CloudShell oturumunu başlat, ardından son çıktıyı tek seferde buraya yapıştır.</p>
 </main><script type="module">@@SCRIPT@@</script></body></html>'''
 
 
