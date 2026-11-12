@@ -49,11 +49,13 @@ try:
             elif set(request) == {"action", "id", "envelope"} and request["action"] == "unwrap":
                 with sessions[request["id"]].open_key(base64.b64decode(request["envelope"], validate=True)) as (fd, pw):
                     valid = os.pread(fd, 20000, 0) == key_data and os.pread(pw, 2000, 0) == password
-                closed = False
-                try:
-                    os.fstat(fd)
-                except OSError:
-                    closed = True
+                closed = True
+                for descriptor in (fd, pw):
+                    try:
+                        os.fstat(descriptor)
+                        closed = False
+                    except OSError:
+                        pass
                 response = {"ok": valid, "descriptorsClosed": closed, "productionDataRead": False}
             else:
                 raise ValueError("SYNTHETIC_ACTION_REQUIRED")
