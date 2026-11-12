@@ -127,13 +127,22 @@ def main():
                 if str(failure) == "OFFLINE_RESTORE_FAILED_SCHEMA":
                     # Diagnostics are restricted to this locally generated CI
                     # fixture. No owner-input mode or production data route.
-                    diagnostic_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + r'''
-SELECT COALESCE(jsonb_object_agg(kind, jsonb_build_array(n, hash)), '{}'::jsonb)::text FROM (
-  SELECT value->>0 AS kind, count(*) AS n,
-    md5(string_agg(value::text, E'\n' ORDER BY value::text COLLATE "C")) AS hash
-  FROM items GROUP BY value->>0
-) summaries;
+                    reference = json.loads(psql(RESTORE.CATALOG))
+                    changed_kinds = {"column", "constraint", "enum"}
+                    # Hash formatting is PostgreSQL's jsonb text, rather than
+                    # Python JSON whitespace. No customer rows are in this catalog.
+                    digest_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + r'''
+SELECT COALESCE(jsonb_agg(md5(value::text)), '[]'::jsonb)::text
+FROM items WHERE value->>0 IN ('column','constraint','enum');
 '''
+                    digests = json.loads(psql(digest_catalog))
+                    if not all(re.fullmatch(r"[0-9a-f]{32}", v) for v in digests):
+                        raise ValueError("INVALID_GENERATED_METADATA_DIGEST")
+                    diagnostic_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + (
+                        "\nSELECT COALESCE(jsonb_agg(value ORDER BY value::text COLLATE \"C\"), '[]'::jsonb)::text "
+                        "FROM items WHERE value->>0 IN ('column','constraint','enum') "
+                        "AND md5(value::text) NOT IN (" + ",".join("'" + v + "'" for v in digests) + ");\n"
+                    )
                     observed = []
                     original_script = RESTORE.script
                     def diagnostic_script(value):
@@ -150,9 +159,12 @@ SELECT COALESCE(jsonb_object_agg(kind, jsonb_build_array(n, hash)), '{}'::jsonb)
                     with ExitStack() as stack, tempfile.TemporaryDirectory() as config, patch.object(RESTORE, "script", side_effect=diagnostic_script):
                         descriptor = memory.VERIFIED.snapshot_stream(stack, io.BytesIO(dump), max_bytes=RESTORE.MAX_DUMP)
                         RESTORE._restore_sealed_dump(DiagnosticDocker(config), descriptor, expected, 180)
-                    reference = json.loads(psql(diagnostic_catalog))
-                    print(json.dumps({"generatedFixtureCatalogDiff": True,
-                                      "reference": reference, "target": observed[0]}))
+                    def key(value):
+                        return tuple(value[:3] + [value[4] if value[0] in ("column", "enum") else value[3]])
+                    reference_by_key = {key(v): v for v in reference if v[0] in changed_kinds}
+                    differences = [{"reference": reference_by_key.get(key(v)), "target": v} for v in observed[0]]
+                    print(json.dumps({"generatedFixtureCatalogDiff": True, "differences": differences[:30],
+                                      "differenceCount": len(differences)}))
                 raise
             try:
                 RESTORE.recover_and_restore(context, "0" * 64, 180, acknowledge_invalidation=True)
