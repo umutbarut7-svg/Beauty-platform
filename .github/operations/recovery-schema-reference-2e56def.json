@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "applicationSha": "2e56def282c97a804a2f3d6c9b36a53b42a09df5",
+  "sourceImage": "sha256:f13b300b0a0a236553b174b6453fc1d8ec3c06b1c912074401e625371464c99e",
+  "postgresImage": "pgvector/pgvector@sha256:01215e09bd4bd582d20230e025b6c971deeeffee49ceef1aae167e839cb62a7e",
+  "catalogQuerySha256": "1e7e22e98e3d370f1a5fe809f1248df6c142a5baa208e4456dc194f2f24f57be",
+  "schemaSha256": "68362cdf1f55954652b3a3bd4df03c91ec92c99c6770e4fac41058b73e9ec71d",
+  "evidenceSourceSha": "d41fc7661cf8327ae980ee340ea7acc2309c7ec0",
+  "evidenceTreeSha": "d184109c2953f191ccceb236c5286d71578aaff1",
+  "evidenceRunId": 43169608631,
+  "evidenceJobId": 131019470556,
+  "productionSchemaVerified": false
+}
