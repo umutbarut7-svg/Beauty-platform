@@ -1,0 +1,77 @@
+name: Signed isolated restore and quarantine
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/isolated-restore-safety.yml
+      - infra/operations/restore-backup-isolated.py
+      - infra/operations/test_isolated_restore.py
+      - infra/operations/check-isolated-restore-ci.py
+      - infra/operations/recovery-catalog.sql
+      - infra/operations/recovery-quarantine-check.sql
+      - infra/operations/quarantine-recovery-access.sql
+      - infra/operations/recover-backup-memory.py
+      - infra/operations/recover-backup-package.py
+      - infra/operations/verified-backup.py
+      - infra/operations/backup-manifest.py
+      - infra/operations/encrypted-backup.py
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector@sha256:01215e09bd4bd582d20230e025b6c971deeeffee49ceef1aae167e839cb62a7e
+        env:
+          POSTGRES_DB: orzell_recovery_fixture
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d orzell_recovery_fixture"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: application
+          ref: 2e56def282c97a804a2f3d6c9b36a53b42a09df5
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Check controller boundaries without provider credentials
+        run: python3 -m unittest discover -s harness/infra/operations -p test_isolated_restore.py -v
+      - name: Migrate the separately reviewed synthetic reference
+        working-directory: application
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/orzell_recovery_fixture?schema=public
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @beauty-platform/api prisma:generate
+          pnpm --filter @beauty-platform/api prisma:migrate
+      - name: Signed CMS to sealed memory to network-none disposable PostgreSQL
+        env:
+          ISOLATED_RESTORE_APPLICATION: 2e56def282c97a804a2f3d6c9b36a53b42a09df5
+          ISOLATED_RESTORE_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: python3 harness/infra/operations/check-isolated-restore-ci.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: isolated-restore-noncontent-evidence
+          path: isolated-restore-evidence.json
+          if-no-files-found: error
+          retention-days: 7
