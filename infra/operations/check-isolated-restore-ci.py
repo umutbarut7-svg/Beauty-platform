@@ -3,6 +3,7 @@
 
 from datetime import datetime, timedelta, timezone
 from contextlib import ExitStack
+import base64
 import hashlib
 import importlib.util
 import io
@@ -19,6 +20,9 @@ import zipfile
 SPEC = importlib.util.spec_from_file_location("isolated_restore", Path(__file__).with_name("restore-backup-isolated.py"))
 RESTORE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RESTORE)
+SPEC = importlib.util.spec_from_file_location("protected_restore", Path(__file__).with_name("restore-protected-handoff.py"))
+BRIDGE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(BRIDGE)
 APPLICATION = "2e56def282c97a804a2f3d6c9b36a53b42a09df5"
 DATABASE = "orzell_recovery_fixture"
 FIXTURE = r'''
@@ -157,8 +161,32 @@ def main():
                        max_package_bytes=RESTORE.MAX_DUMP, max_cipher_bytes=RESTORE.MAX_DUMP,
                        max_plaintext_bytes=RESTORE.MAX_DUMP, decrypt_timeout_seconds=30)
         # Only generated synthetic material. CI is NOT a real-data host approval.
+        handoff_context = dict(backupId=context["backup_id"], applicationSha=APPLICATION,
+            cipherSha256=hashlib.sha256((root / "backup.cms").read_bytes()).hexdigest(),
+            recipientCertificateSha256=context["expected_recipient"], signingPublicKeySha256=context["expected_signer"],
+            schemaReferenceSha256=expected, snapshotBoundary="SYNTHETIC_ONLY",
+            backupCreatedNotBefore=context["not_before"], backupCreatedNotAfter=context["not_after"])
+        # Generated private material travels only on stdin to actual Node Web Crypto.
+        # It never becomes a subprocess argument or a Docker input.
+        wrap_program = '''
+import { wrapRecoveryKey } from CLIENT_URL;
+let text=''; for await (const c of process.stdin) text+=c;
+const i=JSON.parse(text), decode=v=>new Uint8Array(Buffer.from(v,'base64'));
+const capsule=await wrapRecoveryKey(decode(i.challenge), i.pin, decode(i.key), null);
+process.stdout.write(Buffer.from(capsule));
+'''.replace("CLIENT_URL", json.dumps(Path(__file__).with_name("wrap-recovery-handoff.mjs").resolve().as_uri()))
+        with patch.object(BRIDGE.HANDOFF.MEMORY, "host_checks"):
+            with BRIDGE.HANDOFF.KeyHandoff(handoff_context, (root / "recipient.crt").read_bytes()) as handoff:
+                capsule = command(["node", "--input-type=module", "-e", wrap_program], input=json.dumps({
+                    "challenge": base64.b64encode(handoff.challenge).decode(), "pin": handoff.challenge_sha256,
+                    "key": base64.b64encode((root / "recipient.key").read_bytes()).decode()}).encode())
+                report = BRIDGE.restore_protected(handoff, capsule, root / "package.zip", root / "signer.pub",
+                    max_package_bytes=16*1024*1024, max_cipher_bytes=16*1024*1024,
+                    max_plaintext_bytes=RESTORE.MAX_DUMP, decrypt_timeout_seconds=30,
+                    restore_timeout_seconds=180, acknowledge_invalidation=True)
+                if handoff._private is not None or handoff._used is not True:
+                    raise ValueError("HANDOFF_SESSION_NOT_CLOSED")
         with patch.object(memory, "host_checks"):
-            report = RESTORE.recover_and_restore(context, expected, 180, acknowledge_invalidation=True)
             try:
                 RESTORE.recover_and_restore(context, "0" * 64, 180, acknowledge_invalidation=True)
             except ValueError as exc:
