@@ -73,11 +73,9 @@ function timestamp(value) {
 }
 
 /** Pin comes through a separately authenticated owner channel, never the challenge file. */
-export async function wrapRecoveryKey(
+export async function reviewHandoffChallenge(
   challengeBytes,
   expectedChallengeSha256,
-  privateKeyBytes,
-  passphraseBytes = null,
 ) {
   if (
     !(challengeBytes instanceof Uint8Array) ||
@@ -163,6 +161,17 @@ export async function wrapRecoveryKey(
   );
   if (publicKey.algorithm.modulusLength !== 3072)
     fail("HANDOFF_RSA_PROFILE_REQUIRED");
+  return { challenge, request, publicKey, label, observed, expires };
+}
+
+export async function wrapRecoveryKey(
+  challengeBytes,
+  expectedChallengeSha256,
+  privateKeyBytes,
+  passphraseBytes = null,
+) {
+  const { challenge, publicKey, label, observed, expires } =
+    await reviewHandoffChallenge(challengeBytes, expectedChallengeSha256);
   // Trust is checked before the function copies or processes private bytes.
   if (
     !(privateKeyBytes instanceof Uint8Array) ||
