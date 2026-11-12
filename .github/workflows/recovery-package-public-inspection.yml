@@ -1,0 +1,29 @@
+name: Public encrypted recovery package verification
+on:
+  pull_request:
+    paths:
+      - .github/workflows/recovery-package-public-inspection.yml
+      - .github/operations/recovery-snapshot-20261112.json
+      - .github/operations/recovery-schema-reference-2e56def.json
+      - .github/operations/backup-signing-public-20261105.pem
+      - infra/operations/inspect-recovery-package.py
+      - infra/operations/test_recovery_package_inspection.py
+      - infra/operations/recovery-catalog.sql
+      - infra/operations/recover-backup-package.py
+      - infra/operations/verified-backup.py
+      - infra/operations/backup-manifest.py
+      - infra/operations/encrypted-backup.py
+permissions:
+  contents: read
+jobs:
+  public-package-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect only generated signed encrypted packages
+        run: python3 -m unittest discover -s infra/operations -p test_recovery_package_inspection.py -v
+      - name: Verify public default performs no action
+        run: python3 infra/operations/inspect-recovery-package.py
