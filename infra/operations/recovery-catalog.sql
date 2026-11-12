@@ -24,7 +24,14 @@ WITH app_namespaces AS (
   WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
   UNION ALL
   SELECT jsonb_build_array('constraint', n.nspname, c.relname, x.conname,
-    pg_get_constraintdef(x.oid, false), x.convalidated)
+    -- PostgreSQL reparses this array cast as per-element text casts during
+    -- restore. Only this exact reviewed expression on this exact constraint
+    -- maps to its restored spelling; no general expression rewrite or omission.
+    CASE WHEN n.nspname = 'public' AND c.relname = 'BeautyJobSatisfaction'
+      AND x.conname = 'BeautyJobSatisfaction_outcome_check'
+      AND pg_get_constraintdef(x.oid, false) = $original$CHECK (((outcome)::text = ANY ((ARRAY['SATISFIED'::character varying, 'UNSATISFIED'::character varying, 'UNSURE'::character varying])::text[])))$original$
+      THEN $restored$CHECK (((outcome)::text = ANY (ARRAY[('SATISFIED'::character varying)::text, ('UNSATISFIED'::character varying)::text, ('UNSURE'::character varying)::text])))$restored$
+      ELSE pg_get_constraintdef(x.oid, false) END, x.convalidated)
   FROM pg_constraint x JOIN pg_class c ON c.oid = x.conrelid
   JOIN app_namespaces n ON n.oid = c.relnamespace
   UNION ALL

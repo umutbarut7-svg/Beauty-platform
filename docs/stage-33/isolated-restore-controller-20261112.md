@@ -28,6 +28,21 @@ Prisma migration kimliği/checksumlarını kapsar. Bu kapsam tam bir DDL güvenl
 incelemesinin veya yeniden erişim açma onayının yerine geçmez. Beklenen hash
 geri yüklenen hedeften veya paketin yan dosyasından üretilemez.
 
+`pg_dump` silinmiş kolonların fiziksel sıra boşluklarını ve enumların kesirli
+iç sıra numaralarını yeniden oluşturmaz. Katalog bu iki alan için yaşayan
+kolon/değerlerin sırasını karşılaştırır; ad, tip, varsayılan, enum etiketi ve
+etiket sırası korunur. `public.BeautyJobSatisfaction` tablosundaki
+`BeautyJobSatisfaction_outcome_check` ifadesinin ARRAY text cast'i PostgreSQL
+tarafından eleman başına cast olarak yeniden yazılır. Yalnız bu adlandırılmış
+kısıttaki iki tam, incelenmiş ifade aynı biçime eşlenir; başka ifadeler veya
+kısıtlar atlanmaz. CI kolon tipi, yeni kısıt, bu özel kısıtın izinli değerleri,
+enum etiketi ve migration checksum değişikliklerini ayrı transaction'larla
+sınar; her probdan sonra referansın değişmediğini denetler.
+
+Başarısız geri yüklemede de konteyner kaldırıldıktan sonra yokluğu doğrulanır.
+Temizlik hatası veya kalan hedef, ilk hatanın üstüne yazsa bile başarı sonucu
+üretemez. Bunun ayrı sınır testi vardır.
+
 ## Geçici kopyada uygulanan karantina
 
 Fiziksel yalıtımın yanında SQL ayrıca offline DB adı ve auth/fotoğraf
@@ -67,3 +82,4 @@ yenileme ve yeniden kayıt politikası; sonraki silme/geri çekilme uzlaşması;
 fiziksel nesne erasure; bağımsız inceleme ve EC2/stack kaynak temizliği.
 Bu bileşen EC2 veya mevcut 120 dakikalık timer üzerinde değişiklik yapmaz.
 AŞAMA 33 **NOT PASS**.
+

@@ -12,8 +12,6 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 import zipfile
-from contextlib import ExitStack
-import io
 
 
 SPEC = importlib.util.spec_from_file_location("isolated_restore", Path(__file__).with_name("restore-backup-isolated.py"))
@@ -95,6 +93,19 @@ def main():
     # Independent reference comes from the separately migrated reviewed source,
     # never from the restored target that is about to be checked.
     expected = hashlib.sha256(psql(RESTORE.CATALOG)).hexdigest()
+    # Independently migrated reference: canonicalization must not hide real
+    # schema drift. Each probe rolls back and must leave the reference intact.
+    schema_probes = {
+        "columnType": 'ALTER TABLE public."Business" ALTER COLUMN name TYPE varchar(255);',
+        "constraint": 'ALTER TABLE public."Business" ADD CONSTRAINT synthetic_recovery_name CHECK (name <> \'forbidden\');',
+        "reviewedConstraintChanged": 'ALTER TABLE public."BeautyJobSatisfaction" DROP CONSTRAINT "BeautyJobSatisfaction_outcome_check"; ALTER TABLE public."BeautyJobSatisfaction" ADD CONSTRAINT "BeautyJobSatisfaction_outcome_check" CHECK (outcome IN (\'SATISFIED\', \'UNSATISFIED\'));',
+        "enumLabel": 'ALTER TYPE public."AppointmentStatus" RENAME VALUE \'PENDING\' TO \'SYNTHETIC_PENDING\';',
+        "migrationChecksum": "UPDATE public._prisma_migrations SET checksum = repeat('f', 64) WHERE migration_name = (SELECT min(migration_name) FROM public._prisma_migrations);",
+    }
+    for probe, ddl in schema_probes.items():
+        changed = hashlib.sha256(psql("BEGIN;\n" + ddl + "\n" + RESTORE.CATALOG + "\nROLLBACK;\n")).hexdigest()
+        if changed == expected or hashlib.sha256(psql(RESTORE.CATALOG)).hexdigest() != expected:
+            raise ValueError("SCHEMA_DRIFT_PROBE_FAILED")
     with tempfile.TemporaryDirectory(prefix="orzell-generated-restore-") as directory:
         root = Path(directory)
         dump = command(["docker", "exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", DATABASE])
@@ -121,51 +132,7 @@ def main():
                        max_plaintext_bytes=RESTORE.MAX_DUMP, decrypt_timeout_seconds=30)
         # Only generated synthetic material. CI is NOT a real-data host approval.
         with patch.object(memory, "host_checks"):
-            try:
-                report = RESTORE.recover_and_restore(context, expected, 180, acknowledge_invalidation=True)
-            except ValueError as failure:
-                if str(failure) == "OFFLINE_RESTORE_FAILED_SCHEMA":
-                    # Diagnostics are restricted to this locally generated CI
-                    # fixture. No owner-input mode or production data route.
-                    reference = json.loads(psql(RESTORE.CATALOG))
-                    changed_kinds = {"column", "constraint", "enum"}
-                    # Hash formatting is PostgreSQL's jsonb text, rather than
-                    # Python JSON whitespace. No customer rows are in this catalog.
-                    digest_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + r'''
-SELECT COALESCE(jsonb_agg(md5(value::text)), '[]'::jsonb)::text
-FROM items WHERE value->>0 IN ('column','constraint','enum');
-'''
-                    digests = json.loads(psql(digest_catalog))
-                    if not all(re.fullmatch(r"[0-9a-f]{32}", v) for v in digests):
-                        raise ValueError("INVALID_GENERATED_METADATA_DIGEST")
-                    diagnostic_catalog = RESTORE.CATALOG[:RESTORE.CATALOG.rindex("\nSELECT COALESCE")] + (
-                        "\nSELECT COALESCE(jsonb_agg(value ORDER BY value::text COLLATE \"C\"), '[]'::jsonb)::text "
-                        "FROM items WHERE value->>0 IN ('column','constraint','enum') "
-                        "AND md5(value::text) NOT IN (" + ",".join("'" + v + "'" for v in digests) + ");\n"
-                    )
-                    observed = []
-                    original_script = RESTORE.script
-                    def diagnostic_script(value):
-                        body = original_script(value)
-                        marker = "stage=schema\ntest \"$(fingerprint)\" = '" + value + "'"
-                        return body.replace(RESTORE.CATALOG, diagnostic_catalog).replace(marker, "stage=schema\nquery /work/catalog.sql /work/catalog.json\ncat /work/catalog.json\nexit 0")
-                    class DiagnosticDocker(RESTORE.Docker):
-                        def __call__(self, *args, **kwargs):
-                            output = super().__call__(*args, **kwargs)
-                            if args[0] == "start":
-                                observed.append(json.loads(output))
-                                return RESTORE.MARKER
-                            return output
-                    with ExitStack() as stack, tempfile.TemporaryDirectory() as config, patch.object(RESTORE, "script", side_effect=diagnostic_script):
-                        descriptor = memory.VERIFIED.snapshot_stream(stack, io.BytesIO(dump), max_bytes=RESTORE.MAX_DUMP)
-                        RESTORE._restore_sealed_dump(DiagnosticDocker(config), descriptor, expected, 180)
-                    def key(value):
-                        return tuple(value[:3] + [value[4] if value[0] in ("column", "enum") else value[3]])
-                    reference_by_key = {key(v): v for v in reference if v[0] in changed_kinds}
-                    differences = [{"reference": reference_by_key.get(key(v)), "target": v} for v in observed[0]]
-                    print(json.dumps({"generatedFixtureCatalogDiff": True, "differences": differences[:30],
-                                      "differenceCount": len(differences)}))
-                raise
+            report = RESTORE.recover_and_restore(context, expected, 180, acknowledge_invalidation=True)
             try:
                 RESTORE.recover_and_restore(context, "0" * 64, 180, acknowledge_invalidation=True)
             except ValueError as exc:
@@ -179,7 +146,7 @@ FROM items WHERE value->>0 IN ('column','constraint','enum');
         if remaining.strip():
             raise ValueError("FAILED_TARGET_WAS_NOT_REMOVED")
         report.update(status="SYNTHETIC_SIGNED_ISOLATED_RESTORE_PASSED", schemaReferenceSha256=expected,
-                      schemaMismatchRejected=True, sourceUnchanged=True, privateKeyRead=False, productionDataRead=False,
+                      schemaMismatchRejected=True, schemaDriftProbes=list(schema_probes), sourceUnchanged=True, privateKeyRead=False, productionDataRead=False,
                       productionRestoreVerified=False, realRecoveryReady=False, physicalObjectErasureVerified=False)
         Path("isolated-restore-evidence.json").write_text(json.dumps(report, indent=2) + "\n")
         print(json.dumps(report))
@@ -192,3 +159,4 @@ if __name__ == "__main__":
         print(json.dumps({"status": "SYNTHETIC_RESTORE_FAILED", "errorType": type(exc).__name__,
                           "reason": str(exc) if isinstance(exc, ValueError) and re.fullmatch(r"[A-Z_]+", str(exc)) else "FIXTURE_FAILED"}))
         raise SystemExit(1)
+
