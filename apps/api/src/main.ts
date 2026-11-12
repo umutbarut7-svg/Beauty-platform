@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -27,10 +28,13 @@ async function bootstrap(): Promise<void> {
     }),
   );
   await app.register(helmet);
+  await app.register(multipart, {
+    limits: { files: 1, fields: 0, parts: 1, fileSize: 5 * 1024 * 1024 },
+  });
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   });
   await app.listen(config.port, "0.0.0.0");
 }

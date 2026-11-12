@@ -61,6 +61,7 @@ const { PrismaClient } = PrismaPackage as unknown as {
     aiEvaluation: any;
     aiSafetyIncident: any;
     aiKillSwitch: any;
+    aIKillSwitch: any;
     predictionStrategyVersion: any;
     prediction: any;
     predictionSignal: any;
@@ -165,6 +166,13 @@ const { PrismaClient } = PrismaPackage as unknown as {
     audienceDefinition: any;
     audienceMembership: any;
     governancePolicy: any;
+    mvpPhotoConsent: any;
+    mvpPhoto: any;
+    mvpPhotoAnalysis: any;
+    mvpPrivacyEvent: any;
+    mvpVerificationRequest: any;
+    beautyJobResult: any;
+    beautyJobSatisfaction: any;
     governancePolicyVersion: any;
     policyEvaluation: any;
     humanOverride: any;

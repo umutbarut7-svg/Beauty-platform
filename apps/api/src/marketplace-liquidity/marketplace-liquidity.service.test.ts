@@ -141,6 +141,37 @@ describe("MarketplaceLiquidityService", () => {
       expect.objectContaining({ where: { businessId: "tenant-a" }, take: 10 }),
     );
   });
+  it("bounds demand to the selected observation window without mixing predictions into totals", async () => {
+    const { db, service } = setup();
+    db.marketplaceDemandSignal.findMany.mockResolvedValue([]);
+    const before = Date.now();
+    await service.demand(owner, "tenant-a", 20, "ROLLING_7_DAYS");
+    const after = Date.now();
+    const query = db.marketplaceDemandSignal.findMany.mock.calls[0]![0];
+    expect(query.where).toMatchObject({
+      businessId: "tenant-a",
+      timeWindow: "ROLLING_7_DAYS",
+    });
+    expect(query.where.observedAt.lte.getTime()).toBeGreaterThanOrEqual(before);
+    expect(query.where.observedAt.lte.getTime()).toBeLessThanOrEqual(after);
+    expect(query.where.observedAt.lte - query.where.observedAt.gte).toBe(
+      7 * 86_400_000,
+    );
+    expect(query.select.source).toBe(true);
+    expect(query.select.observedAt).toBe(true);
+    expect(query.select.dataState).toBe(true);
+    expect(query.select.evidence).toBeUndefined();
+    expect(query.select.sourceEntityId).toBeUndefined();
+    expect(query.select.businessId).toBeUndefined();
+  });
+  it("denies staff demand access before querying observations", async () => {
+    const { db, service } = setup();
+    db.businessMember.findUnique.mockResolvedValue({ role: "STAFF" });
+    await expect(
+      service.demand(owner, "tenant-a", 20, "ROLLING_7_DAYS"),
+    ).rejects.toThrow("denied");
+    expect(db.marketplaceDemandSignal.findMany).not.toHaveBeenCalled();
+  });
   it("prevents prohibited interventions and confirmation bypass", () => {
     const { service } = setup();
     expect(() =>

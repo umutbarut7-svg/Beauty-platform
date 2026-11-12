@@ -5,3 +5,6 @@ dist
 build
 coverage
 pnpm-lock.yaml
+
+# Local task scratch and package caches
+/work/
