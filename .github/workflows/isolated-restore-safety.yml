@@ -7,6 +7,10 @@ on:
       - infra/operations/restore-backup-isolated.py
       - infra/operations/test_isolated_restore.py
       - infra/operations/check-isolated-restore-ci.py
+      - infra/operations/restore-protected-handoff.py
+      - infra/operations/test_protected_restore.py
+      - infra/operations/recovery-key-handoff.py
+      - infra/operations/wrap-recovery-handoff.mjs
       - infra/operations/recovery-catalog.sql
       - infra/operations/recovery-quarantine-check.sql
       - infra/operations/recovery-domain-check.sql
@@ -57,7 +61,9 @@ jobs:
         with:
           node-version: 24
       - name: Check controller boundaries without provider credentials
-        run: python3 -m unittest discover -s harness/infra/operations -p test_isolated_restore.py -v
+        run: |
+          python3 -m unittest discover -s harness/infra/operations -p test_isolated_restore.py -v
+          python3 -m unittest discover -s harness/infra/operations -p test_protected_restore.py -v
       - name: Migrate the separately reviewed synthetic reference
         working-directory: application
         env:
