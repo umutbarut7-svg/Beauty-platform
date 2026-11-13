@@ -26,6 +26,9 @@ SPEC.loader.exec_module(BRIDGE)
 SPEC = importlib.util.spec_from_file_location("owner_session", Path(__file__).with_name("run-recovery-session.py"))
 SESSION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SESSION)
+SPEC = importlib.util.spec_from_file_location("owner_operator", Path(__file__).with_name("start-owner-recovery-session.py"))
+OPERATOR = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(OPERATOR)
 APPLICATION = "2e56def282c97a804a2f3d6c9b36a53b42a09df5"
 DATABASE = "orzell_recovery_fixture"
 FIXTURE = r'''
@@ -186,9 +189,31 @@ process.stdout.write(Buffer.from(capsule));
                 encoded = base64.b64encode(capsule).decode()
                 frame = ('ORZELL-CAPSULE-V1\n'+'\n'.join(encoded[i:i+256] for i in range(0,len(encoded),256))+'\nEND-ORZELL-CAPSULE\n').encode()
                 reports = []
-                report = SESSION.drive_session(BRIDGE, handoff, root / "package.zip", root / "signer.pub",
-                    package_bytes=(root / "package.zip").stat().st_size, context=handoff_context,
-                    reader=lambda deadline: SESSION.decode_frame(frame), output=reports.append)
+                receipt_helper = OPERATOR.receipt_helper()
+                binding = dict(OPERATOR.receipt_binding(), backupId=context["backup_id"],
+                               packageSha256=hashlib.sha256((root / "package.zip").read_bytes()).hexdigest())
+                saved_result = receipt_helper.ReceiptStore(root / "owner-results", binding)
+                try:
+                    def capture(value):
+                        reports.append(value)
+                        saved_result.feed(json.dumps(value).encode() + b"\n")
+                    # Reuse the existing single positive restore; its actual final
+                    # result now crosses the same bounded saved-receipt path.
+                    with patch.object(SESSION, "emit", side_effect=capture):
+                        report = SESSION.drive_session(BRIDGE, handoff, root / "package.zip", root / "signer.pub",
+                            package_bytes=(root / "package.zip").stat().st_size, context=handoff_context,
+                            reader=lambda deadline: SESSION.decode_frame(frame), output=SESSION.receipt_output(saved_result.receipt_id))
+                    observed = receipt_helper.show_last_result(root / "owner-results")
+                    if (observed["observation"] != "OWNER_TERMINAL_RESULT_OBSERVED"
+                            or observed["result"]["actualBackupRestoredToIsolatedDatabase"]
+                            or observed["result"]["productionDataRead"]):
+                        raise ValueError("SYNTHETIC_OWNER_RECEIPT_NOT_VERIFIED")
+                    saved_bytes = (saved_result.directory / "result.json").read_bytes()
+                    if any(value in saved_bytes for value in ((root / "recipient.key").read_bytes(),
+                            base64.b64encode(handoff.challenge), encoded.encode())):
+                        raise ValueError("OWNER_RECEIPT_CONTAINS_NONRESULT_MATERIAL")
+                finally:
+                    saved_result.close()
                 if report["actualBackupRestoredToIsolatedDatabase"] or report["productionDataRead"]:
                     raise ValueError("SYNTHETIC_SESSION_MISLABELLED")
                 if handoff._private is not None or handoff._used is not True:
@@ -225,6 +250,7 @@ process.stdout.write(Buffer.from(capsule));
         if remaining.strip():
             raise ValueError("FAILED_TARGET_WAS_NOT_REMOVED")
         report.update(status="SYNTHETIC_SIGNED_ISOLATED_RESTORE_PASSED", schemaReferenceSha256=expected,
+                      ownerReceiptNonContentSaved=True,
                       domainMismatchRejected=True, domainDriftProbes=list(domain_probes),
                       schemaMismatchRejected=True, schemaDriftProbes=list(schema_probes), sourceUnchanged=True, privateKeyRead=False, productionDataRead=False,
                       productionRestoreVerified=False, realRecoveryReady=False, physicalObjectErasureVerified=False)

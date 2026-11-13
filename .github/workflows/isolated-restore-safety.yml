@@ -10,6 +10,8 @@ on:
       - infra/operations/run-recovery-session.py
       - infra/operations/start-owner-recovery-session.py
       - infra/operations/test_owner_recovery_session.py
+      - infra/operations/recovery-result-receipt.py
+      - infra/operations/test_recovery_result_receipt.py
       - infra/operations/recovery-owner-client.mjs
       - infra/operations/build-owner-recovery-client.py
       - infra/operations/restore-protected-handoff.py
@@ -70,7 +72,9 @@ jobs:
           python3 -m unittest discover -s harness/infra/operations -p test_isolated_restore.py -v
           python3 -m unittest discover -s harness/infra/operations -p test_protected_restore.py -v
       - name: Check owner session and phone client boundaries
-        run: python3 -m unittest discover -s harness/infra/operations -p test_owner_recovery_session.py -v
+        run: |
+          python3 -m unittest discover -s harness/infra/operations -p test_owner_recovery_session.py -v
+          python3 -m unittest discover -s harness/infra/operations -p test_recovery_result_receipt.py -v
       - name: Migrate the separately reviewed synthetic reference
         working-directory: application
         env:

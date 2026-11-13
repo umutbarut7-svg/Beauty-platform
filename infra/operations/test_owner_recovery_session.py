@@ -68,7 +68,7 @@ class OwnerSessionTests(unittest.TestCase):
             self.assertNotIn('sensitive-filename',p.stdout+p.stderr)
 
     def test_owner_command_is_exact_and_bounded(self):
-        params=START.owner_parameters('https://example.test/encrypted?signature=generated')
+        params=START.owner_parameters('https://example.test/encrypted?signature=generated', 'a'*32)
         self.assertEqual(list(params),['command'])
         command=params['command'][0]
         self.assertIn('timeout -s TERM 900 env -i',command)
