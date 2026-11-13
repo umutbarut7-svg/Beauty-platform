@@ -100,6 +100,24 @@ class RelayTests(unittest.TestCase):
         self.assertNotIn(frame,console)
         self.assertEqual(console.count(b'ENCRYPTED_FRAME_FORWARDED'),1)
 
+    def test_cr_only_phone_paste_is_forwarded(self):
+        packet, frame = capsule()
+        code, record, console = self.exercise(frame.replace(b'\n', b'\r'), packet)
+        self.assertEqual(code, 0)
+        self.assertEqual(record.code, 0)
+        self.assertEqual(console.count(b'ENCRYPTED_FRAME_FORWARDED'), 1)
+        self.assertIn(hashlib.sha256(packet).hexdigest().encode(), record.chunks)
+        self.assertNotIn(frame, console)
+
+    def test_cr_only_frames_still_reject_stale_and_trailing_input(self):
+        packet, frame = capsule('b'*64)
+        with self.assertRaises(ValueError):
+            relay.validate_frame(frame.replace(b'\n', b'\r'), PIN)
+        _, frame = capsule()
+        for value in [frame+frame, frame+b'echo injected\n']:
+            with self.assertRaises(ValueError):
+                relay.validate_frame(value.replace(b'\n', b'\r'), PIN)
+
     def test_never_forwards_incomplete_frame(self):
         packet,frame=capsule()
         self.assertEqual(self.exercise(frame,packet,partial=True)[0],0)
