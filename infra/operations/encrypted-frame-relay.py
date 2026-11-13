@@ -77,7 +77,12 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
     source_fd = 0 if stdin is None else (stdin if isinstance(stdin, int) else stdin.fileno())
     if not os.isatty(source_fd):
         raise ValueError('OWNER_TERMINAL_REQUIRED')
-    mirror = mirror or (lambda data: write_all(1, data))
+    sink = mirror or (lambda data: write_all(1, data))
+    def mirror(data):
+        try:
+            sink(data)
+        except OSError:
+            pass
     old_attrs = termios.tcgetattr(source_fd)
     old_blocking = os.get_blocking(source_fd)
     master, slave = pty.openpty()
@@ -91,6 +96,8 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
     submitted = False
     challenge_sha = None
     intake_deadline = None
+    last_progress = 0
+    received_bytes = 0
     code = 1
     try:
         try:
@@ -104,16 +111,24 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
         slave = None
         os.set_blocking(process.stdin.fileno(), False)
         deadline = time.monotonic() + timeout_seconds
+        startup_deadline = time.monotonic() + min(timeout_seconds,90)
         with selectors.DefaultSelector() as selector:
             selector.register(master, selectors.EVENT_READ, 'output')
             while True:
                 now = time.monotonic()
                 active_deadline = min(deadline, intake_deadline) if ready and not submitted else deadline
+                if not ready:
+                    active_deadline = min(active_deadline,startup_deadline)
                 if now >= active_deadline:
                     raise ValueError('OWNER_TRANSPORT_DEADLINE')
-                events = selector.select(active_deadline - now)
+                events = selector.select(min(active_deadline - now, 10))
                 if not events:
-                    raise ValueError('OWNER_TRANSPORT_DEADLINE')
+                    if time.monotonic() >= active_deadline:
+                        raise ValueError('OWNER_TRANSPORT_DEADLINE')
+                    if ready:
+                        mirror((b'\r\n'+json.dumps({'status':'OWNER_WAITING_FOR_RESULT' if submitted else 'OWNER_WAITING_FOR_CAPSULE',
+                                'receivedBytes':received_bytes,'frameForwarded':submitted}).encode()+b'\r\n'))
+                    continue
                 ended = False
                 for key, _ in events:
                     if key.data == 'output':
@@ -127,6 +142,7 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
                             ended = True
                             break
                         receipt.feed(chunk)
+                        announce_ready = False
                         for piece in chunk.splitlines(keepends=True):
                             if not dropping and len(output_line)+len(piece) <= MAX_LINE:
                                 output_line.extend(piece)
@@ -158,15 +174,20 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
                                         attrs[6][termios.VTIME] = 0
                                         input_changed = True
                                         termios.tcsetattr(source_fd,termios.TCSANOW,attrs)
+                                        if termios.tcgetattr(source_fd)[3] & (termios.ICANON | termios.ECHO | termios.ECHONL):
+                                            raise ValueError('OWNER_TERMINAL_CONFIGURATION_FAILED')
                                         os.set_blocking(source_fd,False)
                                         selector.register(source_fd,selectors.EVENT_READ,'input')
                                         ready = True
+                                        announce_ready = True
                                 output_line.clear()
                                 dropping = False
                         try:
                             mirror(chunk)
                         except OSError:
                             pass
+                        if announce_ready:
+                            mirror(b'\r\n{"status":"OWNER_RELAY_INPUT_READY","receivedBytes":0,"contentSaved":false}\r\n')
                     elif key.data == 'input':
                         try:
                             chunk = os.read(source_fd,min(4096,MAX_FRAME-len(frame)+1))
@@ -175,8 +196,13 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
                         if not chunk:
                             raise ValueError('OWNER_INPUT_CLOSED')
                         frame.extend(chunk)
+                        received_bytes += len(chunk)
                         if len(frame)>MAX_FRAME:
                             raise ValueError('ENCRYPTED_FRAME_LIMIT')
+                        if len(frame)-last_progress >= 4096 or b'\n'+END in frame or b'\r'+END in frame:
+                            last_progress=len(frame)
+                            mirror(b'\r\n'+json.dumps({'status':'ENCRYPTED_FRAME_INPUT_PROGRESS','receivedBytes':len(frame),
+                                   'endMarkerSeen':b'\n'+END in frame or b'\r'+END in frame,'contentSaved':False}).encode()+b'\r\n')
                         # CloudShell phone paste can deliver CR-only line endings.
                         # The validator still checks the full frame before forwarding.
                         if frame.endswith((b'\n',b'\r')) and (b'\n'+END in frame or b'\r'+END in frame):
@@ -197,14 +223,23 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
                         if not pending:
                             selector.unregister(process.stdin)
                             submitted = True
-                            mirror(b'\r\n{"status":"ENCRYPTED_FRAME_FORWARDED","contentSaved":false}\r\n')
+                            mirror(b'\r\n'+json.dumps({'status':'ENCRYPTED_FRAME_FORWARDED','receivedBytes':received_bytes,
+                                   'contentSaved':False}).encode()+b'\r\n')
                 if ended:
                     break
         code = process.wait(timeout=5)
     except (Exception, KeyboardInterrupt):
         code = 130 if isinstance(__import__('sys').exc_info()[1],KeyboardInterrupt) else 1
+        exc = __import__('sys').exc_info()[1]
+        allowed = {'DUPLICATE_ENVELOPE_FIELD','ENCRYPTED_FRAME_LIMIT','SINGLE_ENCRYPTED_FRAME_REQUIRED',
+                   'CANONICAL_ENCRYPTED_ENVELOPE_REQUIRED','CURRENT_ENCRYPTED_ENVELOPE_REQUIRED',
+                   'ENCRYPTED_ENVELOPE_PROFILE_REQUIRED','OWNER_TRANSPORT_DEADLINE','ONE_OWNER_CHALLENGE_REQUIRED',
+                   'VALID_OWNER_CHALLENGE_REQUIRED','UNEXPIRED_OWNER_CHALLENGE_REQUIRED','OWNER_INPUT_CLOSED',
+                   'ENCRYPTED_FORWARD_FAILED','OWNER_TERMINAL_CONFIGURATION_FAILED'}
+        reason = str(exc) if isinstance(exc,ValueError) and str(exc) in allowed else 'OWNER_TRANSPORT_FAILURE'
         try:
-            mirror(b'\r\n{"status":"OWNER_TRANSPORT_STOPPED_RESULT_NOT_VERIFIED","realRecoveryReady":false}\r\n')
+            mirror(b'\r\n'+json.dumps({'status':'OWNER_TRANSPORT_STOPPED_RESULT_NOT_VERIFIED','reason':reason,
+                   'receivedBytes':received_bytes,'frameForwarded':submitted,'realRecoveryReady':False}).encode()+b'\r\n')
         except OSError:
             pass
     finally:
