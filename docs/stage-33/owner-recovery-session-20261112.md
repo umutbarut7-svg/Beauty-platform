@@ -1,5 +1,13 @@
 # Owner-operated isolated recovery session
 
+**13 November update:** the originally approved stack incarnation and its 11
+CloudFormation resources were deleted by the owner. `DELETE_COMPLETE` and the
+empty non-deleted-resource filter are recorded. The original operator remains
+bound to that deleted incarnation and must reject a new start. This update does
+not provision, authorize or rebind a replacement host. The owner's previous
+capsule paste has no observed success/failure receipt; its expired session cannot
+be replayed and is not counted as a completed restore.
+
 This completes the missing operator path from the approved temporary host to
 the existing Web Crypto / signed-package / sealed-memory / offline PostgreSQL
 controller. It does not enable production reopening or mark Stage 33 passed.
@@ -42,6 +50,67 @@ controller. It does not enable production reopening or mark Stage 33 passed.
    schema, tenant/inventory/B2B/material invariants and access/photo quarantine,
    and verifies removal of its disposable database. Only non-content evidence is
    printed. Provider secrets and production services remain outside this scope.
+
+## Saved non-content owner result
+
+Distribute `recovery-result-receipt.py` alongside the hash-checked operator. The
+operator verifies the helper's SHA256 and executes those same verified bytes.
+Before opening SSM it reserves a new random attempt under
+`$HOME/orzell-recovery-results/<receiptId>/result.json` on the owner's CloudShell.
+The base/attempt directories are owner-only `0700`; files are `0600`. Writes use
+descriptor-relative exclusive temporary files, atomic replacement and fsync.
+An empty private `started` marker is created once for attempt ordering; later
+updates to an older result cannot hide a newer incomplete attempt.
+Symlink/permissive base directories and symlink/nonregular result files are
+rejected. No previous attempt is overwritten.
+
+The child's stdin remains the owner's terminal. A local output PTY preserves
+TTY output for the SSM plugin. Output is mirrored, but **no transcript, stdin,
+capsule, challenge, URL, PEM, DB row or arbitrary error string is written** by
+the result recorder. Output parsing holds at most one 8 KiB line; oversized,
+partial, duplicate-field, stale-ID or invalid reports are ignored. Terminal
+echo may transiently pass through this bounded output buffer; this is not a
+physical RAM-erasure guarantee. Existing AWS/SSM records are a separate channel.
+
+The runner tags terminal outcomes with the random attempt ID supplied through
+its fixed command. Only typed allowlisted flags, fixed status values, UTC
+timestamps, durations and the independently bound application SHA can persist.
+Successful restore evidence also requires the existing cleanup/domain/handoff
+checks, `network=none`, no public ports and all production-reopening flags false.
+Synthetic receipt checks keep actual-backup/production-data flags false. A stopped
+then rejected attempt retains whether capsule submission was observed, without
+claiming whether a private key was successfully read. Conflicting terminal
+outcomes remove the success claim.
+
+The initial file says `RESULT_NOT_OBSERVED`. Exiting with code zero, disconnecting,
+timing out, or reopening a blank terminal cannot convert that into restore success
+or failure. A complete valid result is fsynced before it is mirrored to the screen.
+The output reader has a 1200-second transport bound; this does not extend the
+existing host or server-side 900-second timeout. A parent/host crash before result
+observation can still leave an unresolved attempt; the file does not prove that
+no private material was processed. CloudShell home retention/deletion also limits
+availability; this is not an off-account archive.
+
+After reconnecting to the same CloudShell home, the same verified operator can
+print its newest saved attempt without any AWS call:
+
+```bash
+python3 /path/to/verified/start-owner-recovery-session.py --show-last-result
+```
+
+Use the actual verified operator path printed by its setup; the placeholder above
+is documentation, not a ready owner command. The newest incomplete attempt is
+shown instead of falling back to an older success. Saved files are revalidated and
+unknown fields are excluded when reprinting. They bind account/region/exact stack,
+instance, package SHA, runner source/hash and backup ID. They remain **owner terminal
+observations, not signed or independent attestations**, and never authorize
+production reopening or mark Stage 33 passed.
+
+Validation adds bounded parsing, stale/conflicting outcomes, interruption, atomic
+private-file handling, symlink rejection, local reprint, and generated real-PTY
+checks. The existing single generated CMS-to-Postgres CI positive run now passes
+its actual final result through the recorder; no duplicate positive restore is
+added. No real owner key, backup or AWS SSM session is used for these tests.
 
 Expiry, reset, page exit and challenge edits clear the client inputs/output;
 asynchronous results are discarded after invalidation. Browser/OS copies cannot
