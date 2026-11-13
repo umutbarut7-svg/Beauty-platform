@@ -13,11 +13,11 @@ import tempfile
 import urllib.request
 
 UPSTREAM = 'e730c7f2d8f519d0d1d73efe8b0335380ec82288'
-RELAY_SOURCE = '62bbc974f90f6b59b8da07840459f72dd60e0e9e'
+RELAY_SOURCE = '61ec804c58d6fc5e2b9bcac06896fe796e5b91ff'
 FILES = {
     'owner_session.py': (UPSTREAM, 'start-owner-recovery-session.py', '784d7feb5827ca64ce62382ee2cc067f0c6138fb3baa3bf830dd1c68a029a3bb'),
     'recovery-result-receipt.py': (UPSTREAM, 'recovery-result-receipt.py', '842a6116f3d71ca65a3234431de67711aa5c9c24505cb9d401ee6308f398ca3f'),
-    'encrypted-frame-relay.py': (RELAY_SOURCE, 'encrypted-frame-relay.py', '3ba9fef2fb1f7dea3a322f3b8352dad512f70906d292d37f48d1cdd99936033a'),
+    'encrypted-frame-relay.py': (RELAY_SOURCE, 'encrypted-frame-relay.py', '1a9cc397f9a04c9fa656a07555c3c12a0bb076d9f0cf6ce2df0660dd48dce522'),
 }
 STACK = 'arn:aws:cloudformation:eu-north-1:926642724499:stack/orzell-protected-runtime-v1/3635fd80-dfa2-11f1-af8a-06ffea20fa49'
 INSTANCE = 'i-02fb787d173779b04'
