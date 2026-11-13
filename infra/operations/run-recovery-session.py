@@ -90,6 +90,20 @@ def emit(value):
     print(json.dumps(value, sort_keys=True), flush=True)
 
 
+def receipt_output(receipt_id):
+    if not re.fullmatch(r"[0-9a-f]{32}", receipt_id or ""):
+        raise ValueError("VALID_RESULT_RECEIPT_ID_REQUIRED")
+
+    def output(value):
+        # Bind only terminal outcomes to this CloudShell attempt. No key, capsule,
+        # challenge or content is added to the local saved-result channel.
+        if value.get("status") in ("OWNER_SNAPSHOT_RESTORED_TO_ISOLATED_DATABASE",
+                                   "OWNER_RECOVERY_SESSION_STOPPED", "RECOVERY_SESSION_REJECTED"):
+            value = dict(value, resultReceiptId=receipt_id)
+        emit(value)
+    return output
+
+
 def drive_session(bridge, handoff, package, public_key, *, package_bytes, context,
                   output=emit, reader=read_frame):
     started = time.monotonic()
@@ -139,7 +153,7 @@ def host_guard():
             raise ValueError("PINNED_PUBLIC_RUNTIME_REQUIRED")
 
 
-def run_owner(package):
+def run_owner(package, *, output=emit):
     host_guard()
     bridge = module("owner_session_bridge", "restore-protected-handoff.py")
     bridge.HANDOFF.MEMORY.host_checks()
@@ -173,7 +187,7 @@ def run_owner(package):
         context = authenticated["context"]
         with bridge.HANDOFF.KeyHandoff(context, cert.read_bytes()) as handoff:
             return drive_session(bridge, handoff, sealed, public,
-                                 package_bytes=binding["packageBytes"], context=context)
+                                 package_bytes=binding["packageBytes"], context=context, output=output)
 
 
 class Parser(argparse.ArgumentParser):
@@ -182,25 +196,28 @@ class Parser(argparse.ArgumentParser):
 
 
 def main():
+    output = emit
     try:
         parser = Parser(description=__doc__)
         parser.add_argument("--start-isolated-session", action="store_true")
         parser.add_argument("--encrypted-package")
         parser.add_argument("--acknowledge-access-invalidation", action="store_true")
+        parser.add_argument("--result-receipt-id")
         args = parser.parse_args()
         if not any(vars(args).values()):
             emit({"status": "OFFLINE_NO_ACTION", "privateKeyRead": False, "productionDataRead": False})
             return 0
         if not (args.start_isolated_session and args.encrypted_package and args.acknowledge_access_invalidation):
             raise ValueError("EXPLICIT_ISOLATED_SESSION_ACKNOWLEDGEMENT_REQUIRED")
+        output = receipt_output(args.result_receipt_id)
         def interrupted(*_):
             raise KeyboardInterrupt()
         signal.signal(signal.SIGTERM, interrupted)
-        run_owner(args.encrypted_package)
+        run_owner(args.encrypted_package, output=output)
         return 0
     except (Exception, KeyboardInterrupt) as exc:
         reason = str(exc) if isinstance(exc, ValueError) and re.fullmatch(r"[A-Z_]{1,100}", str(exc)) else "RECOVERY_SESSION_FAILED"
-        emit({"status": "RECOVERY_SESSION_REJECTED", "reason": reason, "realRecoveryReady": False})
+        output({"status": "RECOVERY_SESSION_REJECTED", "reason": reason, "realRecoveryReady": False})
         return 1
 
 
