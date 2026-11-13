@@ -46,6 +46,12 @@ class PhoneInputTests(unittest.TestCase):
         self.assertTrue(values[-1]['exactPublicProbeMatched'])
         self.assertNotIn('0123456789ABCDEF', str(values))
 
+    def test_cr_only_phone_paste_finishes_without_deadline(self):
+        code, values = self.exercise(probe.EXPECTED.replace(b'\n', b'\r'), timeout=0.5)
+        self.assertEqual(code, 0)
+        self.assertEqual(values[-1]['reason'], 'COMPLETE_PUBLIC_FRAME')
+        self.assertTrue(values[-1]['exactPublicProbeMatched'])
+
     def test_enter_only_is_distinct_from_no_input(self):
         _, no_input = self.exercise(b'')
         _, enter = self.exercise(b'\r')
