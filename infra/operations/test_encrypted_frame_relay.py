@@ -108,6 +108,16 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(console.count(b'ENCRYPTED_FRAME_FORWARDED'), 1)
         self.assertIn(hashlib.sha256(packet).hexdigest().encode(), record.chunks)
         self.assertNotIn(frame, console)
+        metadata=[]
+        for line in console.splitlines():
+            try:
+                metadata.append(json.loads(line))
+            except (ValueError, UnicodeError):
+                pass
+        self.assertEqual(sum(v.get('status')=='OWNER_RELAY_INPUT_READY' for v in metadata),1)
+        forwarded=[v for v in metadata if v.get('status')=='ENCRYPTED_FRAME_FORWARDED'][0]
+        self.assertEqual(forwarded['receivedBytes'],len(frame))
+        self.assertFalse(forwarded['contentSaved'])
 
     def test_cr_only_frames_still_reject_stale_and_trailing_input(self):
         packet, frame = capsule('b'*64)
@@ -134,6 +144,10 @@ class RelayTests(unittest.TestCase):
         code,record,console=self.exercise(frame[:1024],packet,timeout=.25)
         self.assertNotEqual(code,0)
         self.assertNotIn(b'ENCRYPTED_FRAME_FORWARDED',console)
+        stopped=[json.loads(line) for line in console.splitlines() if b'OWNER_TRANSPORT_STOPPED_RESULT_NOT_VERIFIED' in line][0]
+        self.assertEqual(stopped['receivedBytes'],1024)
+        self.assertEqual(stopped['reason'],'OWNER_TRANSPORT_DEADLINE')
+        self.assertFalse(stopped['frameForwarded'])
 
     def test_forbids_plaintext_duplicate_frame_and_trailing_command(self):
         _,frame=capsule()
