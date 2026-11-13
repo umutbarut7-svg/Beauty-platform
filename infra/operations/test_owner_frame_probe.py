@@ -114,6 +114,21 @@ class ProbeTests(unittest.TestCase):
             launch.assert_not_called()
         self.assertEqual(ssm.terminated, [])
 
+    def test_fixed_wrapper_closes_only_exact_expired_attempt(self):
+        for matching in (True,False):
+            ssm,modules=self.fake_aws()
+            row={'SessionId':'from-api-only','Target':probe.HOST,'Status':'Connected',
+                 'StartDate':datetime(2026,11,13,22,9 if matching else 8,20,tzinfo=timezone.utc)}
+            with patch.dict(sys.modules,modules), patch.object(probe,'active_sessions',side_effect=[[row],[]]), patch.object(probe,'run',return_value={'tested':True}) as launch:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    if matching:
+                        self.assertEqual(probe.start(close_expired=True),{'tested':True})
+                    else:
+                        with self.assertRaisesRegex(ValueError,'EXPIRED_OWNER_SESSION_BINDING_REJECTED'):
+                            probe.start(close_expired=True)
+                        launch.assert_not_called()
+            self.assertEqual(ssm.terminated,['from-api-only'] if matching else [])
+
     def test_cleanup_only_closes_current_probe_session(self):
         for stale in (False, True):
             ssm, modules = self.fake_aws()
