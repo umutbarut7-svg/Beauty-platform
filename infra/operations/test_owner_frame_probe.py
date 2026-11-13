@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+import runpy
 from unittest.mock import patch
 from types import ModuleType, SimpleNamespace
 from datetime import datetime, timedelta, timezone
@@ -60,6 +61,29 @@ class ProbeTests(unittest.TestCase):
         import subprocess
         output = subprocess.check_output([sys.executable, '-I', str(Path(probe.__file__))], text=True)
         self.assertEqual(json.loads(output)['status'], 'OFFLINE_NO_ACTION')
+
+    def test_actual_owner_relay_generated_cr_frame(self):
+        runner=Path(__file__).with_name('run-recovery-session.py').resolve()
+        source=probe.probe_source(str(runner),hashlib.sha256(runner.read_bytes()).hexdigest(),relay_ready=True)
+        relay=runpy.run_path(str(Path(__file__).with_name('encrypted-frame-relay.py')))
+        with contextlib.redirect_stdout(io.StringIO()):
+            result=probe.run_generated_relay([sys.executable,'-u','-c',source],relay,timeout_seconds=3)
+        self.assertEqual(result['status'],'GENERATED_OWNER_RELAY_PASSED')
+        self.assertTrue(result['relayInputConfigured'])
+        self.assertTrue(result['frameForwarded'])
+        self.assertTrue(result['exactPayloadMatched'])
+        self.assertEqual(result['injectedBytes'],result['frameBytes'])
+        self.assertFalse(result['privateKeyRead'])
+        self.assertFalse(result['restoreStarted'])
+
+    def test_owner_relay_no_challenge_is_bounded(self):
+        relay=runpy.run_path(str(Path(__file__).with_name('encrypted-frame-relay.py')))
+        with contextlib.redirect_stdout(io.StringIO()):
+            result=probe.run_generated_relay([sys.executable,'-u','-c','import time;time.sleep(1)'],relay,timeout_seconds=.15)
+        self.assertEqual(result['status'],'GENERATED_OWNER_RELAY_NOT_VERIFIED')
+        self.assertFalse(result['readyObserved'])
+        self.assertEqual(result['injectedBytes'],0)
+        self.assertFalse(result['frameForwarded'])
 
     def fake_aws(self, active=False):
         class SSM:
