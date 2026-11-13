@@ -60,7 +60,7 @@ def run_probe(fd=0, *, timeout_seconds=90, output=emit):
             if len(data) > LIMIT:
                 reason = 'INPUT_LIMIT'
                 break
-            if data.endswith((b'\n', b'\r')) and b'\n' + END in data:
+            if data.endswith((b'\n', b'\r')) and (b'\n' + END in data or b'\r' + END in data):
                 reason = 'COMPLETE_PUBLIC_FRAME'
                 break
         details = summary(data)
