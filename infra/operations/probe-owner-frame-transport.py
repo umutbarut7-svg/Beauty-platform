@@ -13,6 +13,9 @@ import signal
 import subprocess
 import sys
 import time
+import threading
+import termios
+import urllib.request
 
 HOST = 'i-02fb787d173779b04'
 STACK = 'arn:aws:cloudformation:eu-north-1:926642724499:stack/orzell-protected-runtime-v1/3635fd80-dfa2-11f1-af8a-06ffea20fa49'
@@ -20,14 +23,100 @@ EXPECTED = '36c921f3eb0f31bfaadb479e63c20f4904d9034fa59234da58cea7ede0644c3a'
 REMOTE_PATH = '/opt/orzell-recovery-runtime/infra/operations/run-recovery-session.py'
 
 
-def probe_source(path=REMOTE_PATH, digest=EXPECTED):
+def probe_source(path=REMOTE_PATH, digest=EXPECTED, relay_ready=False):
+    ready = ('print(json.dumps({"status":"WAITING_FOR_ENCRYPTED_CAPSULE",'
+             '"challengeSha256":"'+'a'*64+'","challengeBase64":"A"*3072,'
+             '"expiresAt":(datetime.now(timezone.utc)+timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")}),flush=True)\n'
+             if relay_ready else 'print("ORZELL_PROBE_READY",flush=True)\n')
     return ('import hashlib,json,pathlib,runpy,time\n'
+            'from datetime import datetime,timedelta,timezone\n'
             'p=pathlib.Path('+repr(path)+')\n'
             'if hashlib.sha256(p.read_bytes()).hexdigest()!='+repr(digest)+': raise ValueError("PINNED_RUNNER_REQUIRED")\n'
             'r=runpy.run_path(str(p))\n'
-            'print("ORZELL_PROBE_READY",flush=True)\n'
+            +ready+
             'v=r["read_frame"](time.monotonic()+8)\n'
             'print("ORZELL_PROBE_RESULT "+json.dumps({"bytes":len(v),"sha256":hashlib.sha256(v).hexdigest()}),flush=True)\n')
+
+
+def run_generated_relay(command, relay, *, timeout_seconds=35, cleanup=None):
+    """Exercise the pinned owner relay with a private synthetic phone PTY."""
+    packet = json.dumps({'version':1,'kind':'ORZELL_RECOVERY_KEY_HANDOFF',
+        'challengeSha256':'a'*64,'wrappedKey':base64.b64encode(b'w'*384).decode(),
+        'iv':base64.b64encode(b'i'*12).decode(),
+        'ciphertext':base64.b64encode(b'ORZELL_GENERATED_CIPHERTEXT_'*450).decode()},
+        sort_keys=True,separators=(',',':')).encode()
+    encoded = base64.b64encode(packet)
+    frame = b'ORZELL-CAPSULE-V1\r'+b'\r'.join(encoded[i:i+256] for i in range(0,len(encoded),256))+b'\rEND-ORZELL-CAPSULE\r'
+    expected = {'bytes':len(packet),'sha256':hashlib.sha256(packet).hexdigest()}
+    master, slave = pty.openpty()
+    os.set_blocking(master, False)
+    console = bytearray()
+    output = bytearray()
+    ready = threading.Event()
+    state = {'injectedBytes':0,'relayInputConfigured':False,'exitCode':None}
+    class Receipt:
+        def feed(self, chunk):
+            if len(output)+len(chunk)>65536:
+                raise ValueError('PUBLIC_PROBE_OUTPUT_LIMIT')
+            output.extend(chunk)
+        def finish(self, code):
+            state['exitCode']=code
+    def mirror(chunk):
+        if len(console)+len(chunk)>65536:
+            raise ValueError('PUBLIC_PROBE_OUTPUT_LIMIT')
+        console.extend(chunk)
+        if b'WAITING_FOR_ENCRYPTED_CAPSULE' in console and not ready.is_set():
+            attrs=termios.tcgetattr(slave)
+            state['relayInputConfigured']=not bool(attrs[3] & (termios.ECHO|termios.ICANON))
+            ready.set()
+    def inject():
+        deadline=time.monotonic()+timeout_seconds
+        while not ready.wait(.05):
+            if time.monotonic()>=deadline:
+                return
+        with selectors.DefaultSelector() as selector:
+            selector.register(master,selectors.EVENT_WRITE)
+            while state['injectedBytes']<len(frame) and time.monotonic()<deadline:
+                if not selector.select(max(0,deadline-time.monotonic())):
+                    return
+                try:
+                    count=os.write(master,frame[state['injectedBytes']:state['injectedBytes']+1024])
+                except BlockingIOError:
+                    continue
+                except OSError:
+                    return
+                state['injectedBytes']+=count
+    writer=threading.Thread(target=inject)
+    writer.start()
+    cleanup_status='NO_SESSION_ID_OBSERVED'
+    try:
+        code=relay['run_interactive'](command,Receipt(),stdin=slave,mirror=mirror,
+                                      timeout_seconds=timeout_seconds)
+    finally:
+        writer.join(timeout_seconds+1)
+        os.close(master)
+        os.close(slave)
+        ids=re.findall(rb'Starting session with SessionId: ([A-Za-z0-9-]{1,96})',output)
+        if cleanup is not None and len(ids)==1:
+            cleanup_status=cleanup(ids[0].decode())
+    observed=False
+    for line in bytes(output).splitlines():
+        if line.startswith(b'ORZELL_PROBE_RESULT '):
+            try:
+                observed=json.loads(line[len(b'ORZELL_PROBE_RESULT '):])==expected
+            except (ValueError,UnicodeError):
+                pass
+    forwarded=b'ENCRYPTED_FRAME_FORWARDED' in console
+    result={'status':'GENERATED_OWNER_RELAY_PASSED' if observed and forwarded and code==0 else 'GENERATED_OWNER_RELAY_NOT_VERIFIED',
+            'readyObserved':ready.is_set(),'relayInputConfigured':state['relayInputConfigured'],
+            'injectedBytes':state['injectedBytes'],'frameBytes':len(frame),'frameForwarded':forwarded,
+            'exactPayloadMatched':observed,'sessionExitCode':state['exitCode'],
+            'outputBytes':len(output),'outputLF':output.count(b'\n'),'outputCR':output.count(b'\r'),
+            'probeSessionCleanup':cleanup_status,'privateKeyRead':False,'productionDataRead':False,'restoreStarted':False}
+    output.clear()
+    console.clear()
+    print(json.dumps(result),flush=True)
+    return result
 
 
 def summarize(rows):
@@ -154,7 +243,7 @@ def run(command, *, timeout_seconds=35, cleanup=None):
     return result
 
 
-def start():
+def start(relay_mode=False):
     import boto3
     from botocore.config import Config
     aws = boto3.Session(region_name='eu-north-1')
@@ -183,18 +272,27 @@ def start():
             return 'EXACT_PROBE_SESSION_TERMINATED'
         except Exception:
             return 'PROBE_SESSION_CLEANUP_NOT_VERIFIED'
-    parameters = {'command': ['sudo timeout 15 python3 -u -c '+shlex.quote(probe_source())]}
+    parameters = {'command': ['sudo timeout 15 python3 -u -c '+shlex.quote(probe_source(relay_ready=relay_mode))]}
     command = ['aws','ssm','start-session','--region','eu-north-1','--target',HOST,
                '--document-name','AWS-StartInteractiveCommand','--parameters',json.dumps(parameters), '--no-cli-pager']
+    if relay_mode:
+        url='https://raw.githubusercontent.com/umutbarut7-svg/Beauty-platform/62bbc974f90f6b59b8da07840459f72dd60e0e9e/infra/operations/encrypted-frame-relay.py'
+        with urllib.request.urlopen(url,timeout=15) as response:
+            source=response.read(32769)
+        if len(source)>32768 or hashlib.sha256(source).hexdigest()!='3ba9fef2fb1f7dea3a322f3b8352dad512f70906d292d37f48d1cdd99936033a':
+            raise ValueError('PINNED_OWNER_RELAY_REQUIRED')
+        relay={'__name__':'public_probe_relay'}
+        exec(compile(source,'pinned-public-relay.py','exec'),relay)
+        return run_generated_relay(command,relay,cleanup=cleanup)
     return run(command, cleanup=cleanup)
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] != ['--probe-generated-frame']:
+    if sys.argv[1:] not in (['--probe-generated-frame'], ['--probe-generated-relay']):
         print(json.dumps({'status': 'OFFLINE_NO_ACTION', 'privateKeyRead': False, 'restoreStarted': False}))
         raise SystemExit(0 if len(sys.argv) == 1 else 2)
     try:
-        start()
+        start(relay_mode=sys.argv[1:]==['--probe-generated-relay'])
     except Exception as exc:
         reason = str(exc) if isinstance(exc, ValueError) and re.fullmatch('[A-Z_]{1,100}', str(exc)) else 'PROBE_NOT_STARTED'
         print(json.dumps({'status': 'GENERATED_FRAME_TRANSPORT_NOT_VERIFIED', 'reason': reason,
