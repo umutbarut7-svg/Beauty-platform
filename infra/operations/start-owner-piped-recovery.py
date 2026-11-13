@@ -12,10 +12,10 @@ import sys
 import tempfile
 import urllib.request
 
-UPSTREAM = 'e730c7f2d8f519d0d1d73efe8b0335380ec82288'
+UPSTREAM = 'ee647c1f66aeff86a2eb80294b47c882eeba7178'
 RELAY_SOURCE = '61ec804c58d6fc5e2b9bcac06896fe796e5b91ff'
 FILES = {
-    'owner_session.py': (UPSTREAM, 'start-owner-recovery-session.py', '784d7feb5827ca64ce62382ee2cc067f0c6138fb3baa3bf830dd1c68a029a3bb'),
+    'owner_session.py': (UPSTREAM, 'start-owner-recovery-session.py', '3132ded95655bb60019be531f415f6a96e24fadfe594ddea65ecf162101591cc'),
     'recovery-result-receipt.py': (UPSTREAM, 'recovery-result-receipt.py', '842a6116f3d71ca65a3234431de67711aa5c9c24505cb9d401ee6308f398ca3f'),
     'encrypted-frame-relay.py': (RELAY_SOURCE, 'encrypted-frame-relay.py', '1a9cc397f9a04c9fa656a07555c3c12a0bb076d9f0cf6ce2df0660dd48dce522'),
 }
