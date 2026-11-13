@@ -243,7 +243,7 @@ def run(command, *, timeout_seconds=35, cleanup=None):
     return result
 
 
-def start(relay_mode=False):
+def start(relay_mode=False, close_expired=False):
     import boto3
     from botocore.config import Config
     aws = boto3.Session(region_name='eu-north-1')
@@ -257,8 +257,26 @@ def start(relay_mode=False):
             or outputs.get('Purpose') != 'PUBLIC_RUNTIME_PREPARATION_ONLY_REAL_INTAKE_CLOSED'):
         raise ValueError('EXACT_EXISTING_FOURTH_HOST_REQUIRED')
     ssm = aws.client('ssm', config=config)
-    if active_sessions(ssm):
-        raise ValueError('ACTIVE_SESSION_EXISTS_NO_PROBE_STARTED')
+    existing=active_sessions(ssm)
+    if existing:
+        if not close_expired or len(existing)!=1:
+            raise ValueError('ACTIVE_SESSION_EXISTS_NO_PROBE_STARTED')
+        old=existing[0]
+        lower=datetime(2026,11,13,22,9,tzinfo=timezone.utc)
+        upper=datetime(2026,11,13,22,10,tzinfo=timezone.utc)
+        expired=datetime(2026,11,13,22,20,tzinfo=timezone.utc)
+        if (old.get('Target')!=HOST or not isinstance(old.get('StartDate'),datetime)
+                or not lower<=old['StartDate']<upper or datetime.now(timezone.utc)<expired
+                or old.get('Status') not in ('Connected','Disconnected')):
+            raise ValueError('EXPIRED_OWNER_SESSION_BINDING_REJECTED')
+        ssm.terminate_session(SessionId=old['SessionId'])
+        print(json.dumps({'status':'EXACT_EXPIRED_OWNER_SESSION_TERMINATED'}),flush=True)
+        for _ in range(10):
+            if not active_sessions(ssm):
+                break
+            time.sleep(1)
+        else:
+            raise ValueError('OWNER_SESSION_CLOSURE_NOT_VERIFIED')
     started = datetime.now(timezone.utc)
     def cleanup(session_id):
         try:
@@ -272,7 +290,10 @@ def start(relay_mode=False):
             return 'EXACT_PROBE_SESSION_TERMINATED'
         except Exception:
             return 'PROBE_SESSION_CLEANUP_NOT_VERIFIED'
-    parameters = {'command': ['sudo timeout 15 python3 -u -c '+shlex.quote(probe_source(relay_ready=relay_mode))]}
+    # Match the real owner launch: a noninteractive shell retains an EXIT trap.
+    # Without --foreground, timeout's new process group cannot read that TTY.
+    body = 'set -eu\ntrap : EXIT\ntimeout --foreground -s TERM 15 python3 -u -c '+shlex.quote(probe_source(relay_ready=relay_mode))
+    parameters = {'command': ['sudo sh -c '+shlex.quote(body)]}
     command = ['aws','ssm','start-session','--region','eu-north-1','--target',HOST,
                '--document-name','AWS-StartInteractiveCommand','--parameters',json.dumps(parameters), '--no-cli-pager']
     if relay_mode:
@@ -288,11 +309,12 @@ def start(relay_mode=False):
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] not in (['--probe-generated-frame'], ['--probe-generated-relay']):
+    if sys.argv[1:] not in (['--probe-generated-frame'], ['--probe-generated-relay'], ['--probe-fixed-owner-wrapper']):
         print(json.dumps({'status': 'OFFLINE_NO_ACTION', 'privateKeyRead': False, 'restoreStarted': False}))
         raise SystemExit(0 if len(sys.argv) == 1 else 2)
     try:
-        start(relay_mode=sys.argv[1:]==['--probe-generated-relay'])
+        fixed=sys.argv[1:]==['--probe-fixed-owner-wrapper']
+        start(relay_mode=fixed or sys.argv[1:]==['--probe-generated-relay'],close_expired=fixed)
     except Exception as exc:
         reason = str(exc) if isinstance(exc, ValueError) and re.fullmatch('[A-Z_]{1,100}', str(exc)) else 'PROBE_NOT_STARTED'
         print(json.dumps({'status': 'GENERATED_FRAME_TRANSPORT_NOT_VERIFIED', 'reason': reason,
