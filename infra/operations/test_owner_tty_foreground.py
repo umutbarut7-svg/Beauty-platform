@@ -20,7 +20,7 @@ SPEC.loader.exec_module(owner)
 
 
 class ForegroundTests(unittest.TestCase):
-    def exercise(self, remove_foreground=False):
+    def exercise(self, remove_foreground=False, send_input=True):
         command=owner.owner_parameters('https://example.invalid/generated','0'*32)['command'][0]
         body=shlex.split(command)[3]
         argv=shlex.split(next(line for line in body.splitlines() if line.startswith('timeout ')))
@@ -61,7 +61,8 @@ class ForegroundTests(unittest.TestCase):
                         pid=json.loads(bytes(output).splitlines()[0])['pid']
                         time.sleep(.05)
                         state=next(line for line in Path('/proc',str(pid),'status').read_text().splitlines() if line.startswith('State:'))
-                        os.write(master,b'GENERATED_ONLY\n')
+                        if send_input:
+                            os.write(master,b'GENERATED_ONLY\n')
                         sent=True
             code=child.wait(timeout=3)
             return state,b'GENERATED_INPUT_READ' in output,code
@@ -82,6 +83,12 @@ class ForegroundTests(unittest.TestCase):
         self.assertNotIn('T (stopped)',state)
         self.assertTrue(read)
         self.assertEqual(code,0)
+
+    def test_foreground_still_enforces_deadline(self):
+        state,read,code=self.exercise(send_input=False)
+        self.assertNotIn('T (stopped)',state)
+        self.assertFalse(read)
+        self.assertEqual(code,124)
 
 
 if __name__=='__main__':
