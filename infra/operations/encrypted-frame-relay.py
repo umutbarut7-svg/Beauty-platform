@@ -177,7 +177,9 @@ def run_interactive(command, receipt, *, stdin=None, mirror=None, timeout_second
                         frame.extend(chunk)
                         if len(frame)>MAX_FRAME:
                             raise ValueError('ENCRYPTED_FRAME_LIMIT')
-                        if frame.endswith((b'\n',b'\r')) and b'\n'+END in frame:
+                        # CloudShell phone paste can deliver CR-only line endings.
+                        # The validator still checks the full frame before forwarding.
+                        if frame.endswith((b'\n',b'\r')) and (b'\n'+END in frame or b'\r'+END in frame):
                             pending.extend(validate_frame(frame,challenge_sha))
                             frame.clear()
                             selector.unregister(source_fd)
