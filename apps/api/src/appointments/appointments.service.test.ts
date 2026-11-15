@@ -19,7 +19,13 @@ const owner = {
   role: "BUSINESS_OWNER" as const,
 };
 
-function fixture(options: { overlap?: boolean; unavailable?: boolean } = {}) {
+function fixture(
+  options: {
+    overlap?: boolean;
+    unavailable?: boolean;
+    ownerCustomer?: boolean;
+  } = {},
+) {
   let listWhere: any;
   const history: any[] = [];
   const appointment = {
@@ -49,9 +55,12 @@ function fixture(options: { overlap?: boolean; unavailable?: boolean } = {}) {
     },
     customer: {
       findUnique: async ({ where }: any) =>
-        where.userId === "customer-user" || where.id === "customer"
-          ? { id: "customer" }
-          : null,
+        options.ownerCustomer &&
+        (where.userId === "owner-user" || where.id === "owner-customer")
+          ? { id: "owner-customer" }
+          : where.userId === "customer-user" || where.id === "customer"
+            ? { id: "customer" }
+            : null,
     },
     businessCustomer: {
       findFirst: async () => null,
@@ -342,5 +351,77 @@ describe("AppointmentsService", () => {
       type: "BREAK",
       createdByUserId: "owner-user",
     });
+  });
+});
+
+describe("Explicit customer booking context for dual-role users", () => {
+  const booking = {
+    serviceId: "service",
+    locationId: "location",
+    staffMemberId: "staff-member",
+    startsAt: "2030-01-07T10:00:00.000Z",
+  };
+  it("books for the owner's own customer only when explicitly requested", async () => {
+    await expect(
+      fixture({ ownerCustomer: true }).service.create(owner, "business", {
+        ...booking,
+        bookForSelf: true,
+        internalNote: "must not persist",
+      }),
+    ).resolves.toMatchObject({
+      customerId: "owner-customer",
+      internalNote: undefined,
+      status: "PENDING",
+    });
+  });
+  it("keeps manager booking without a selected customer rejected", async () => {
+    await expect(
+      fixture({ ownerCustomer: true }).service.create(
+        owner,
+        "business",
+        booking,
+      ),
+    ).rejects.toThrow("A customer is required");
+  });
+  it("preserves manager booking for an explicitly selected customer", async () => {
+    await expect(
+      fixture({ ownerCustomer: true }).service.create(owner, "business", {
+        ...booking,
+        customerId: "customer",
+      }),
+    ).resolves.toMatchObject({ customerId: "customer" });
+  });
+  it("rejects a different customer ID in self-booking context even for owners", async () => {
+    await expect(
+      fixture({ ownerCustomer: true }).service.create(owner, "business", {
+        ...booking,
+        bookForSelf: true,
+        customerId: "customer",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it("does not invent a customer profile when the owner has none", async () => {
+    await expect(
+      fixture().service.create(owner, "business", {
+        ...booking,
+        bookForSelf: true,
+      }),
+    ).rejects.toThrow("A customer is required");
+  });
+  it("preserves the existing staff booking restriction", async () => {
+    await expect(
+      fixture().service.create(staffUser, "business", {
+        ...booking,
+        bookForSelf: true,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it("keeps normal customers scoped to their own profile", async () => {
+    await expect(
+      fixture().service.create(customerUser, "business", {
+        ...booking,
+        bookForSelf: true,
+      }),
+    ).resolves.toMatchObject({ customerId: "customer" });
   });
 });

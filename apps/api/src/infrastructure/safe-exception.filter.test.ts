@@ -17,6 +17,22 @@ const host = (reply: {
 
 describe("SafeExceptionFilter", () => {
   const security = { record: vi.fn().mockResolvedValue({}) };
+  it("uses the framework adapter for native middleware error replies", async () => {
+    const native = {};
+    const adapter = { httpAdapter: { reply: vi.fn() } };
+    await new SafeExceptionFilter(security as never, adapter as never).catch(
+      new Error("private internal detail"),
+      { switchToHttp: () => ({ getResponse: () => native }) } as never,
+    );
+    expect(adapter.httpAdapter.reply).toHaveBeenCalledWith(
+      native,
+      expect.objectContaining({
+        code: "INTERNAL_ERROR",
+        message: "Internal server error",
+      }),
+      500,
+    );
+  });
   it("preserves domain HTTP responses using the standard taxonomy", async () => {
     const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
     await new SafeExceptionFilter(security as never).catch(

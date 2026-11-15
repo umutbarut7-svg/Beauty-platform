@@ -1,0 +1,91 @@
+name: Stage 33 native compilation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage-33-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: ${{ matrix.platform }} native build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            runner: ubuntu-24.04
+          - platform: ios
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    env:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.28.1
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build shared types
+        run: pnpm --filter @beauty-platform/types build
+      - name: Generate ephemeral native project
+        run: |
+          node scripts/stage33-native-config.cjs
+          pnpm --filter @beauty-platform/mobile exec expo prebuild --platform ${{ matrix.platform }} --no-install --skip-dependency-update expo,react,react-native
+          git diff --exit-code -- pnpm-lock.yaml
+      - name: Build self-contained Android preview APK
+        if: matrix.platform == 'android'
+        working-directory: apps/mobile/android
+        run: |
+          java -version
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
+      - name: Install iOS pods
+        if: matrix.platform == 'ios'
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -version
+          pod install
+      - name: Compile unsigned iOS simulator app
+        if: matrix.platform == 'ios'
+        run: |
+          set -o pipefail
+          workspace=$(find apps/mobile/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/stage33-ios CODE_SIGNING_ALLOWED=NO build > /tmp/stage33-xcode.log 2>&1 || { tail -n 160 /tmp/stage33-xcode.log; exit 1; }
+          app=$(find /tmp/stage33-ios/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" /tmp/stage33-ios-simulator.zip
+      - name: Preserve Android compilation artifact
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: orzell-android-preview
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve iOS compilation artifact
+        if: matrix.platform == 'ios'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stage33-ios-simulator
+          path: /tmp/stage33-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 7

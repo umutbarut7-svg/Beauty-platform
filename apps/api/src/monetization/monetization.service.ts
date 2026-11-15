@@ -340,11 +340,12 @@ export class MonetizationService {
     return {
       status: rows.length ? "AVAILABLE" : "INSUFFICIENT_DATA",
       currency,
-      grossRevenueMinor: amount(["CHARGE"]),
-      refundsMinor: amount(["REFUND"]),
-      platformRevenueMinor: amount(["COMMISSION", "PLATFORM_FEE"]),
-      netRevenueMinor:
-        amount(["CHARGE"]) - amount(["REFUND", "COMMISSION", "PLATFORM_FEE"]),
+      grossRevenueMinor: amount(["CHARGE"]).toString(),
+      refundsMinor: amount(["REFUND"]).toString(),
+      platformRevenueMinor: amount(["COMMISSION", "PLATFORM_FEE"]).toString(),
+      netRevenueMinor: (
+        amount(["CHARGE"]) - amount(["REFUND", "COMMISSION", "PLATFORM_FEE"])
+      ).toString(),
     };
   }
   forecast(

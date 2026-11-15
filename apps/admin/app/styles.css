@@ -27,3 +27,59 @@ main > p:last-child {
   color: #695c61;
   line-height: 1.6;
 }
+main {
+  margin: 4rem auto;
+  max-width: 64rem;
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3.8rem);
+}
+form,
+section {
+  margin: 2rem 0;
+  padding: 1.75rem;
+  background: #fffdf9;
+  border: 1px solid #e5ded6;
+  border-radius: 16px;
+}
+label {
+  display: block;
+  margin: 1rem 0;
+}
+input {
+  display: block;
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+  width: min(90%, 26rem);
+  border: 1px solid #bfcbbf;
+  border-radius: 8px;
+  font: inherit;
+}
+button {
+  background: #264e3d;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem;
+  margin: 0.4rem 0.6rem 0.4rem 0;
+  cursor: pointer;
+  font: inherit;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #ba754e;
+  outline-offset: 3px;
+}
+[role="alert"] {
+  padding: 1rem;
+  color: #703b26;
+  background: #f3e8db;
+}
+dt {
+  font-weight: bold;
+  margin-top: 1rem;
+}

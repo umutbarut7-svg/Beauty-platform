@@ -75,15 +75,18 @@ export class BackgroundJobsService implements OnModuleDestroy {
       update: {},
     });
   }
-  async processNext(): Promise<boolean> {
+  async processNext(registeredOnly = false): Promise<boolean> {
     if (!this.acceptingWork) return false;
+    if (registeredOnly && !this.handlers.size) return false;
+    const typeFilter = registeredOnly ? ' AND "type" = ANY($1::text[])' : "";
     const rows = (await this.db.$queryRawUnsafe(
       `UPDATE "BackgroundJob" SET "status" = 'PROCESSING', "lockedAt" = NOW(), "attempts" = "attempts" + 1, "updatedAt" = NOW()
        WHERE "id" = (SELECT "id" FROM "BackgroundJob"
          WHERE (("status" IN ('PENDING','RETRYING') AND "availableAt" <= NOW() AND "attempts" < "maxAttempts")
-           OR ("status" = 'PROCESSING' AND "lockedAt" < NOW() - INTERVAL '5 minutes' AND "attempts" <= "maxAttempts"))
+           OR ("status" = 'PROCESSING' AND "lockedAt" < NOW() - INTERVAL '5 minutes' AND "attempts" <= "maxAttempts"))${typeFilter}
          ORDER BY "availableAt", "id" FOR UPDATE SKIP LOCKED LIMIT 1)
        RETURNING "id", "businessId", "type", "payload", "attempts", "maxAttempts", "correlationId", "actorId"`,
+      ...(registeredOnly ? [[...this.handlers.keys()]] : []),
     )) as ClaimedJob[];
     const job = rows[0];
     if (!job) return false;
