@@ -20,6 +20,36 @@ describe("ORZELL Everywhere share links", () => {
       parseOrzellShareLink(createOrzellShareLink(origin, target), origin),
     ).toEqual(target);
   });
+  it("rejects unsafe optional identifiers during creation", () => {
+    expect(() =>
+      createOrzellShareLink(origin, {
+        businessId: "salon",
+        serviceId: "color",
+        professionalId: "other/tenant",
+      }),
+    ).toThrow();
+    expect(() =>
+      createOrzellShareLink(origin, {
+        businessId: "salon",
+        serviceId: "color",
+        resultId: "photo?redirect",
+      }),
+    ).toThrow();
+  });
+  it("rejects credential-bearing and path-bearing origins", () => {
+    expect(() =>
+      createOrzellShareLink("https://user:pass@orzell.app", {
+        businessId: "salon",
+        serviceId: "color",
+      }),
+    ).toThrow();
+    expect(() =>
+      createOrzellShareLink("https://orzell.app/other", {
+        businessId: "salon",
+        serviceId: "color",
+      }),
+    ).toThrow();
+  });
   it("rejects insecure origins and unsafe IDs", () => {
     expect(() =>
       createOrzellShareLink("http://orzell.app", {
