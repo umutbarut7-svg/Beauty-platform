@@ -63,7 +63,7 @@ def owner_parameters(url, receipt_id):
         "curl -fsS --proto '=https' --max-time 60 --max-filesize 32768 "+shlex.quote(runner)+' -o "$work/runner.py"',
         "printf '%s  %s\\n' "+shlex.quote(RUNNER_SHA256)+' "$work/runner.py" | sha256sum -c -',
         'install -m 0400 "$work/runner.py" /opt/orzell-recovery-runtime/infra/operations/run-recovery-session.py',
-        'timeout -s TERM 900 env -i PATH=/usr/bin:/bin LANG=C.UTF-8 python3 -u /opt/orzell-recovery-runtime/infra/operations/run-recovery-session.py --start-isolated-session --encrypted-package "$work/package.zip" --acknowledge-access-invalidation --result-receipt-id '+receipt_id,
+        'timeout --foreground -s TERM 900 env -i PATH=/usr/bin:/bin LANG=C.UTF-8 python3 -u /opt/orzell-recovery-runtime/infra/operations/run-recovery-session.py --start-isolated-session --encrypted-package "$work/package.zip" --acknowledge-access-invalidation --result-receipt-id '+receipt_id,
     ])
     return {"command": ["sudo sh -c "+shlex.quote(body)]}
 
@@ -132,3 +132,4 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
