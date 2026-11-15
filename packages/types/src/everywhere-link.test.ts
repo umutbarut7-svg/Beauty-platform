@@ -47,6 +47,40 @@ describe("ORZELL Everywhere share links", () => {
       }),
     ).toThrow();
   });
+  it("rejects wrong paths and missing required identifiers", () => {
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/other?businessId=a&serviceId=b",
+        origin,
+      ),
+    ).toBeNull();
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/service?businessId=a",
+        origin,
+      ),
+    ).toBeNull();
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/service?serviceId=b",
+        origin,
+      ),
+    ).toBeNull();
+  });
+  it("rejects malformed optional identifiers and untrusted origins", () => {
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/service?businessId=a&serviceId=b&professionalId=bad%2Fid",
+        origin,
+      ),
+    ).toBeNull();
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/service?businessId=a&serviceId=b",
+        "http://orzell.app",
+      ),
+    ).toBeNull();
+  });
   it("rejects foreign hosts, duplicated IDs and unknown parameters", () => {
     expect(
       parseOrzellShareLink(
