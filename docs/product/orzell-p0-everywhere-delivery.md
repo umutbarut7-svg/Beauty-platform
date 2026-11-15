@@ -30,3 +30,12 @@ No paid service, ads spend, external account authorization, public posting, prod
 - #143 integration program
 
 This document records durable priorities; it is not a claim that the features are shipped.
+
+## Repository audit checkpoint (2026-11-16)
+- Default-branch `apps/mobile/App.tsx` still contains a minimal Expo placeholder screen. This is **not** evidence that the TestFlight delivery lacks features: release work exists on separate PR branches; inspect the actual delivery commit and merge graph before modifying the mobile app.
+- Default-branch `apps/mobile/package.json` has Expo/React Native without an obvious dedicated navigation or linking package. Do not assume native universal links are already implemented or absent across other branches.
+- Open PR #141 describes successful isolated backup restore and scoped cleanup, but explicitly keeps `productionRestoreVerified`, `realRecoveryReady` and `productionReopenAuthorized` false. PR #142 is a separate draft clipboard diagnostic. Do not conflate isolated restore success with Stage 33 final acceptance.
+- Open PR #109 concerns account erasure and governance; ensure link attribution respects erasure, consent and tenant isolation.
+- PR #77 visual consultation matching and subsequent delivery history must be reconciled against current release candidate before creating new visual matching code.
+
+**Next implementation handoff:** identify the exact current TestFlight/mobile delivery ref, API release ref, and web booking route; then implement one provider-independent share URL and mobile-web landing on top of those refs. Require a real device click-through test and a test booking receipt. Avoid building against the placeholder `main` mobile entry point without integration review.
