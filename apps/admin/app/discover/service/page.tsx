@@ -1,5 +1,11 @@
 import { parseOrzellShareLink } from "@beauty-platform/types";
 
+/** Keep the pre-integration placeholder out of search indexes. */
+export const metadata = {
+  title: "ORZELL · Hizmet keşfi",
+  robots: { index: false, follow: false },
+};
+
 /** Public mobile-web entry point. No booking is claimed until a verified service lookup exists. */
 export default async function SharedServicePage({
   searchParams,
