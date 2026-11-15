@@ -47,6 +47,14 @@ describe("ORZELL Everywhere share links", () => {
       }),
     ).toThrow();
   });
+  it("rejects an optional identifier containing encoded separators", () => {
+    expect(
+      parseOrzellShareLink(
+        "https://orzell.app/discover/service?businessId=a&serviceId=b&resultId=other%2Ftenant",
+        origin,
+      ),
+    ).toBeNull();
+  });
   it("rejects wrong paths and missing required identifiers", () => {
     expect(
       parseOrzellShareLink(
