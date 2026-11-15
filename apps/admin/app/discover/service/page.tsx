@@ -63,8 +63,9 @@ async function resolvePublishedService(
         typeof item.name === "string" &&
         Array.isArray(item.services),
     );
-    if (matches.length !== 1) return null;
-    const services = matches[0].services.filter(
+    const match = matches[0];
+    if (matches.length !== 1 || !match) return null;
+    const services = match.services.filter(
       (service) =>
         service !== null &&
         typeof service === "object" &&
@@ -75,8 +76,9 @@ async function resolvePublishedService(
         typeof service.currency === "string" &&
         typeof service.durationMinutes === "number",
     );
-    if (services.length !== 1) return null;
-    return { name: matches[0].name, service: services[0] };
+    const service = services[0];
+    if (services.length !== 1 || !service) return null;
+    return { name: match.name, service };
   } catch {
     return null;
   }
