@@ -31,7 +31,7 @@ export function parseOrzellShareLink(link: string, trustedOrigin: string): Orzel
   try {
     const url = new URL(link);
     const origin = new URL(trustedOrigin);
-    if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash || origin.username || origin.password || url.protocol !== "https:" || url.origin !== origin.origin || url.pathname !== "/discover/service") return null;
+    if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash || origin.username || origin.password || url.protocol !== "https:" || url.username || url.password || url.hash || url.origin !== origin.origin || url.pathname !== "/discover/service") return null;
     const allowed = new Set(["businessId", "serviceId", "professionalId", "resultId"]);
     for (const key of url.searchParams.keys()) {
       if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) return null;
