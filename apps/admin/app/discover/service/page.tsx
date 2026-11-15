@@ -48,8 +48,6 @@ export default async function SharedServicePage({
         Bağlantı doğrulandı. Hizmetin güncel fiyatı, uzmanı ve müsaitliği
         işletme verileriyle doğrulandıktan sonra randevu alınabilecek.
       </p>
-      <p>Hizmet kodu: {target.serviceId}</p>
-      <p>İşletme kodu: {target.businessId}</p>
       <p>Randevu işlemi henüz bu önizleme sayfasında etkin değil.</p>
     </main>
   );
