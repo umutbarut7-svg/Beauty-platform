@@ -116,6 +116,16 @@ export default async function SharedServicePage({
       </main>
     );
   }
+  // Do not silently drop professional/result targeting before those records
+  // have a verified, tenant-scoped public resolver.
+  if (target.professionalId || target.resultId) {
+    return (
+      <main>
+        <h1>Bu paylaşım henüz desteklenmiyor</h1>
+        <p>İşletmeden güncel hizmet bağlantısını isteyin.</p>
+      </main>
+    );
+  }
   const published = await resolvePublishedService(
     target.businessId,
     target.serviceId,
