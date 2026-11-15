@@ -40,6 +40,8 @@ export function parseOrzellShareLink(link: string, trustedOrigin: string): Orzel
     const serviceId = requireId(url.searchParams.get("serviceId") ?? undefined, "serviceId");
     const professionalId = url.searchParams.get("professionalId") ?? undefined;
     const resultId = url.searchParams.get("resultId") ?? undefined;
+    if (url.searchParams.has("professionalId") && !professionalId) return null;
+    if (url.searchParams.has("resultId") && !resultId) return null;
     if (professionalId) requireId(professionalId, "professionalId");
     if (resultId) requireId(resultId, "resultId");
     return { businessId, serviceId, ...(professionalId ? { professionalId } : {}), ...(resultId ? { resultId } : {}) };
