@@ -21,5 +21,7 @@ describe("ORZELL Everywhere share links", () => {
     expect(parseOrzellShareLink("https://orzell.app/discover/service?businessId=a&serviceId=b&redirect=https://evil.test", origin)).toBeNull();
     expect(parseOrzellShareLink("https://orzell.app/discover/service?businessId=a&serviceId=b&professionalId=", origin)).toBeNull();
     expect(parseOrzellShareLink("https://orzell.app/discover/service?businessId=a&serviceId=b&resultId=", origin)).toBeNull();
+    expect(parseOrzellShareLink("https://orzell.app/discover/service?businessId=a&serviceId=b#unexpected", origin)).toBeNull();
+    expect(parseOrzellShareLink("https://user:pass@orzell.app/discover/service?businessId=a&serviceId=b", origin)).toBeNull();
   });
 });
