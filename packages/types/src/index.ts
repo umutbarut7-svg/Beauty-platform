@@ -234,5 +234,5 @@ export interface AgentResponse {
   meta: { noMatch: boolean; capability?: "AVAILABLE" | "NOT_AVAILABLE" };
 }
 
-export { createOrzellShareLink, parseOrzellShareLink } from "./everywhere-link";
-export type { OrzellShareTarget } from "./everywhere-link";
+export { createOrzellShareLink, parseOrzellShareLink } from "./everywhere-link.js";
+export type { OrzellShareTarget } from "./everywhere-link.js";
