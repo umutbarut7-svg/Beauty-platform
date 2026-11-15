@@ -31,6 +31,22 @@ describe("ORZELL Everywhere share links", () => {
       createOrzellShareLink(origin, { businessId: "a/b", serviceId: "b" }),
     ).toThrow();
   });
+  it("rejects empty optional IDs when creating a share link", () => {
+    expect(() =>
+      createOrzellShareLink(origin, {
+        businessId: "salon",
+        serviceId: "color",
+        professionalId: "",
+      }),
+    ).toThrow();
+    expect(() =>
+      createOrzellShareLink(origin, {
+        businessId: "salon",
+        serviceId: "color",
+        resultId: "",
+      }),
+    ).toThrow();
+  });
   it("rejects foreign hosts, duplicated IDs and unknown parameters", () => {
     expect(
       parseOrzellShareLink(
