@@ -34,12 +34,12 @@ export function createOrzellShareLink(
     requireId(target.businessId, "businessId"),
   );
   url.searchParams.set("serviceId", requireId(target.serviceId, "serviceId"));
-  if (target.professionalId)
+  if (target.professionalId !== undefined)
     url.searchParams.set(
       "professionalId",
       requireId(target.professionalId, "professionalId"),
     );
-  if (target.resultId)
+  if (target.resultId !== undefined)
     url.searchParams.set("resultId", requireId(target.resultId, "resultId"));
   return url.toString();
 }
