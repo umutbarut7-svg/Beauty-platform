@@ -6,6 +6,82 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+type PublishedService = {
+  name: string;
+  price: string;
+  currency: string;
+  durationMinutes: number;
+};
+type PublishedBusiness = { name: string; service: PublishedService };
+
+/** Read-only published discovery; fail closed on missing or ambiguous records. */
+async function resolvePublishedService(
+  businessId: string,
+  serviceId: string,
+): Promise<PublishedBusiness | null> {
+  const apiOrigin = process.env.ORZELL_PUBLIC_API_ORIGIN;
+  if (!apiOrigin) return null;
+  let base: URL;
+  try {
+    base = new URL(apiOrigin);
+    if (
+      base.protocol !== "https:" ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      base.pathname !== "/"
+    )
+      return null;
+  } catch {
+    return null;
+  }
+  const url = new URL("/discovery/services", base);
+  url.searchParams.set("businessId", businessId);
+  url.searchParams.set("serviceId", serviceId);
+  url.searchParams.set("limit", "10");
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return null;
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== "object" || !("items" in payload))
+      return null;
+    const items = (payload as { items: unknown }).items;
+    if (!Array.isArray(items)) return null;
+    const matches = items.filter(
+      (item): item is {
+        businessId: string;
+        name: string;
+        services: PublishedService[];
+      } =>
+        item !== null &&
+        typeof item === "object" &&
+        item.businessId === businessId &&
+        typeof item.name === "string" &&
+        Array.isArray(item.services),
+    );
+    if (matches.length !== 1) return null;
+    const services = matches[0].services.filter(
+      (service) =>
+        service !== null &&
+        typeof service === "object" &&
+        "id" in service &&
+        service.id === serviceId &&
+        typeof service.name === "string" &&
+        typeof service.price === "string" &&
+        typeof service.currency === "string" &&
+        typeof service.durationMinutes === "number",
+    );
+    if (services.length !== 1) return null;
+    return { name: matches[0].name, service: services[0] };
+  } catch {
+    return null;
+  }
+}
+
 /** Public mobile-web entry point. No booking is claimed until a verified service lookup exists. */
 export default async function SharedServicePage({
   searchParams,
@@ -40,15 +116,31 @@ export default async function SharedServicePage({
       </main>
     );
   }
+  const published = await resolvePublishedService(
+    target.businessId,
+    target.serviceId,
+  );
+  if (!published) {
+    return (
+      <main>
+        <h1>Hizmet şu anda görüntülenemiyor</h1>
+        <p>İşletmenin güncel ORZELL bağlantısını kontrol edin.</p>
+      </main>
+    );
+  }
   return (
     <main style={{ maxWidth: 640, margin: "5rem auto", padding: "1.5rem" }}>
       <p>ORZELL · Keşfet</p>
-      <h1>Beğendiğiniz hizmete bir adım daha yakınsınız</h1>
+      <h1>{published.service.name}</h1>
+      <p>{published.name}</p>
       <p>
-        Bağlantı doğrulandı. Hizmetin güncel fiyatı, uzmanı ve müsaitliği
-        işletme verileriyle doğrulandıktan sonra randevu alınabilecek.
+        {published.service.price} {published.service.currency} ·{" "}
+        {published.service.durationMinutes} dakika
       </p>
-      <p>Randevu işlemi henüz bu önizleme sayfasında etkin değil.</p>
+      <p>
+        Randevu işlemi henüz bu önizleme sayfasında etkin değil.
+        Güncel müsaitlik doğrulanmadan rezervasyon oluşturulmaz.
+      </p>
     </main>
   );
 }
