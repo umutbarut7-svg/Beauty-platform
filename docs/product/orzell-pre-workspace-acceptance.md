@@ -24,3 +24,19 @@
 - Official Instagram/TikTok/Google/WhatsApp/YouTube account authorization and provider review.
 
 **Release gate:** all required CI checks green, release ref reconciled, actual customer booking success/cancel path verified, security/tenant isolation validated, rollback ready, user approval for production rollout.
+
+## Source-audited API contract (main branch)
+
+- Public discovery endpoints: `GET /discovery/search`, `GET /discovery/businesses`, `GET /discovery/services`, `GET /discovery/professionals`, and `POST /discovery/match` in `apps/api/src/discovery/discovery.controller.ts`. Public reads have throttling.
+- Existing availability: `GET /businesses/:businessId/availability` with `serviceId`, `staffMemberId`, `date`, optional `locationId`. **Not marked public** in controller; inspect global auth guard before calling from guest web.
+- Existing booking: `POST /businesses/:businessId/appointments` uses `@CurrentUser`; **not a guest booking endpoint**. Do not wire unauthenticated share visitors directly to it or bypass auth.
+- Important identifier mismatch: share contract calls the optional field `professionalId`, whereas availability uses `staffMemberId`. Resolve a verified staff mapping, never assume interchangeable IDs.
+- Public discovery list response alone is not sufficient proof that a specific result/photo is authorized for display. A dedicated published-detail resolver is needed.
+
+## Web landing acceptance
+
+1. Validate IDs, then fetch published business+service details from a tenant-aware server resolver.
+2. Validate staff belongs to same business/service and result has explicit public permission.
+3. Handle missing, private, deleted, unavailable records without leaking tenant existence.
+4. Display current price/duration/availability only from server-verified data, not query parameters.
+5. Require authentication or a reviewed guest-booking flow before POSTing appointments; avoid false confirmation.
