@@ -1,14 +1,15 @@
 # ORZELL physical-device acceptance
 
-## Current delivery and focused acceptance — 6 November 2026
+## Current delivery and focused acceptance — updated 15 November 2026
 
 The latest recorded internal delivery is **ORZELL 1.0.0 (1151)**, application
 `2e56def282c97a804a2f3d6c9b36a53b42a09df5`, signed build source
 `9c487dc425d157a2a5bb1de9bc48beab63eda90c`. The
 [upload run](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/41986541356)
 completed; Apple VALID / IN_BETA_TESTING and existing internal-group access were
-recorded on 5 November at 10:32 Istanbul. Physical installation of 1151 has not
-been confirmed. The 1031 candidate and closed-gate descriptions below are
+recorded on 5 November at 10:32 Istanbul. The 13 November consolidated
+closeout list records the owner's installation confirmation for 1151; it is
+preserved. Do not request installation or its confirmation again. The 1031 candidate and closed-gate descriptions below are
 historical; they are not the current delivery or a request to repeat every row.
 
 Prior owner confirmations of login, booking, business selection, confirmation
@@ -31,6 +32,35 @@ own explicit authorization; the previous one-use test must not be repeated.
 Use the current [progress ledger](progress-ledger.md) for outstanding gates.
 An actual new device observation is required to close a device row; updating
 this document does not create one.
+
+## Next focused iPhone observation: result, satisfaction and care history
+
+Source review on 15 November found the complete `apps/mobile/App.tsx` blob
+identical in delivered application `2e56def282c97a804a2f3d6c9b36a53b42a09df5`
+and delivery ref `61f97f0ed996844917be036a77e36d9aad999a94`
+(blob `1f8da3cc8c72d1b954197892c88a4c122388c12d`). This flow needs no new
+binary or AI request. This is source evidence, not a new device PASS.
+
+Use an existing, explicitly labelled test appointment; preserve prior login,
+booking and cancellation acceptance. First inspect the business appointment
+detail. If it is not completed or already has a result, do not invent a performed
+service, overwrite a result or advance a real appointment merely to run this check.
+
+| Owner action | Expected observation |
+| --- | --- |
+| In business mode, select the authorized business and its existing completed test appointment under “Randevular” | “RANDEVU DETAYI” and the correct appointment; an absent result offers “Yapılan işlemin sonucu” and “Sonucu kaydet” |
+| Enter an explicitly labelled test summary and save once | “Sonuç kaydedildi.” and “BAKIM SONUCUN”; refresh/reopen preserves the same summary |
+| Switch to the customer who owns that appointment and open “Randevularım” | Same summary and “Memnuniyet: Henüz bildirilmedi”; choose one of “Memnunum”, “Emin değilim”, “Memnun değilim” once |
+| Open “Bakımım” and use “Bakım geçmişimi yenile” after publication | Same result and chosen satisfaction; reopening preserves them |
+
+Result and satisfaction submissions are single-record writes. Only the actual
+appointment customer may submit satisfaction; a business role is not a substitute.
+If publication has not yet appeared, record it as pending and inspect the worker,
+rather than submitting another result. No photo, provider, embedding or paid AI
+call belongs to this check. Material consumption requires a separate explicit
+confirmation and is not a required step here. Capture only the relevant test
+detail, with personal data hidden. All new physical observations remain **NOT RUN**
+until the owner supplies evidence. Android remains separately open.
 
 ## Historical 1031 acceptance specification
 
