@@ -1,3 +1,4 @@
+import { ServiceQr } from "./ServiceQr";
 import type { Metadata } from "next";
 import { cache } from "react";
 import {
@@ -134,6 +135,7 @@ export default async function SharedServicePage({ searchParams }: PageProps) {
         {published.service.price} {published.service.currency} ·{" "}
         {published.service.durationMinutes} dakika
       </p>
+      <ServiceQr url={createOrzellShareLink(origin, target)} />
       {published.professionals.length > 0 && (
         <section aria-label="Hizmeti sunan uzmanlar">
           <h2>Uzmanlar</h2>

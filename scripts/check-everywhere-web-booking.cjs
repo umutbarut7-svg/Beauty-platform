@@ -421,6 +421,7 @@ async function main() {
     assert.ok(html.includes("Web randevusu"));
     assert.match(html, /property="og:title" content="Balayage · /);
     assert.match(html, /name="twitter:card" content="summary"/);
+    assert.ok(html.includes('aria-label="Hizmet bağlantısının QR kodu"'));
     const brandUrl = "https://share.example.test/orzell-original-reference.jpg";
     assert.ok(html.includes(`property="og:image" content="${brandUrl}"`));
     assert.ok(html.includes(`name="twitter:image" content="${brandUrl}"`));
@@ -433,7 +434,7 @@ async function main() {
     );
     assert.doesNotMatch(
       await closed.text(),
-      /property="og:(?:title|image)"|Balayage/,
+      /property="og:(?:title|image)"|Balayage|Hizmet bağlantısının QR kodu/,
     );
     assert.deepEqual(unexpected, []);
     if (process.argv.includes("--server-only")) {
