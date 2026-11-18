@@ -60,8 +60,10 @@ Local checks cover quote/receipt wire boundaries and exact decimal comparisons,
 existing appointment unit tests, TypeScript for API/integration/admin, lint,
 formatting and the production Next build. A generated local HTTPS CA verifies the
 actual server-rendered page and `/api` prefix without disabling Node TLS checks.
-The workspace's browser archive download was invalid; local browser acceptance is
-not claimed. The pinned CI browser container runs the added Chromium/WebKit flow.
+The workspace's browser archive download was invalid, and the installed system
+Chromium could not create its process-singleton socket (Operation not permitted).
+Local browser acceptance is not claimed. The pinned CI browser container runs the
+added Chromium/WebKit flow.
 
 The new disposable PostgreSQL/HTTP suite covers authentication/whitelisting,
 foreign tenant/staff/location, withdrawn publication, stale quote fields,
@@ -88,3 +90,18 @@ Existing 15 November backup recovery/temporary-stack cleanup and accepted device
 observations are preserved. No recovery key, new paid resource, AI/provider call,
 personal notification, live appointment or deletion was used. Stage33 overall
 PASS is not declared by this change.
+
+## Focused acceptance follow-up
+
+The first real PostgreSQL/HTTP booking run passed. The browser run found that
+implicit select labels were ambiguous for exact label lookup. Location, specialist
+and slot selects now have explicit accessible names; application-alert assertions
+are scoped to main, following the existing admin acceptance pattern.
+
+To preserve running and pending checks across follow-up commits, the four existing
+Stage32/application/native/native-photo concurrency groups keep their identifiers
+and job bodies but use `queue: max` with `cancel-in-progress: false`. This follows
+[GitHub's current concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+It does not remove checks or prevent provider/runner failures. The first booking
+candidate's Android job stopped while resolving the unchanged upstream Foojay
+Gradle plugin, before application compilation; it is not counted as a pass.

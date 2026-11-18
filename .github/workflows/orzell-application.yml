@@ -6,7 +6,8 @@ permissions:
   contents: read
 concurrency:
   group: orzell-application-${{ github.ref }}
-  cancel-in-progress: true
+  queue: max
+  cancel-in-progress: false
 jobs:
   review:
     runs-on: ubuntu-24.04

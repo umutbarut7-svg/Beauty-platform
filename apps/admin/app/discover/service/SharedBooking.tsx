@@ -194,6 +194,7 @@ export function SharedBooking({
             <label>
               Konum
               <select
+                aria-label="Konum"
                 required
                 disabled={busy}
                 value={locationId}
@@ -213,6 +214,7 @@ export function SharedBooking({
             <label>
               Uzman
               <select
+                aria-label="Uzman"
                 required
                 disabled={busy || Boolean(target.professionalId)}
                 value={professionalId}
@@ -252,6 +254,7 @@ export function SharedBooking({
               <label>
                 Uygun saat
                 <select
+                  aria-label="Uygun saat"
                   disabled={busy}
                   value={startsAt}
                   onChange={(e) => setStartsAt(e.target.value)}

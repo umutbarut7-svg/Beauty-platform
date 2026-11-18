@@ -6,7 +6,8 @@ permissions:
   contents: read
 concurrency:
   group: native-photo-runtime-${{ github.ref }}
-  cancel-in-progress: true
+  queue: max
+  cancel-in-progress: false
 jobs:
   runtime:
     runs-on: macos-26

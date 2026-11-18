@@ -106,7 +106,7 @@ async function review(engine, name, apiOrigin) {
     await page
       .getByRole("button", { name: "Randevu talebini gönder", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
       "İşletme onayı bekleniyor",
     );
     assert.equal(attempts, 1);
@@ -117,7 +117,7 @@ async function review(engine, name, apiOrigin) {
     await page
       .getByRole("button", { name: "Bu randevuyu iptal et", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
       "Randevunuz iptal edildi",
     );
     assert.equal(record.status, "CANCELLED");
@@ -140,7 +140,9 @@ async function review(engine, name, apiOrigin) {
     await page
       .getByRole("button", { name: "Randevu talebini gönder", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toContainText("Kayıt değişti");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Kayıt değişti",
+    );
     assert.equal(record, null);
     assert.equal(attempts, 1);
     await expect(
@@ -156,7 +158,7 @@ async function review(engine, name, apiOrigin) {
     await page
       .getByRole("button", { name: "Randevu talebini gönder", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
       "İşlem sonucu doğrulanamadı",
     );
     assert.equal(attempts, 1);
@@ -174,7 +176,7 @@ async function review(engine, name, apiOrigin) {
     await page
       .getByRole("button", { name: "Uygun saatleri göster", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
     await expect(page.getByLabel("Uygun saat", { exact: true })).toHaveCount(0);
     assert.equal(attempts, 0);
 
