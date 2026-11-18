@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - apps/admin/**
+      - scripts/check-service-link-domain*.mjs
       - scripts/check-admin-entry.cjs
       - scripts/check-everywhere-web-booking.cjs
       - .github/workflows/admin-entry.yml
@@ -36,6 +37,7 @@ jobs:
       - run: pnpm --filter @beauty-platform/admin typecheck
       - name: Verify package matches the preinstalled browser image
         run: node -e "if (require('@playwright/test/package.json').version !== '1.64.1') throw new Error('Review the pinned browser image before upgrading Playwright')"
+      - run: node --test scripts/check-service-link-domain.test.mjs
       - run: node scripts/check-admin-entry.cjs
       - name: Exercise isolated shared-service web booking
         run: node scripts/check-everywhere-web-booking.cjs
