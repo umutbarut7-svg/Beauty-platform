@@ -419,6 +419,22 @@ async function main() {
     const html = await entry.text();
     assert.ok(html.includes("Balayage"));
     assert.ok(html.includes("Web randevusu"));
+    assert.match(html, /property="og:title" content="Balayage · /);
+    assert.match(html, /name="twitter:card" content="summary"/);
+    const brandUrl = "https://share.example.test/orzell-original-reference.jpg";
+    assert.ok(html.includes(`property="og:image" content="${brandUrl}"`));
+    assert.ok(html.includes(`name="twitter:image" content="${brandUrl}"`));
+    const brand = await fetch(origin + "/orzell-original-reference.jpg");
+    assert.equal(brand.status, 200);
+    assert.match(brand.headers.get("content-type"), /image\/jpeg/);
+    const closed = await fetch(
+      origin + "/discover/service" + target + "&resultId=private",
+      { headers: { "user-agent": "Twitterbot/1.0" } },
+    );
+    assert.doesNotMatch(
+      await closed.text(),
+      /property="og:(?:title|image)"|Balayage/,
+    );
     assert.deepEqual(unexpected, []);
     if (process.argv.includes("--server-only")) {
       console.log(
