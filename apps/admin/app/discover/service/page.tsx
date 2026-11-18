@@ -56,19 +56,26 @@ export async function generateMetadata({
   if (!origin || !target || !published) return defaults;
   const title = `${published.service.name} · ${published.business.name}`;
   const description = "Hizmet ayrıntılarını ORZELL’de görüntüleyin.";
+  const brandImage = {
+    url: new URL("/orzell-original-reference.jpg", origin).href,
+    width: 1254,
+    height: 1254,
+    alt: "ORZELL",
+  };
   return {
     ...defaults,
     title,
     description,
     openGraph: {
       type: "website",
+      images: [brandImage],
       siteName: "ORZELL",
       locale: "tr_TR",
       title,
       description,
       url: createOrzellShareLink(origin, target),
     },
-    twitter: { card: "summary", title, description },
+    twitter: { card: "summary", title, description, images: [brandImage] },
   };
 }
 
