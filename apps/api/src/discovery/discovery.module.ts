@@ -1,3 +1,5 @@
+import { SharedServiceController } from "./shared-service.controller.js";
+import { SharedServiceService } from "./shared-service.service.js";
 import { Module } from "@nestjs/common";
 import { DatabaseSearchProvider } from "./database-search.provider.js";
 import { DiscoveryController } from "./discovery.controller.js";
@@ -10,8 +12,9 @@ import { UnavailableResultProbabilityProvider } from "./result-probability.provi
 import { DiscoveryAvailabilityService } from "./discovery-availability.service.js";
 @Module({
   imports: [AppointmentsModule],
-  controllers: [DiscoveryController],
+  controllers: [DiscoveryController, SharedServiceController],
   providers: [
+    SharedServiceService,
     DatabaseSearchProvider,
     GeoService,
     HistoricalExpertiseProvider,

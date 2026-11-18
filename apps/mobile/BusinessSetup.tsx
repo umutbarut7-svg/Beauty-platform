@@ -2,6 +2,7 @@ import { AppText as Text, palette } from "./ui";
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { MvpApiClient } from "@beauty-platform/types";
+import { ServiceShare } from "./ServiceShare";
 import { ServiceChoice } from "./ServiceChoice";
 type Named = { id: string; name: string };
 type ManagedService = Named & {
@@ -255,6 +256,22 @@ export function BusinessSetup({
           );
           setMessage("Hizmet ataması kaydedildi.");
         })}
+      {process.env.EXPO_PUBLIC_ORZELL_EVERYWHERE_ENABLED === "true" &&
+        process.env.EXPO_PUBLIC_ORZELL_WEB_ORIGIN &&
+        serviceId && (
+          <ServiceShare
+            key={`${businessId}:${serviceId}:${staffId}`}
+            api={api}
+            target={{
+              businessId,
+              serviceId,
+              ...(staffId ? { professionalId: staffId } : {}),
+            }}
+            origin={process.env.EXPO_PUBLIC_ORZELL_WEB_ORIGIN}
+            busy={busy}
+            run={run}
+          />
+        )}
       <Text style={styles.heading}>Çalışma saatleri</Text>
       <Text>
         Günü ve saatleri açıkça seçin. Diğer günlerin kayıtları korunur.
