@@ -373,6 +373,12 @@ async function main() {
     );
     await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
     const apiOrigin = `https://127.0.0.1:${api.address().port}`;
+    const signedFixture = {
+      ORZELL_PUBLIC_ORIGIN: "https://share.example.test",
+      ORZELL_IOS_APPLICATION_IDENTIFIER: "TESTTEAM01.test.orzell",
+      ORZELL_ANDROID_APPLICATION_ID: "test.orzell",
+      ORZELL_ANDROID_CERT_SHA256: Array(32).fill("AB").join(":"),
+    };
     server = spawn(
       process.execPath,
       [
@@ -392,7 +398,7 @@ async function main() {
           ...process.env,
           NEXT_TELEMETRY_DISABLED: "1",
           NODE_EXTRA_CA_CERTS: certificate,
-          ORZELL_PUBLIC_ORIGIN: "https://share.example.test",
+          ...signedFixture,
           ORZELL_PUBLIC_API_ORIGIN: apiOrigin,
           ORZELL_PUBLIC_API_PATH_PREFIX: "/api",
           ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED: "true",
@@ -414,6 +420,12 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     assert.equal(ready, true);
+    const { checkServiceLinkDomain } =
+      await import("./check-service-link-domain.mjs");
+    await checkServiceLinkDomain(signedFixture, (url, options) =>
+      fetch(origin + url.pathname, options),
+    );
+
     const entry = await fetch(origin + "/discover/service" + target);
     assert.equal(entry.status, 200);
     const html = await entry.text();
@@ -422,6 +434,15 @@ async function main() {
     assert.match(html, /property="og:title" content="Balayage · /);
     assert.match(html, /name="twitter:card" content="summary"/);
     assert.ok(html.includes('aria-label="Hizmet bağlantısının QR kodu"'));
+    const continuation = await fetch(origin + "/book/service" + target, {
+      redirect: "error",
+    });
+    assert.equal(continuation.status, 200);
+    const continuationHtml = await continuation.text();
+    assert.ok(
+      continuationHtml.includes("Web randevusu") &&
+        continuationHtml.includes("Balayage"),
+    );
     const brandUrl = "https://share.example.test/orzell-original-reference.jpg";
     assert.ok(html.includes(`property="og:image" content="${brandUrl}"`));
     assert.ok(html.includes(`name="twitter:image" content="${brandUrl}"`));

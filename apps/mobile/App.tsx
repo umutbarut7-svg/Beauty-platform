@@ -21,6 +21,7 @@ import {
   locationLabel,
   staffForBooking,
 } from "./booking-options";
+import { IncomingService } from "./IncomingService";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
 import { BusinessSetup } from "./BusinessSetup";
@@ -502,6 +503,7 @@ export default function App() {
           <Text style={styles.beta}>ERKEN ERİŞİM</Text>
         </View>
       )}
+      <IncomingService api={api} />
       <ScrollView
         key={user ? `${mode}-${screen}` : "auth"}
         contentContainerStyle={styles.content}
