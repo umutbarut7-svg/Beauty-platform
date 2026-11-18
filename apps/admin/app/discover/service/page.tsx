@@ -1,40 +1,88 @@
-import { parseOrzellShareLink } from "@beauty-platform/types";
+import type { Metadata } from "next";
+import { cache } from "react";
+import {
+  createOrzellShareLink,
+  parseOrzellShareLink,
+} from "@beauty-platform/types";
 import { SharedBooking } from "./SharedBooking";
 import { publicApiBase, resolvePublishedService } from "./published-service";
 
 export const dynamic = "force-dynamic";
 
-/** Keep the pre-integration placeholder out of search indexes. */
-export const metadata = {
-  title: "ORZELL · Hizmet keşfi",
-  robots: { index: false, follow: false },
+type PageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-/** Public mobile-web entry point. No booking is claimed until a verified service lookup exists. */
-export default async function SharedServicePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+function encodeQuery(params: Awaited<PageProps["searchParams"]>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) for (const item of value) query.append(key, item);
+    else if (value !== undefined) query.append(key, value);
+  }
+  return query.toString();
+}
+
+const loadService = cache(async (query: string) => {
   const origin = process.env.ORZELL_PUBLIC_ORIGIN;
-  if (!origin) {
+  const target = origin
+    ? parseOrzellShareLink(
+        `${origin.replace(/\/$/, "")}/discover/service?${query}`,
+        origin,
+      )
+    : null;
+  const published =
+    target && !target.resultId
+      ? await resolvePublishedService(
+          target,
+          process.env.ORZELL_PUBLIC_API_ORIGIN,
+          fetch,
+          process.env.ORZELL_PUBLIC_API_PATH_PREFIX ?? "",
+        )
+      : null;
+  return { origin, target, published };
+});
+
+export async function generateMetadata({
+  searchParams,
+}: PageProps): Promise<Metadata> {
+  const { origin, target, published } = await loadService(
+    encodeQuery(await searchParams),
+  );
+  const defaults = {
+    title: "ORZELL · Hizmet keşfi",
+    description: "ORZELL hizmet paylaşımı",
+    robots: { index: false, follow: false },
+  };
+  if (!origin || !target || !published) return defaults;
+  const title = `${published.service.name} · ${published.business.name}`;
+  const description = "Hizmet ayrıntılarını ORZELL’de görüntüleyin.";
+  return {
+    ...defaults,
+    title,
+    description,
+    openGraph: {
+      type: "website",
+      siteName: "ORZELL",
+      locale: "tr_TR",
+      title,
+      description,
+      url: createOrzellShareLink(origin, target),
+    },
+    twitter: { card: "summary", title, description },
+  };
+}
+
+export default async function SharedServicePage({ searchParams }: PageProps) {
+  const { origin, target, published } = await loadService(
+    encodeQuery(await searchParams),
+  );
+  if (!origin)
     return (
       <main>
         <h1>ORZELL</h1>
         <p>Paylaşım bağlantıları henüz yapılandırılmadı.</p>
       </main>
     );
-  }
-  const params = await searchParams;
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (Array.isArray(value)) for (const item of value) query.append(key, item);
-    else if (value !== undefined) query.append(key, value);
-  }
-  const target = parseOrzellShareLink(
-    `${origin.replace(/\/$/, "")}/discover/service?${query}`,
-    origin,
-  );
   if (!target) {
     return (
       <main>
@@ -52,12 +100,6 @@ export default async function SharedServicePage({
       </main>
     );
   }
-  const published = await resolvePublishedService(
-    target,
-    process.env.ORZELL_PUBLIC_API_ORIGIN,
-    fetch,
-    process.env.ORZELL_PUBLIC_API_PATH_PREFIX ?? "",
-  );
   if (!published) {
     return (
       <main>

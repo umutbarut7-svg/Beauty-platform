@@ -419,6 +419,13 @@ async function main() {
     const html = await entry.text();
     assert.ok(html.includes("Balayage"));
     assert.ok(html.includes("Web randevusu"));
+    assert.match(html, /property="og:title" content="Balayage · /);
+    assert.match(html, /name="twitter:card" content="summary"/);
+    const closed = await fetch(
+      origin + "/discover/service" + target + "&resultId=private",
+      { headers: { "user-agent": "Twitterbot/1.0" } },
+    );
+    assert.doesNotMatch(await closed.text(), /property="og:title"|Balayage/);
     assert.deepEqual(unexpected, []);
     if (process.argv.includes("--server-only")) {
       console.log(
