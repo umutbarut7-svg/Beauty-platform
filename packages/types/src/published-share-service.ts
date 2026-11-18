@@ -2,6 +2,7 @@ import type { OrzellShareTarget } from "./everywhere-link.js";
 
 export interface PublishedShareService {
   business: { id: string; name: string; timezone: string };
+  locations: Array<{ id: string; name: string }>;
   service: {
     id: string;
     name: string;
@@ -39,6 +40,8 @@ export function parsePublishedShareService(
     !price(row.service.price) ||
     !/^[A-Z]{3}$/.test(row.service.currency ?? "") ||
     !duration(row.service.durationMinutes) ||
+    !Array.isArray(row.locations) ||
+    row.locations.length > 500 ||
     !Array.isArray(row.professionals) ||
     row.professionals.length > 500
   )
@@ -49,6 +52,18 @@ export function parsePublishedShareService(
     return null;
   }
   const ids = new Set<string>();
+  const locationIds = new Set<string>();
+  for (const location of row.locations) {
+    if (
+      !location ||
+      typeof location.id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(location.id) ||
+      !text(location.name) ||
+      locationIds.has(location.id)
+    )
+      return null;
+    locationIds.add(location.id);
+  }
   for (const staff of row.professionals) {
     if (
       !staff ||

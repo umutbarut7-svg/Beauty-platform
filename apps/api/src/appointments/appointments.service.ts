@@ -86,6 +86,10 @@ export class AppointmentsService {
     user: AuthenticatedUser,
     businessId: string,
     dto: CreateAppointmentDto,
+    publicBooking?: {
+      prepare(database: PrismaService): Promise<string | null>;
+      complete(database: PrismaService, appointmentId: string): Promise<void>;
+    },
   ) {
     const actor = await this.actor(user, businessId);
     if (actor.membership?.role === "STAFF")
@@ -120,6 +124,18 @@ export class AppointmentsService {
             "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:${dto.staffMemberId}`,
           );
+          // Public-web quote and replay binding share this serializable transaction.
+          // The existing three-argument callers retain their previous behavior.
+          const replayId = await publicBooking?.prepare(tx);
+          if (replayId) {
+            const replay = await tx.appointment.findFirst({
+              where: { id: replayId, businessId, customerId },
+              include: this.includes(),
+            });
+            if (!replay)
+              throw new ConflictException("Booking replay is unavailable");
+            return replay;
+          }
           const business = await tx.business.findUnique({
             where: { id: businessId },
             select: { timezone: true },
@@ -324,6 +340,7 @@ export class AppointmentsService {
               changedById: user.id,
             },
           });
+          await publicBooking?.complete(tx, created.id);
           return created;
         },
         { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 },

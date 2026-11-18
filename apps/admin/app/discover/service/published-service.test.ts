@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolvePublishedService } from "./published-service";
+import { publicApiBase, resolvePublishedService } from "./published-service";
 
 const target = { businessId: "salon", serviceId: "color" };
 const published = {
+  locations: [],
   business: { id: "salon", name: "Salon", timezone: "Europe/Istanbul" },
   service: {
     id: "color",
@@ -21,6 +22,26 @@ const published = {
   ],
 };
 describe("Shared-service server lookup", () => {
+  it("supports the approved /api reverse-proxy mount without accepting arbitrary prefixes", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(published));
+    expect(
+      await resolvePublishedService(
+        target,
+        "https://api.example.test",
+        transport,
+        "/api",
+      ),
+    ).toEqual(published);
+    expect(String(transport.mock.calls[0]![0])).toBe(
+      "https://api.example.test/api/discovery/shared-service?businessId=salon&serviceId=color",
+    );
+    expect(publicApiBase("https://api.example.test", "/other")).toBeNull();
+    expect(
+      publicApiBase("https://api.example.test", "//foreign.test"),
+    ).toBeNull();
+  });
   it("fetches the exact trusted endpoint without cache, credentials or redirects", async () => {
     const transport = vi
       .fn<typeof fetch>()

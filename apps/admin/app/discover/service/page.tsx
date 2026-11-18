@@ -1,5 +1,6 @@
 import { parseOrzellShareLink } from "@beauty-platform/types";
-import { resolvePublishedService } from "./published-service";
+import { SharedBooking } from "./SharedBooking";
+import { publicApiBase, resolvePublishedService } from "./published-service";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,8 @@ export default async function SharedServicePage({
   const published = await resolvePublishedService(
     target,
     process.env.ORZELL_PUBLIC_API_ORIGIN,
+    fetch,
+    process.env.ORZELL_PUBLIC_API_PATH_PREFIX ?? "",
   );
   if (!published) {
     return (
@@ -63,6 +66,10 @@ export default async function SharedServicePage({
       </main>
     );
   }
+  const apiBase = publicApiBase(
+    process.env.ORZELL_PUBLIC_API_ORIGIN,
+    process.env.ORZELL_PUBLIC_API_PATH_PREFIX ?? "",
+  );
   return (
     <main style={{ maxWidth: 640, margin: "5rem auto", padding: "1.5rem" }}>
       <div className="brand" role="img" aria-label="ORZELL">
@@ -89,10 +96,17 @@ export default async function SharedServicePage({
           ))}
         </section>
       )}
-      <p>
-        Randevu işlemi henüz bu önizleme sayfasında etkin değil. Güncel
-        müsaitlik doğrulanmadan rezervasyon oluşturulmaz.
-      </p>
+      {process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED === "true" &&
+      apiBase ? (
+        <SharedBooking
+          key={`${target.businessId}:${target.serviceId}:${target.professionalId ?? ""}`}
+          apiBase={apiBase}
+          target={target}
+          published={published}
+        />
+      ) : (
+        <p>Bu hizmet için web randevusu şu anda kullanılamıyor.</p>
+      )}
     </main>
   );
 }

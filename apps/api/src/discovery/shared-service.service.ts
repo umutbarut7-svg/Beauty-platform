@@ -10,7 +10,10 @@ import type { PrismaService } from "../database/prisma.service.js";
 export class SharedServiceService {
   constructor(@Inject(PRISMA_SERVICE) private readonly db: PrismaService) {}
 
-  async resolve(target: OrzellShareTarget): Promise<PublishedShareService> {
+  async resolve(
+    target: OrzellShareTarget,
+    database: PrismaService = this.db,
+  ): Promise<PublishedShareService> {
     // Photo consent alone is not permission to publish a result to the internet.
     if (process.env.ORZELL_EVERYWHERE_ENABLED !== "true" || target.resultId)
       throw new NotFoundException("Shared service is unavailable");
@@ -20,7 +23,7 @@ export class SharedServiceService {
       acceptsBookings: true,
       ...(target.professionalId ? { id: target.professionalId } : {}),
     };
-    const row = await this.db.service.findFirst({
+    const row = await database.service.findFirst({
       where: {
         id: target.serviceId,
         businessId: target.businessId,
@@ -46,7 +49,18 @@ export class SharedServiceService {
         price: true,
         currency: true,
         durationMinutes: true,
-        business: { select: { id: true, name: true, timezone: true } },
+        business: {
+          select: {
+            id: true,
+            name: true,
+            timezone: true,
+            locations: {
+              where: { businessId: target.businessId, isActive: true },
+              select: { id: true, name: true },
+              orderBy: { id: "asc" },
+            },
+          },
+        },
         staffProfiles: {
           where: {
             businessId: target.businessId,
@@ -64,7 +78,12 @@ export class SharedServiceService {
     });
     if (!row) throw new NotFoundException("Shared service is unavailable");
     return {
-      business: row.business,
+      business: {
+        id: row.business.id,
+        name: row.business.name,
+        timezone: row.business.timezone,
+      },
+      locations: row.business.locations,
       service: {
         id: row.id,
         name: row.name,

@@ -3,12 +3,8 @@ import {
   type OrzellShareTarget,
 } from "@beauty-platform/types";
 
-export async function resolvePublishedService(
-  target: OrzellShareTarget,
-  apiOrigin: string | undefined,
-  transport: typeof fetch = fetch,
-) {
-  if (!apiOrigin || target.resultId) return null;
+export function publicApiBase(apiOrigin: string | undefined, pathPrefix = "") {
+  if (!apiOrigin || !["", "/api"].includes(pathPrefix)) return null;
   try {
     const base = new URL(apiOrigin);
     if (
@@ -20,7 +16,23 @@ export async function resolvePublishedService(
       base.pathname !== "/"
     )
       return null;
-    const url = new URL("/discovery/shared-service", base);
+    return `${base.origin}${pathPrefix}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolvePublishedService(
+  target: OrzellShareTarget,
+  apiOrigin: string | undefined,
+  transport: typeof fetch = fetch,
+  pathPrefix = "",
+) {
+  if (!apiOrigin || target.resultId) return null;
+  try {
+    const base = publicApiBase(apiOrigin, pathPrefix);
+    if (!base) return null;
+    const url = new URL(`${base}/discovery/shared-service`);
     url.searchParams.set("businessId", target.businessId);
     url.searchParams.set("serviceId", target.serviceId);
     if (target.professionalId)

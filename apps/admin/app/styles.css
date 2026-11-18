@@ -90,6 +90,7 @@ label {
   margin: 1rem 0;
 }
 input,
+select,
 textarea {
   display: block;
   padding: 0.8rem;
@@ -129,6 +130,7 @@ button:disabled {
 }
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 3px;

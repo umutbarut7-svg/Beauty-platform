@@ -4,6 +4,7 @@ on:
     paths:
       - apps/admin/**
       - scripts/check-admin-entry.cjs
+      - scripts/check-everywhere-web-booking.cjs
       - .github/workflows/admin-entry.yml
 permissions:
   contents: read
@@ -36,6 +37,8 @@ jobs:
       - name: Verify package matches the preinstalled browser image
         run: node -e "if (require('@playwright/test/package.json').version !== '1.64.1') throw new Error('Review the pinned browser image before upgrading Playwright')"
       - run: node scripts/check-admin-entry.cjs
+      - name: Exercise isolated shared-service web booking
+        run: node scripts/check-everywhere-web-booking.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
