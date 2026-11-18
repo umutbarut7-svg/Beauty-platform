@@ -422,6 +422,15 @@ async function main() {
     assert.match(html, /property="og:title" content="Balayage · /);
     assert.match(html, /name="twitter:card" content="summary"/);
     assert.ok(html.includes('aria-label="Hizmet bağlantısının QR kodu"'));
+    const continuation = await fetch(origin + "/book/service" + target, {
+      redirect: "error",
+    });
+    assert.equal(continuation.status, 200);
+    const continuationHtml = await continuation.text();
+    assert.ok(
+      continuationHtml.includes("Web randevusu") &&
+        continuationHtml.includes("Balayage"),
+    );
     const brandUrl = "https://share.example.test/orzell-original-reference.jpg";
     assert.ok(html.includes(`property="og:image" content="${brandUrl}"`));
     assert.ok(html.includes(`name="twitter:image" content="${brandUrl}"`));
