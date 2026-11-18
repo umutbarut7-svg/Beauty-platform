@@ -2,6 +2,7 @@ import {
   IsDateString,
   IsInt,
   IsString,
+  IsUUID,
   Matches,
   Max,
   Min,
@@ -20,6 +21,7 @@ export class SharedAvailabilityQueryDto extends SharedBookingTargetDto {
   date!: string;
 }
 export class SharedCreateBookingDto extends SharedBookingTargetDto {
+  @IsUUID("4") idempotencyKey!: string;
   @IsDateString({ strict: true })
   @Matches(/(?:Z|[+-]\d{2}:\d{2})$/)
   startsAt!: string;

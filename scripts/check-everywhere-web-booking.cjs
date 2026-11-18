@@ -36,7 +36,9 @@ const slot = {
 };
 let scenario = "normal",
   attempts = 0,
-  record = null;
+  record = null,
+  requestKey = null,
+  createdCount = 0;
 const unexpected = [];
 
 async function review(engine, name, apiOrigin) {
@@ -65,6 +67,8 @@ async function review(engine, name, apiOrigin) {
       scenario = "normal";
       attempts = 0;
       record = null;
+      requestKey = null;
+      createdCount = 0;
       await page.goto(origin + "/discover/service" + target);
       await expect(
         page.getByRole("heading", { name: "Balayage", exact: true }),
@@ -159,10 +163,31 @@ async function review(engine, name, apiOrigin) {
       .getByRole("button", { name: "Randevu talebini gönder", exact: true })
       .click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      /İşlem sonucu doğrulanamadı|Randevu talebiniz alındı/,
+    );
+    assert.ok(attempts >= 1 && attempts <= 2);
+    assert.equal(createdCount, 1);
+    assert.equal(record.status, "PENDING");
+    const transportAttempts = attempts;
+    await page
+      .getByRole("button", { name: "Randevularımı kontrol et", exact: true })
+      .click();
+    await expect(
+      page.getByRole("article", { name: "Randevu kaydı", exact: true }),
+    ).toContainText("İşletme onayı bekleniyor");
+    assert.equal(attempts, transportAttempts);
+
+    await load();
+    await quote();
+    scenario = "gateway-error";
+    await page
+      .getByRole("button", { name: "Randevu talebini gönder", exact: true })
+      .click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
       "İşlem sonucu doğrulanamadı",
     );
     assert.equal(attempts, 1);
-    assert.equal(record.status, "PENDING");
+    assert.equal(createdCount, 1);
     await page
       .getByRole("button", { name: "Randevularımı kontrol et", exact: true })
       .click();
@@ -297,7 +322,14 @@ async function main() {
             assert.equal(body.expectedDurationMinutes, 120);
             assert.equal(body.customerId, undefined);
             if (scenario === "changed") return send(409, {});
-            if (record) return send(409, {});
+            assert.match(body.idempotencyKey, /^[0-9a-f-]{36}$/);
+            if (record)
+              return send(
+                body.idempotencyKey === requestKey ? 201 : 409,
+                body.idempotencyKey === requestKey ? record : {},
+              );
+            requestKey = body.idempotencyKey;
+            createdCount++;
             record = {
               id: "synthetic-booking",
               businessId: "salon",
@@ -310,6 +342,7 @@ async function main() {
               currency: "TRY",
               status: "PENDING",
             };
+            if (scenario === "gateway-error") return send(503, {});
             if (scenario === "lost-response") {
               response.destroy();
               return;

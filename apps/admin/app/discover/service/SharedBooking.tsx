@@ -280,6 +280,7 @@ export function SharedBooking({
                     onClick={() =>
                       void run(async () => {
                         const input = {
+                          idempotencyKey: globalThis.crypto.randomUUID(),
                           businessId: target.businessId,
                           serviceId: target.serviceId,
                           professionalId,

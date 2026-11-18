@@ -29,18 +29,24 @@ not placed in URLs, cookies, localStorage or sessionStorage.
 - Quote resolution uses the existing AvailabilityService with the verified
   staff-profile ID and active business/service/location relationships.
 - Booking delegates to the existing AppointmentsService with `bookForSelf=true`.
-  An optional internal callback rechecks publication, staff assignment, location,
+  Optional internal transaction hooks recheck publication, staff assignment, location,
   quoted price/currency/duration inside the same serializable transaction and
   staff lock. It runs before any write. Existing callers do not provide the
-  callback and keep their previous behavior. Category, availability, overlap and
+  hooks and keep their previous behavior. Category, availability, overlap and
   booking-policy checks remain in the existing service.
 - Prices are compared as integer hundredths using BigInt. Changing price,
   currency, duration or slot never silently accepts the old quote.
 - Concurrent attempts are bounded by the existing booking lock and PostgreSQL
   overlap constraint. The client makes one write attempt and does not retry an
   ambiguous network result. "Randevularımı kontrol et" reads persisted own records
-  before the customer decides what to do next. This is not a new idempotency-key
-  or payment/refund subsystem.
+  before the customer decides what to do next. Each explicit submit has a random
+  UUID, bound to business/actor/operation plus a canonical request hash in the
+  existing IdempotencyRecord table. Reservation, appointment and result binding
+  commit atomically. Identical transport retries return the existing own record;
+  changed payloads and expired keys are rejected. The binding uses the existing
+  24-hour idempotency lifetime; no new schema, plaintext request body or payment/
+  refund subsystem is introduced. A concurrent serializable conflict performs one
+  fresh own-result read, never a second write. Cancelled records are not recreated.
 - The own-booking projection is customer-scoped even for a business owner.
   Other users cannot inspect or cancel it. Existing own receipts and cancellation
   remain accessible after the business withdraws public discovery, while the
@@ -105,3 +111,15 @@ and job bodies but use `queue: max` with `cancel-in-progress: false`. This follo
 It does not remove checks or prevent provider/runner failures. The first booking
 candidate's Android job stopped while resolving the unchanged upstream Foojay
 Gradle plugin, before application compilation; it is not counted as a pass.
+
+## Transport replay acceptance
+
+Chromium demonstrated that a lost HTTP response can trigger a transparent browser
+POST replay even though the application called fetch once. The server now binds
+that retry to the existing appointment and returns its current own receipt. The
+real PostgreSQL suite covers concurrent identical-key replay, changed-payload
+rejection, replay after cancellation and expired-key rejection as well as distinct
+requests competing for one slot. The browser fixture distinguishes transport
+replay from an application retry, asserts one created record, and separately
+simulates a committed write followed by a gateway 503 to verify own-result
+reconciliation without another write. No failed browser run is counted as a pass.

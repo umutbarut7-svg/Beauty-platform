@@ -63,6 +63,7 @@ function request(
 }
 const target = () => ({ businessId, serviceId, professionalId, locationId });
 const body = () => ({
+  idempotencyKey: randomUUID(),
   ...target(),
   startsAt,
   expectedPrice: "1700.25",
@@ -366,10 +367,12 @@ describe("Authenticated shared booking on real HTTP and PostgreSQL", () => {
     expect(await db.appointment.count({ where: { businessId } })).toBe(0);
   });
   it("persists exactly one pending self-booking, exposes it to the business, and permits only owner cancellation", async () => {
-    const attempts = await Promise.all([
-      request("POST", "/discovery/shared-service/bookings", userId, body()),
-      request("POST", "/discovery/shared-service/bookings", userId, body()),
-    ]);
+    const inputs = [body(), body()];
+    const attempts = await Promise.all(
+      inputs.map((input) =>
+        request("POST", "/discovery/shared-service/bookings", userId, input),
+      ),
+    );
     expect(attempts.map((response) => response.statusCode).sort()).toEqual([
       201, 409,
     ]);
@@ -385,6 +388,24 @@ describe("Authenticated shared booking on real HTTP and PostgreSQL", () => {
       currency: "TRY",
       status: "PENDING",
     });
+    const winningInput =
+      inputs[attempts.findIndex((response) => response.statusCode === 201)]!;
+    const replay = await request(
+      "POST",
+      "/discovery/shared-service/bookings",
+      userId,
+      winningInput,
+    );
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json().id).toBe(created.id);
+    expect(
+      (
+        await request("POST", "/discovery/shared-service/bookings", userId, {
+          ...winningInput,
+          expectedPrice: "1700.24",
+        })
+      ).statusCode,
+    ).toBe(409);
     expect(created).not.toHaveProperty("customer");
     expect(Date.parse(created.endsAt) - Date.parse(created.startsAt)).toBe(
       120 * 60_000,
@@ -446,6 +467,37 @@ describe("Authenticated shared booking on real HTTP and PostgreSQL", () => {
       { businessId },
     );
     expect(cancelled.statusCode).toBe(201);
+    const afterCancellation = await request(
+      "POST",
+      "/discovery/shared-service/bookings",
+      userId,
+      winningInput,
+    );
+    expect(afterCancellation.statusCode).toBe(201);
+    expect(afterCancellation.json()).toMatchObject({
+      id: created.id,
+      status: "CANCELLED",
+    });
+    expect(await db.appointment.count({ where: { businessId } })).toBe(1);
+    await db.idempotencyRecord.updateMany({
+      where: {
+        businessId,
+        actorId: userId,
+        operation: "ORZELL_SHARED_BOOKING_V1",
+      },
+      data: { expiresAt: new Date(0) },
+    });
+    expect(
+      (
+        await request(
+          "POST",
+          "/discovery/shared-service/bookings",
+          userId,
+          winningInput,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(await db.appointment.count({ where: { businessId } })).toBe(1);
     expect(cancelled.json()).toMatchObject({
       id: created.id,
       status: "CANCELLED",
@@ -453,6 +505,25 @@ describe("Authenticated shared booking on real HTTP and PostgreSQL", () => {
     expect(
       (await db.appointment.findUnique({ where: { id: created.id } }))?.status,
     ).toBe("CANCELLED");
+  });
+  it("replays concurrent identical request keys as the same appointment", async () => {
+    await db.business.update({
+      where: { id: businessId },
+      data: { isPublic: true },
+    });
+    const input = { ...body(), startsAt: day.set({ hour: 14 }).toISO()! };
+    const results = await Promise.all([
+      request("POST", "/discovery/shared-service/bookings", userId, input),
+      request("POST", "/discovery/shared-service/bookings", userId, input),
+    ]);
+    expect(results.map((result) => result.statusCode)).toEqual([201, 201]);
+    expect(results[0]!.json().id).toBe(results[1]!.json().id);
+    expect(await db.appointment.count({ where: { businessId } })).toBe(2);
+    expect(
+      await db.idempotencyRecord.count({
+        where: { businessId, operation: "ORZELL_SHARED_BOOKING_V1" },
+      }),
+    ).toBe(2);
   });
   it("keeps the web write flow disabled independently of public discovery", async () => {
     vi.stubEnv("ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED", "false");

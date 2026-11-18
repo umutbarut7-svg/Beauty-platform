@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/consistent-type-imports */
+import { createHash } from "node:crypto";
 import {
   ConflictException,
   Inject,
@@ -64,6 +65,34 @@ const minor = (value: string) => {
   const [whole = "0", fraction = ""] = value.split(".");
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
 };
+const digest = (value: string) =>
+  createHash("sha256").update(value).digest("hex");
+interface ReplayRecord {
+  requestHash: string;
+  statusCode: number | null;
+  response: unknown;
+  expiresAt: Date;
+}
+function replayId(
+  record: ReplayRecord | null,
+  requestHash: string,
+): string | null {
+  if (!record) return null;
+  if (
+    record.requestHash !== requestHash ||
+    record.expiresAt.getTime() <= Date.now() ||
+    record.statusCode !== 201 ||
+    !record.response ||
+    typeof record.response !== "object" ||
+    !("appointmentId" in record.response) ||
+    typeof record.response.appointmentId !== "string" ||
+    !/^[A-Za-z0-9_-]{1,64}$/.test(record.response.appointmentId)
+  )
+    throw new ConflictException(
+      "Booking request changed or expired; inspect your bookings",
+    );
+  return record.response.appointmentId;
+}
 
 @Injectable()
 export class SharedBookingService {
@@ -100,35 +129,107 @@ export class SharedBookingService {
   }
   async book(user: AuthenticatedUser, input: SharedCreateBookingDto) {
     this.enabled();
-    const row = await this.appointments.create(
-      user,
-      input.businessId,
-      {
-        serviceId: input.serviceId,
-        staffMemberId: input.professionalId,
-        locationId: input.locationId,
-        startsAt: input.startsAt,
-        bookForSelf: true,
-      },
-      async (tx) => {
-        this.enabled();
-        const current = await this.published.resolve(input, tx);
-        this.atLocation(current, input.locationId);
-        const staff = current.professionals.find(
-          (item) => item.id === input.professionalId,
-        );
-        if (
-          !staff ||
-          minor(staff.price) !== minor(input.expectedPrice) ||
-          current.service.currency !== input.expectedCurrency ||
-          staff.durationMinutes !== input.expectedDurationMinutes
-        )
-          throw new ConflictException(
-            "Quote changed; refresh availability before booking",
-          );
-      },
+    const scope = {
+      businessId: input.businessId,
+      actorId: user.id,
+      operation: "ORZELL_SHARED_BOOKING_V1",
+      keyHash: digest(input.idempotencyKey),
+    };
+    const where = { businessId_actorId_operation_keyHash: scope };
+    const requestHash = digest(
+      JSON.stringify([
+        input.serviceId,
+        input.professionalId,
+        input.locationId,
+        new Date(input.startsAt).toISOString(),
+        minor(input.expectedPrice).toString(),
+        input.expectedCurrency,
+        input.expectedDurationMinutes,
+      ]),
     );
-    return receipt(row);
+    let reservationId: string | undefined;
+    try {
+      const row = await this.appointments.create(
+        user,
+        input.businessId,
+        {
+          serviceId: input.serviceId,
+          staffMemberId: input.professionalId,
+          locationId: input.locationId,
+          startsAt: input.startsAt,
+          bookForSelf: true,
+        },
+        {
+          prepare: async (tx) => {
+            this.enabled();
+            await tx.$queryRawUnsafe(
+              "SELECT pg_advisory_xact_lock(hashtext($1))::text",
+              `shared-booking:${input.businessId}:${user.id}:${scope.keyHash}`,
+            );
+            const existing = replayId(
+              await tx.idempotencyRecord.findUnique({ where }),
+              requestHash,
+            );
+            if (existing) return existing;
+            const reservation = await tx.idempotencyRecord.create({
+              data: {
+                ...scope,
+                requestHash,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+              },
+              select: { id: true },
+            });
+            reservationId = reservation.id;
+            const current = await this.published.resolve(input, tx);
+            this.atLocation(current, input.locationId);
+            const staff = current.professionals.find(
+              (item) => item.id === input.professionalId,
+            );
+            if (
+              !staff ||
+              minor(staff.price) !== minor(input.expectedPrice) ||
+              current.service.currency !== input.expectedCurrency ||
+              staff.durationMinutes !== input.expectedDurationMinutes
+            )
+              throw new ConflictException(
+                "Quote changed; refresh availability before booking",
+              );
+            return null;
+          },
+          complete: async (tx, appointmentId) => {
+            if (!reservationId)
+              throw new ConflictException("Booking request is unbound");
+            await tx.idempotencyRecord.update({
+              where: { id: reservationId },
+              data: { statusCode: 201, response: { appointmentId } },
+            });
+          },
+        },
+      );
+      return receipt(row);
+    } catch (error) {
+      // A concurrently committed identical request can invalidate a serializable
+      // snapshot. Read its own result on a fresh snapshot; never retry the write.
+      const existingId = replayId(
+        await this.db.idempotencyRecord.findUnique({ where }),
+        requestHash,
+      );
+      if (existingId) {
+        const own: BookingRow | null = await this.db.appointment.findFirst({
+          where: {
+            id: existingId,
+            businessId: input.businessId,
+            serviceId: input.serviceId,
+            staffId: input.professionalId,
+            locationId: input.locationId,
+            customer: { userId: user.id },
+          },
+          select: receiptSelect,
+        });
+        if (own) return receipt(own);
+      }
+      throw error;
+    }
   }
   async mine(user: AuthenticatedUser, target: OrzellShareTarget) {
     this.enabled();
