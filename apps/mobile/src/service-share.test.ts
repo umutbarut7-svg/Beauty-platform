@@ -7,6 +7,7 @@ const target = {
   professionalId: "staff",
 };
 const published = {
+  locations: [],
   business: { id: "salon", name: "Salon", timezone: "Europe/Istanbul" },
   service: {
     id: "color",

@@ -86,6 +86,7 @@ export class AppointmentsService {
     user: AuthenticatedUser,
     businessId: string,
     dto: CreateAppointmentDto,
+    validatePublicQuote?: (database: PrismaService) => Promise<void>,
   ) {
     const actor = await this.actor(user, businessId);
     if (actor.membership?.role === "STAFF")
@@ -120,6 +121,9 @@ export class AppointmentsService {
             "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:${dto.staffMemberId}`,
           );
+          // Optional public-web quote validation shares the booking's serializable
+          // transaction and staff lock; existing callers retain their behavior.
+          await validatePublicQuote?.(tx);
           const business = await tx.business.findUnique({
             where: { id: businessId },
             select: { timezone: true },
