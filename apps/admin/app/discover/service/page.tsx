@@ -52,7 +52,9 @@ async function resolvePublishedService(
     const items = (payload as { items: unknown }).items;
     if (!Array.isArray(items)) return null;
     const matches = items.filter(
-      (item): item is {
+      (
+        item,
+      ): item is {
         businessId: string;
         name: string;
         services: PublishedService[];
@@ -102,8 +104,7 @@ export default async function SharedServicePage({
   const params = await searchParams;
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (Array.isArray(value))
-      for (const item of value) query.append(key, item);
+    if (Array.isArray(value)) for (const item of value) query.append(key, item);
     else if (value !== undefined) query.append(key, value);
   }
   const target = parseOrzellShareLink(
@@ -150,8 +151,8 @@ export default async function SharedServicePage({
         {published.service.durationMinutes} dakika
       </p>
       <p>
-        Randevu işlemi henüz bu önizleme sayfasında etkin değil.
-        Güncel müsaitlik doğrulanmadan rezervasyon oluşturulmaz.
+        Randevu işlemi henüz bu önizleme sayfasında etkin değil. Güncel
+        müsaitlik doğrulanmadan rezervasyon oluşturulmaz.
       </p>
     </main>
   );
