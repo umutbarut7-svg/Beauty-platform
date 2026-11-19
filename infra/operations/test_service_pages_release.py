@@ -43,6 +43,14 @@ class ReleaseTests(unittest.TestCase):
         updated, _ = publish.candidate_config(baseline,'gateway',{})
         self.assertEqual(updated['services']['gateway']['volumes'][0]['source'],str(publish.WORK/'Caddyfile'))
 
+    def test_acceptance_reads_visible_text_with_react_markers(self):
+        page = publish.RenderedText()
+        page.feed('<h1>Kaynak </h1><p>20000<!-- --> <!-- -->TRY · <!-- -->120<!-- --> dakika</p>'
+                  '<script>unpublished fixture</script>')
+        self.assertEqual(''.join(page.heading).strip(),'Kaynak')
+        self.assertIn('20000 TRY · 120 dakika',''.join(page.text))
+        self.assertNotIn('unpublished fixture',''.join(page.text))
+
     def test_gate_rejects_failed_or_stale_run(self):
         for head, conclusion in [('other','success'),('exact','failure')]:
             with self.assertRaises(dispatch.transport.Stop):

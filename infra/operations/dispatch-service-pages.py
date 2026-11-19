@@ -12,14 +12,14 @@ spec = importlib.util.spec_from_file_location('preview_transport', HERE/'dispatc
 transport = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(transport)
 require = transport.require
-APPLICATION = 'eab66cca00ca47e9f1fd035208068d1922ba8212'
-GATES = [44518626964, 44518627775, 44518626933, 44518626976, 44518626913]
+APPLICATION = '0fae2655395df7dcbd580f1ab85295b1d3a6e1f3'
+GATES = [44527207911, 44527207936, 44527208040, 44527207980, 44527208036]
 INSTANCE = 'i-09fe7fdb5f10d63b6'
 
 
 def pinned_request():
     body = Path('.github/operations/service-pages-release.json').read_bytes()
-    require(hashlib.sha256(body).hexdigest() == 'd00854fe998a89311b7c33834dc9a817ff6b0589c0aee67a6f0dab0eb9801227',
+    require(hashlib.sha256(body).hexdigest() == '9be1a46aa18ff52239ed94c6de66ec4e51f8697987415347a78c88b67fd276e4',
             'Preview release request differs')
     return json.loads(body)
 
@@ -53,7 +53,7 @@ def main():
     build = transport.github('actions/runs/'+str(expected['run']))
     require(build['path'] == '.github/workflows/preview-service-images.yml', 'Image workflow differs')
     verify_gate(build, expected['head'])
-    for run_id in GATES + [44525638155]:
+    for run_id in GATES + [44527240735]:
         verify_gate(transport.github('actions/runs/'+str(run_id)), APPLICATION if run_id in GATES else expected['head'])
     identity = transport.aws('sts','get-caller-identity')
     require(identity.get('Arn','').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'),

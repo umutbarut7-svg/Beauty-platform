@@ -1,16 +1,16 @@
 {
   "artifact": {
-    "id": 14531555495,
-    "run": 44525637972,
-    "head": "90d44a4ac3b328df4c4f1745cb4e804995ec05c9",
-    "sha256": "fede1e5f4801e95c767d5ebedc08fa257fe33ca6f68ffd439f8a6bdead66e3b5",
-    "bytes": 374015153
+    "id": 14530952829,
+    "run": 44527240607,
+    "head": "3f109e85822ceb22fafd81fceeb6492fe998c3fa",
+    "sha256": "906545ca080df30b18a6cc3b66b6df5282dbfbd791e250a48f8fece1d949a887",
+    "bytes": 374025024
   },
   "manifest": {
-    "source": "eab66cca00ca47e9f1fd035208068d1922ba8212",
-    "api": "sha256:1df86665169910d387bb681b45af2832bcee1cbb447a418f0069eb3794fa7151",
-    "admin": "sha256:fa7b45cb1634cdce6b82cc799f9b29e2e716515c3245d2ae3443aabbf92731c2",
-    "archiveSha256": "02ab7d97fe7c84190a12ca09274f0b4d02294a979e837d612562b54de53a53ad",
-    "archiveBytes": 374014562
+    "source": "0fae2655395df7dcbd580f1ab85295b1d3a6e1f3",
+    "api": "sha256:5e98b54f3371ef2605675c09aebf2b8ed0d9e105d48dc8dd4c8cc130bb3b58f9",
+    "admin": "sha256:950b2f795d5d482276f9927ba017a580ccc72179b30f8f80c94df2c1c4685d4c",
+    "archiveSha256": "14ada8af908d5cbb99e1c9bca4b2517be91eb9429fbcf154435d11979c4e0ddd",
+    "archiveBytes": 374024433
   }
 }

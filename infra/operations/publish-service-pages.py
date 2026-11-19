@@ -1,10 +1,7 @@
 """Apply the pinned service sharing images and public gateway routes on preview."""
 import copy
 import fcntl
-import hashlib
-import html
 import json
-import os
 import re
 import shutil
 import time
@@ -12,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-from pathlib import Path
+from html.parser import HTMLParser
 
 import preview_admin_ops as ops
 
@@ -43,18 +40,49 @@ def http(path):
         return response.status, response.headers.get_content_type(), body
 
 
-def catalog_target():
+def catalog_targets():
     status, _, body = http('/api/discovery/services')
     require(status == 200, 'Public catalog unavailable')
+    targets = []
     for business in json.loads(body)['items']:
         for service in business['services']:
             ids = [business['businessId'], service['id']]
             if all(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', key) for key in ids):
-                return urllib.parse.urlencode(dict(zip(['businessId','serviceId'], ids)))
-    raise ops.Stop('No published catalog service available for acceptance')
+                targets.append(urllib.parse.urlencode(dict(zip(['businessId','serviceId'], ids))))
+                if len(targets) == 2:
+                    return targets
+    require(bool(targets), 'No published catalog service available for acceptance')
+    return targets
 
 
-def inspect_pages(query, home):
+class RenderedText(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.text = []
+        self.heading = []
+        self.in_heading = False
+        self.hidden = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'h1':
+            self.in_heading = True
+        if tag in ('script', 'style'):
+            self.hidden = True
+
+    def handle_endtag(self, tag):
+        if tag == 'h1':
+            self.in_heading = False
+        if tag in ('script', 'style'):
+            self.hidden = False
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.text.append(data)
+        if self.in_heading:
+            self.heading.append(data)
+
+
+def inspect_pages(query):
     api = '/api/discovery/shared-service?'
     status, _, raw = http(api + query)
     require(status == 200, 'Published service lookup failed')
@@ -64,14 +92,25 @@ def inspect_pages(query, home):
             shared['service']['id'] == identity['serviceId'][0], 'Returned service identity differs')
     for path in ['/discover/service?', '/book/service?']:
         status, mime, raw = http(path + query)
-        page = html.unescape(raw.decode())
+        page = raw.decode()
+        rendered = RenderedText()
+        rendered.feed(page)
+        visible = ' '.join(''.join(rendered.text).split())
+        service = shared['service']
+        detail = service['price'] + ' ' + service['currency'] + ' · ' + str(service['durationMinutes']) + ' dakika'
         require((status, mime) == (200, 'text/html') and
-                '<h1>' + shared['service']['name'] + '</h1>' in page and
-                shared['business']['name'] in page and 'web randevusu şu anda kullanılamıyor' in page,
+                ''.join(rendered.heading).strip() == service['name'].strip() and
+                shared['business']['name'] in visible and detail in visible and
+                'web randevusu şu anda kullanılamıyor' in visible,
                 'Browser service detail acceptance failed')
         assets = re.findall(r'(?:src|href)="(/_next/static/[^"]+\.css[^"]*)"', page)
         require(bool(assets) and http(assets[0])[:2] == (200, 'text/css'), 'Public stylesheet unavailable')
     require(http(api + query + '&resultId=unpublished-result')[0] == 404, 'Result publication gate differs')
+
+
+def acceptance(queries, home):
+    for query in queries:
+        inspect_pages(query)
     require(http('/')[2] == home and http('/.well-known/apple-app-site-association')[1] == 'application/json',
             'Preview home or Apple declaration changed')
     ops.http_candidate()
@@ -134,12 +173,12 @@ def publish(release, url, caddy):
     manifest = release['manifest']
     before = ops.snapshot()
     ops.ready()
-    query = catalog_target()
+    queries = catalog_targets()
     status, mime, home = http('/')
     require((status, mime) == (200, 'text/html') and b'ORZELL' in home, 'Preview home unavailable')
     if WORK.exists() and (WORK/'complete').is_file():
         require(all(before[s]['Image'] == manifest[s] for s in ORIGINAL), 'Installed images drifted')
-        inspect_pages(query, home)
+        acceptance(queries, home)
         print('COMPLETED: public service pages verified')
         return
     require(not WORK.exists(), 'Previous incomplete release requires inspection')
@@ -189,7 +228,7 @@ def publish(release, url, caddy):
                                    actual['services'][service], manifest[service])
         for attempt in range(8):
             try:
-                inspect_pages(query, home)
+                acceptance(queries, home)
                 break
             except Exception:
                 if attempt == 7:
