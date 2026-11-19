@@ -194,15 +194,24 @@ class CatalogPublicationTests(unittest.TestCase):
 
 class ExecutionQueueTests(unittest.TestCase):
     def test_queue_is_bounded_and_hash_pinned(self):
-        root = SCRIPT.parents[2]
-        queue = (root / '.github/operations/preview-commands.sh').read_text()
+        # The shared operations queue advances after a publication. Keep testing
+        # the original request, plus the live queue whenever it selects this helper.
+        self.check_publication_queue(SCRIPT.parent / 'fixtures/consultation-publication')
+        current = SCRIPT.parents[2] / '.github/operations'
+        request = json.loads((current / 'preview-request.json').read_text())
+        if (request['request_id'].startswith('orzell-consultation-recovery-') or
+                SCRIPT.name in (current / 'preview-commands.sh').read_text()):
+            self.check_publication_queue(current)
+
+    def check_publication_queue(self, directory):
+        queue = (directory / 'preview-commands.sh').read_text()
         self.assertLess(len(queue), 12000)
         self.assertRegex(queue, r"REV = '[0-9a-f]{40}'")
         digest = re.search(r"EXPECTED = '([0-9a-f]{64})'", queue).group(1)
         self.assertEqual(digest, hashlib.sha256(SCRIPT.read_bytes()).hexdigest())
         self.assertIn('response.read(24001)', queue)
         self.assertIn('hashlib.sha256(script).hexdigest() != EXPECTED', queue)
-        self.assertEqual(json.loads((root / '.github/operations/preview-request.json').read_text()), {
+        self.assertEqual(json.loads((directory / 'preview-request.json').read_text()), {
             'request_id': 'orzell-consultation-recovery-20261029-retry-1',
             'mode': 'approved-maintenance',
         })
