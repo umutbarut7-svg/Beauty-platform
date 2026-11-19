@@ -88,7 +88,7 @@ export class SharedServiceService {
         id: row.id,
         name: row.name,
         price: String(row.price),
-        currency: row.currency,
+        currency: row.currency.toUpperCase(),
         durationMinutes: row.durationMinutes,
       },
       professionals: row.staffProfiles.map(

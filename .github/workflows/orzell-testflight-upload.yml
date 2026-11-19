@@ -24,6 +24,9 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_ORZELL_EVERYWHERE_ENABLED: ${{ vars.ORZELL_TESTFLIGHT_SERVICE_LINKS_ENABLED }}
+      EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED: ${{ vars.ORZELL_TESTFLIGHT_SERVICE_LINKS_ENABLED }}
+      EXPO_PUBLIC_ORZELL_WEB_ORIGIN: ${{ vars.ORZELL_PUBLIC_ORIGIN }}
       EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
     steps:
       - name: Check out reviewed application
@@ -53,6 +56,16 @@ jobs:
             console.log("Verified appointment material consumption preview delivery 41985890032.");
           }
           main().catch(e=>{console.error(e.message);process.exitCode=1;});
+          NODE
+      - name: Verify the Apple service-link declaration for the enabled build
+        if: env.EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED == 'true'
+        env:
+          ORZELL_PUBLIC_ORIGIN: ${{ env.EXPO_PUBLIC_ORZELL_WEB_ORIGIN }}
+          ORZELL_IOS_APPLICATION_IDENTIFIER: CDL78S6U9A.com.orzell.app
+        run: |
+          node --input-type=module <<'NODE'
+          import { checkAppleServiceLinkDomain } from './scripts/check-service-link-domain.mjs';
+          await checkAppleServiceLinkDomain(process.env);
           NODE
       - name: Install pinned dependencies and shared types
         run: |
@@ -126,6 +139,30 @@ jobs:
           test -n "$ipa"
           echo "ORZELL_IPA=$ipa" >> "$GITHUB_ENV"
           echo "Signed IPA exported. App Store submission has not been requested." >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify service-link entitlements in the exported IPA
+        if: env.EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          extracted=$(mktemp -d "$RUNNER_TEMP/orzell-ipa-check.XXXXXX")
+          trap 'rm -rf "$extracted"' EXIT
+          ditto -x -k "$ORZELL_IPA" "$extracted"
+          apps=("$extracted"/Payload/*.app)
+          test "${#apps[@]}" -eq 1
+          test -d "${apps[0]}"
+          codesign --verify --deep --strict "${apps[0]}"
+          codesign --display --entitlements - --xml "${apps[0]}" > "$extracted/entitlements.plist"
+          python3 - "$extracted/entitlements.plist" <<'PYTHON'
+          import os, plistlib, sys
+          from urllib.parse import urlsplit
+          with open(sys.argv[1], "rb") as source:
+              entitlements = plistlib.load(source)
+          domain = "applinks:" + urlsplit(os.environ["EXPO_PUBLIC_ORZELL_WEB_ORIGIN"]).hostname
+          domains = entitlements.get("com.apple.developer.associated-domains")
+          if (entitlements.get("application-identifier") != "CDL78S6U9A.com.orzell.app"
+                  or not isinstance(domains, list) or domain not in domains):
+              raise SystemExit("Exported IPA lacks the expected app identity or associated domain")
+          PYTHON
       - name: Validate and upload to App Store Connect for TestFlight
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

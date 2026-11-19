@@ -8,23 +8,28 @@ import { appendDevicePhoto, prepareDevicePhoto } from "./native-photo-expo";
 const origin = "http://127.0.0.1:18733";
 export default function NativePhotoProbe() {
   useEffect(() => {
-    let step = "download synthetic fixture";
+    const progress = new File(Paths.document, "native-photo-probe-step.txt");
+    let step = "open device fixture";
+    function mark(next: string) {
+      step = next;
+      progress.write(step);
+    }
     let cleanup: (() => void) | undefined;
     let source: File | undefined;
     void (async () => {
       try {
-        source = await File.downloadFileAsync(
-          origin + "/fixture.png",
-          new File(Paths.cache, "native-photo-synthetic.png"),
-          { idempotent: true },
-        );
+        progress.create({ overwrite: true });
+        mark("open device fixture");
+        source = new File(Paths.document, "native-photo-synthetic.png");
+        if (!source.exists) throw new Error("Missing simulator fixture");
+        mark("pinned native read regression");
         let oldReadRejected = false;
         try {
           await source.slice(0, 64).arrayBuffer();
         } catch {
           oldReadRejected = true;
         }
-        step = "actual native file read and JPEG encoder";
+        mark("actual native file read and JPEG encoder");
         const photo = await prepareDevicePhoto({
           uri: source.uri,
           width: 2560,
@@ -32,12 +37,13 @@ export default function NativePhotoProbe() {
         });
         cleanup = photo.cleanup;
         const api = new MvpApiClient(origin);
-        step = "native HTTPS-compatible client login on local fixture server";
+        mark("native HTTPS-compatible client login on local fixture server");
         await api.signIn(
           "login",
           "synthetic@example.test",
           "synthetic-native-password",
         );
+        mark("pinned multipart regression");
         const oldForm = new FormData();
         oldForm.append("photo", {
           uri: photo.uri,
@@ -50,7 +56,7 @@ export default function NativePhotoProbe() {
         } catch {
           oldMultipartRejected = true;
         }
-        step = "actual Expo fetch multipart upload";
+        mark("actual Expo fetch multipart upload");
         const form = new FormData();
         appendDevicePhoto(form, photo);
         const result = await api.request<{ status: string }>(
@@ -61,13 +67,14 @@ export default function NativePhotoProbe() {
         );
         if (result.status !== "VALIDATED")
           throw new Error("Synthetic upload not validated");
-        step = "native temporary file cleanup";
+        mark("native temporary file cleanup");
         cleanup();
         cleanup = undefined;
         if (new File(photo.uri).exists || !source.exists)
           throw new Error("Unexpected cleanup scope");
         if (!oldReadRejected || !oldMultipartRejected)
           throw new Error("Pinned runtime regression not reproduced");
+        mark("report validated result");
         await fetch(origin + "/result", {
           method: "POST",
           headers: { "content-type": "application/json" },

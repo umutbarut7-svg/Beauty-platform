@@ -102,12 +102,6 @@ class Server(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):
-        if self.path == '/fixture.png':
-            self.respond(FIXTURE, mime='image/png')
-        else:
-            self.respond({'status': 'NOT_FOUND'}, 404)
-
     def do_POST(self):
         validation = 'content length'
         facts = {}
@@ -207,12 +201,27 @@ try:
     run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
     subprocess.run(['xcrun', 'simctl', 'bootstatus', udid, '-b'], check=True, timeout=360)
     run('xcrun', 'simctl', 'install', udid, sys.argv[1])
-    run('xcrun', 'simctl', 'launch', '--stdout=' + str(ROOT / 'probe-stdout.log'), '--stderr=' + str(ROOT / 'probe-stderr.log'), '--terminate-running-process', udid, 'com.beautyplatform.stage33test')
-    for _ in range(90):
+    data = run('xcrun', 'simctl', 'get_app_container', udid, app_info['CFBundleIdentifier'], 'data').strip()
+    documents = pathlib.Path(data) / 'Documents'
+    documents.mkdir(exist_ok=True)
+    # Seed a device file just as a picker supplies a local URI on a real phone.
+    (documents / 'native-photo-synthetic.png').write_bytes(FIXTURE)
+    progress = documents / 'native-photo-probe-step.txt'
+    progress.unlink(missing_ok=True)
+    launch = ('xcrun', 'simctl', 'launch', '--stdout=' + str(ROOT / 'probe-stdout.log'),
+              '--stderr=' + str(ROOT / 'probe-stderr.log'), '--terminate-running-process',
+              udid, app_info['CFBundleIdentifier'])
+    run(*launch)
+    for attempt in range(90):
         if REPORT.exists():
             break
+        if attempt == 30 and not progress.exists() and not UPLOADS:
+            print('Simulator app has not entered the photo probe; relaunching once', flush=True)
+            run(*launch)
         time.sleep(2)
     if not REPORT.exists():
+        last_step = progress.read_text()[:100] if progress.exists() else 'entrypoint did not mark startup'
+        print('Last native photo step: ' + last_step, flush=True)
         for name in ['probe-stdout.log', 'probe-stderr.log']:
             log = ROOT / name
             if log.exists():
