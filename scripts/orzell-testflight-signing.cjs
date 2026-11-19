@@ -51,7 +51,12 @@ async function main() {
       redirect: "error",
       signal: AbortSignal.timeout(30000),
     });
-    if (!r.ok) throw new Error("Apple read failed: HTTP " + r.status);
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      const code = body?.errors?.[0]?.code;
+      const safeCode = typeof code === "string" && /^[A-Z][A-Z0-9_.-]{0,79}$/.test(code) ? code : "UNKNOWN";
+      throw new Error("Apple read failed: HTTP " + r.status + " (" + safeCode + ")");
+    }
     return r.json();
   }
   console.log("Checking active Apple profile and certificate.");
@@ -361,7 +366,7 @@ main().catch((error) => {
     "Invalid profile UUID.",
     "Associated Domains profile required.",
   ];
-  if (known.includes(error.message) || /^Apple read failed: HTTP [1-5][0-9]{2}$/.test(error.message))
+  if (known.includes(error.message) || /^Apple read failed: HTTP [1-5][0-9]{2} \([A-Z][A-Z0-9_.-]{0,79}\)$/.test(error.message))
     console.error("::error::" + error.message);
   console.error(
     "::error::Signing preparation failed. Private material was not logged.",
