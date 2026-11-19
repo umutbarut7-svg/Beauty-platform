@@ -1,0 +1,31 @@
+name: ORZELL service-link preview images
+on:
+  pull_request:
+    paths:
+      - .github/workflows/preview-service-images.yml
+      - infra/operations/prepare-service-images.sh
+permissions:
+  contents: read
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: eab66cca00ca47e9f1fd035208068d1922ba8212
+          path: application
+          persist-credentials: false
+      - name: Build and verify the preview images
+        run: bash harness/infra/operations/prepare-service-images.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: orzell-preview-service-images
+          path: release/
+          compression-level: 0
+          retention-days: 2
+          if-no-files-found: error
