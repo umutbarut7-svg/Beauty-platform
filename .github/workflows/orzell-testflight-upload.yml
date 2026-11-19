@@ -1,5 +1,4 @@
-# Release trigger: appointment-linked batch material consumption; follows verified preview delivery 41985890032.
-# Reviewed application 2e56def282c97a804a2f3d6c9b36a53b42a09df5; merge tree 4504204ef4e7614844dc9a6d8a089f6407b5a88f.
+# Internal TestFlight release for the service pages deployed in run 44529308969.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -24,9 +23,9 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
-      EXPO_PUBLIC_ORZELL_EVERYWHERE_ENABLED: ${{ vars.ORZELL_TESTFLIGHT_SERVICE_LINKS_ENABLED }}
-      EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED: ${{ vars.ORZELL_TESTFLIGHT_SERVICE_LINKS_ENABLED }}
-      EXPO_PUBLIC_ORZELL_WEB_ORIGIN: ${{ vars.ORZELL_PUBLIC_ORIGIN }}
+      EXPO_PUBLIC_ORZELL_EVERYWHERE_ENABLED: "true"
+      EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED: "true"
+      EXPO_PUBLIC_ORZELL_WEB_ORIGIN: https://preview.13-51-112-228.sslip.io
       EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
     steps:
       - name: Check out reviewed application
@@ -67,6 +66,12 @@ jobs:
           import { checkAppleServiceLinkDomain } from './scripts/check-service-link-domain.mjs';
           await checkAppleServiceLinkDomain(process.env);
           NODE
+      - name: Check the active profile supports service links before the native build
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: node scripts/orzell-testflight-signing.cjs --check-service-link-profile
       - name: Install pinned dependencies and shared types
         run: |
           pnpm install --frozen-lockfile

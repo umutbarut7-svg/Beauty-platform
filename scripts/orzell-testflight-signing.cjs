@@ -114,7 +114,7 @@ assert p["Entitlements"]["application-identifier"]=="CDL78S6U9A.com.orzell.app"
 assert p["Entitlements"].get("get-task-allow") is False
 assert not p.get("ProvisionedDevices") and not p.get("ProvisionsAllDevices")
 assert p["ExpirationDate"]>datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-print(json.dumps({"uuid":p["UUID"],"certificates":[__import__("base64").b64encode(c).decode() for c in p["DeveloperCertificates"]]}))
+print(json.dumps({"hasAssociatedDomains":bool(p["Entitlements"].get("com.apple.developer.associated-domains")),"uuid":p["UUID"],"certificates":[__import__("base64").b64encode(c).decode() for c in p["DeveloperCertificates"]]}))
 `;
   const decoded = JSON.parse(
     run("python3", ["-c", validation], { input: plist }).toString(),
@@ -125,6 +125,15 @@ print(json.dumps({"uuid":p["UUID"],"certificates":[__import__("base64").b64encod
     throw new Error("Embedded profile certificate mismatch.");
   if (!/^[A-Fa-f0-9-]{36}$/.test(decoded.uuid))
     throw new Error("Invalid profile UUID.");
+
+  if (process.argv.includes("--check-service-link-profile")) {
+    if (!decoded.hasAssociatedDomains) {
+      console.error("::error::The active ORZELL App Store profile lacks the Associated Domains entitlement.");
+      throw new Error("Associated Domains profile required.");
+    }
+    console.log("Active distribution profile includes Associated Domains.");
+    return;
+  }
 
   // Recover only the explicitly approved encrypted backup, pinned by artifact ID and digest.
   console.log("Retrieving the pinned encrypted signing backup.");
