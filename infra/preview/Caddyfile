@@ -8,6 +8,24 @@
     Referrer-Policy no-referrer
     Permissions-Policy "camera=(self), microphone=()"
   }
+  @appleServiceLink {
+    host preview.13-51-112-228.sslip.io
+    path /.well-known/apple-app-site-association
+  }
+  handle @appleServiceLink {
+    header Content-Type application/json
+    header Cache-Control "no-store"
+    respond `{"applinks":{"details":[{"appIDs":["CDL78S6U9A.com.orzell.app"],"components":[{"/":"/discover/service"}]}]}}` 200
+  }
+  @androidServiceLink {
+    host preview.13-51-112-228.sslip.io
+    path /.well-known/assetlinks.json
+  }
+  handle @androidServiceLink {
+    header Content-Type application/json
+    header Cache-Control "no-store"
+    respond "[]" 200
+  }
   handle_path /api/* {
     reverse_proxy api:3001
   }
