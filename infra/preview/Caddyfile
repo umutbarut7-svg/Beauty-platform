@@ -26,6 +26,13 @@
     header Cache-Control "no-store"
     respond "[]" 200
   }
+  @publicServicePages {
+    host preview.13-51-112-228.sslip.io
+    path /discover/service /book/service /_next/static/* /orzell-original-reference.jpg
+  }
+  handle @publicServicePages {
+    reverse_proxy admin:3000
+  }
   handle_path /api/* {
     reverse_proxy api:3001
   }
