@@ -352,7 +352,17 @@ print(json.dumps({"hasAssociatedDomains":bool(p["Entitlements"].get("com.apple.d
   aes.fill(0);
   material.fill(0);
 }
-main().catch(() => {
+main().catch((error) => {
+  const known = [
+    "Expected one active App Store profile.",
+    "Bundle mismatch.",
+    "Profile certificate must match original CSR.",
+    "Embedded profile certificate mismatch.",
+    "Invalid profile UUID.",
+    "Associated Domains profile required.",
+  ];
+  if (known.includes(error.message) || /^Apple read failed: HTTP [1-5][0-9]{2}$/.test(error.message))
+    console.error("::error::" + error.message);
   console.error(
     "::error::Signing preparation failed. Private material was not logged.",
   );

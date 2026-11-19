@@ -1,4 +1,4 @@
-# Internal TestFlight release for the service pages deployed in run 44529308969.
+# Internal TestFlight release for preview run 44529308969. Report the Apple profile check outcome.
 name: ORZELL signed iOS TestFlight upload
 
 on:
