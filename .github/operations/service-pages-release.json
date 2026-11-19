@@ -1,0 +1,16 @@
+{
+  "artifact": {
+    "id": 14531555495,
+    "run": 44525637972,
+    "head": "90d44a4ac3b328df4c4f1745cb4e804995ec05c9",
+    "sha256": "fede1e5f4801e95c767d5ebedc08fa257fe33ca6f68ffd439f8a6bdead66e3b5",
+    "bytes": 374015153
+  },
+  "manifest": {
+    "source": "eab66cca00ca47e9f1fd035208068d1922ba8212",
+    "api": "sha256:1df86665169910d387bb681b45af2832bcee1cbb447a418f0069eb3794fa7151",
+    "admin": "sha256:fa7b45cb1634cdce6b82cc799f9b29e2e716515c3245d2ae3443aabbf92731c2",
+    "archiveSha256": "02ab7d97fe7c84190a12ca09274f0b4d02294a979e837d612562b54de53a53ad",
+    "archiveBytes": 374014562
+  }
+}
