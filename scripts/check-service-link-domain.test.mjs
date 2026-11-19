@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkServiceLinkDomain } from "./check-service-link-domain.mjs";
+import {
+  checkAppleServiceLinkDomain,
+  checkServiceLinkDomain,
+} from "./check-service-link-domain.mjs";
 
 const env = {
   ORZELL_PUBLIC_ORIGIN: "https://share.example.test",
@@ -53,4 +56,18 @@ test("rejects unrelated paths, exclusions, mismatched certificates and redirects
     { status: 302 },
   ])
     await assert.rejects(checkServiceLinkDomain(env, fixture(options)));
+});
+
+test("iOS release checks only its own declaration", async () => {
+  const ios = {
+    ORZELL_PUBLIC_ORIGIN: env.ORZELL_PUBLIC_ORIGIN,
+    ORZELL_IOS_APPLICATION_IDENTIFIER: env.ORZELL_IOS_APPLICATION_IDENTIFIER,
+  };
+  await checkAppleServiceLinkDomain(ios, (url, options) => {
+    assert.equal(url.pathname, "/.well-known/apple-app-site-association");
+    return fixture()(url, options);
+  });
+  await assert.rejects(
+    checkAppleServiceLinkDomain(ios, fixture({ exclude: true })),
+  );
 });
