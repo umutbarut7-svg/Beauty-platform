@@ -65,6 +65,7 @@ beforeAll(async () => {
       name: "Balayage",
       slug: "balayage",
       price: "1500.50",
+      currency: "Try",
       durationMinutes: 90,
     },
   });
