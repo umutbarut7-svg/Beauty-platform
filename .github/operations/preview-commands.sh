@@ -31,13 +31,28 @@ adapt=docker+['caddy','adapt','--adapter','caddyfile','--config','/dev/stdin']
 prior=json.loads(run(adapt,original))
 desired=json.loads(run(adapt,candidate))
 active=json.loads(run(docker+['wget','-qO-','http://127.0.0.1:2019/config/']))
-if active!=prior and active!=desired: raise SystemExit('Live configuration differs; stopped')
-reload=docker+['caddy','reload','--adapter','caddyfile','--config','/dev/stdin']
+def overlay(old,new,current):
+    if old==new: return current
+    if current==old or current==new: return new
+    if isinstance(old,dict) and isinstance(new,dict) and isinstance(current,dict) and old.keys()<=new.keys():
+        merged=dict(current)
+        for key,value in new.items():
+            if key not in old:
+                if key in current and current[key]!=value: raise ValueError('Conflicting live setting')
+                merged[key]=value
+            elif old[key]!=value:
+                merged[key]=overlay(old[key],value,current[key])
+        return merged
+    if isinstance(old,list) and isinstance(new,list) and isinstance(current,list) and len(old)==len(new)==len(current):
+        return [overlay(a,b,c) for a,b,c in zip(old,new,current)]
+    raise ValueError('Conflicting live route')
+desired=overlay(prior,desired,active)
+reload=docker+['caddy','reload','--config','/dev/stdin']
 host='preview.13-51-112-228.sslip.io'
 def probe(path):
     return run(['curl','-fsS','--max-time','8','--resolve',host+':443:127.0.0.1','https://'+host+path])
 try:
-    if active!=desired: run(reload,candidate)
+    if active!=desired: run(reload,json.dumps(desired))
     start=str(int(time.time()) )
     probe('/api/health/ready')
     doc=json.loads(probe('/.well-known/apple-app-site-association'))
@@ -52,6 +67,6 @@ try:
     assert events and all('request' not in e and 'resp_headers' not in e for e in events)
     print('Apple route diagnostic active; self-test status:',events[-1]['status'],'events:',len(events))
 except BaseException:
-    if active!=desired: run(reload,original)
+    if active!=desired: run(reload,json.dumps(active))
     raise
 PY
