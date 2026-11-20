@@ -106,7 +106,7 @@ def install():
                     raise RuntimeError('Trusted TLS or Apple association did not become ready')
                 time.sleep(3)
         page, status = probe(HOST, SERVICE)
-        if not status.startswith('200 text/html') or 'Saç kesimi' not in page or 'Restart Hair Design' not in page:
+        if not status.startswith('200 text/html') or 'Saç kesimi' not in page or 'restart hair design' not in page.casefold():
             raise RuntimeError('Shared service failed at links hostname')
         if not probe(HOST, '/login')[1].startswith('404 ') or not probe(PREVIEW, '/api/health/ready')[1].startswith('200 '):
             raise RuntimeError('Gateway routing check failed')
