@@ -5,7 +5,7 @@ import copy,fcntl,json,pathlib,subprocess,time
 from urllib.request import urlopen
 from urllib.error import HTTPError
 primary='preview.13-51-112-228.sslip.io'
-alias='admin.13-51-112-228.sslip.io'
+alias='13-51-112-228.local-ip.sh'
 path='/.well-known/apple-app-site-association'
 docker=['docker','exec','-i','beauty-preview-gateway-1']
 def run(cmd,data=None):
@@ -30,11 +30,11 @@ assert doc=={'applinks':{'details':[{'appIDs':['CDL78S6U9A.com.orzell.app'],'com
 candidate=copy.deepcopy(before)
 servers=candidate['apps']['http']['servers']
 server,=[s for s in servers.values() if primary in s.get('logs',{}).get('logger_names',{})]
-assert alias in json.dumps(server['routes']), 'Existing admin hostname differs'
+assert alias not in json.dumps(before)
 def respond(status,body):
     return {'handler':'static_response','status_code':status,'headers':{'Content-Type':['application/json']},'body':body}
 routes=[{'match':[{'path':[path]}],'handle':[respond(200,json.dumps(doc,separators=(',',':')))],'terminal':True},{'handle':[respond(404,'{}')],'terminal':True}]
-server['routes'].insert(0,{'match':[{'host':[alias],'path':[path]}],'handle':[respond(200,json.dumps(doc,separators=(',',':')))],'terminal':True})
+server['routes'].insert(0,{'match':[{'host':[alias]}],'handle':[{'handler':'subroute','routes':routes}],'terminal':True})
 try:
     reload(candidate)
     for _ in range(35):
@@ -44,16 +44,17 @@ try:
         time.sleep(3)
     else: raise RuntimeError('Alias TLS was not ready; could not compare Apple responses')
     print('Secondary host trusted TLS and identical AASA verified',flush=True)
-    import shutil,signal
-    # Only count inbound connection attempts; no payloads, addresses or capture files are retained.
-    capture=subprocess.Popen(['tcpdump','-i','any','-nn','-l','-s','80','tcp dst port 443 and tcp[tcpflags] & (tcp-syn|tcp-ack) == tcp-syn'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+    import signal
+    nic=json.loads(run(['ip','-json','route','get','1.1.1.1']))[0]['dev']
+    cap=subprocess.Popen(['tcpdump','-i',nic,'-Q','in','-nn','-l','-s','80','tcp dst port 443 and tcp[tcpflags] & (tcp-syn|tcp-ack) == tcp-syn'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
     try:
         time.sleep(1)
+        if cap.poll() is not None: raise RuntimeError('Could not observe interface')
         apple(alias)
     finally:
-        capture.send_signal(signal.SIGINT)
-        lines,_=capture.communicate(timeout=6)
-        print('Inbound SYN observations during Apple comparison:',len(lines.splitlines()),flush=True)
+        cap.send_signal(signal.SIGINT)
+        output,_=cap.communicate(timeout=5)
+        print('External-interface inbound HTTPS SYN packets during CDN call:',sum('Flags [S]' in l for l in output.splitlines()),flush=True)
     apple(primary)
 finally:
     current=active()
