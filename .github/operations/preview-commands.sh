@@ -45,6 +45,12 @@ def overlay(old,new,current):
         return merged
     if isinstance(old,list) and isinstance(new,list) and isinstance(current,list) and len(old)==len(new)==len(current):
         return [overlay(a,b,c) for a,b,c in zip(old,new,current)]
+    if isinstance(old,list) and isinstance(new,list) and isinstance(current,list):
+        extras=[r for r in new if r not in old]
+        if len(extras)==1 and [r for r in new if r!=extras[0]]==old:
+            rule=extras[0]
+            if 'skip_log' in json.dumps(rule) and '/.well-known/apple-app-site-association' in json.dumps(rule):
+                return [rule]+[r for r in current if r!=rule]
     raise ValueError('Conflicting live route')
 desired=overlay(prior,desired,active)
 reload=docker+['caddy','reload','--config','/dev/stdin']
