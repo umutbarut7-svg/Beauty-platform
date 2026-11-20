@@ -23,7 +23,7 @@ ORIGINAL = {
 }
 ENV = {
     'api': {'ORZELL_EVERYWHERE_ENABLED': 'true', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': 'false'},
-    'admin': {'ORZELL_PUBLIC_ORIGIN': HOST, 'ORZELL_PUBLIC_API_ORIGIN': HOST,
+    'admin': {'ORZELL_PUBLIC_ORIGIN': 'https://links.orzell.app', 'ORZELL_PUBLIC_API_ORIGIN': HOST,
               'ORZELL_PUBLIC_API_PATH_PREFIX': '/api', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': 'false'},
 }
 require = ops.require
