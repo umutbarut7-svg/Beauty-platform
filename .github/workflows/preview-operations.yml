@@ -75,3 +75,39 @@ jobs:
           if result['Status'] != 'Success':
               raise SystemExit(1)
           PY
+
+      - name: Inspect preview HTTPS network rules
+        if: ${{ hashFiles('.github/operations/preview-request.json') != '' }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re, subprocess
+          request = json.loads(pathlib.Path('.github/operations/preview-request.json').read_text())
+          if request['request_id'] != 'inspect-preview-https-rules-20261120':
+              raise SystemExit()
+          def read(operation, *args):
+              result = subprocess.run(['aws', 'ec2', operation, *args, '--output', 'json'], capture_output=True, text=True, timeout=35)
+              if result.returncode:
+                  match = re.search(r'An error occurred \(([^)]+)\)', result.stderr)
+                  print(operation, match.group(1) if match else 'unavailable')
+                  return {}
+              return json.loads(result.stdout)
+          result = read('describe-instances', '--instance-ids', 'i-09fe7fdb5f10d63b6')
+          if not result.get('Reservations'):
+              raise SystemExit('Instance network metadata unavailable')
+          instance = result['Reservations'][0]['Instances'][0]
+          print('expected_public_ip', instance.get('PublicIpAddress') == '13.51.112.228')
+          groups = read('describe-security-groups', '--group-ids', *[g['GroupId'] for g in instance['SecurityGroups']])
+          if 'SecurityGroups' in groups:
+              rules = [r for g in groups['SecurityGroups'] for r in g['IpPermissions']]
+              print('public_ipv4_https_allowed', any((r['IpProtocol'] == '-1' or (r['IpProtocol'] == 'tcp' and r['FromPort'] <= 443 <= r['ToPort'])) and any(c['CidrIp'] == '0.0.0.0/0' for c in r.get('IpRanges',[])) for r in rules))
+          acls = read('describe-network-acls', '--filters', 'Name=association.subnet-id,Values='+instance['SubnetId'])
+          for acl in acls.get('NetworkAcls', []):
+              for e in sorted(acl['Entries'], key=lambda e:e['RuleNumber']):
+                  if 'CidrBlock' in e and e['Protocol'] in ['-1','6']:
+                      print('acl', 'return' if e['Egress'] else 'incoming', e['RuleNumber'], e['RuleAction'], 'all_ipv4' if e['CidrBlock']=='0.0.0.0/0' else 'limited_ipv4', e.get('PortRange', 'all_ports'))
+          ids = [instance['VpcId'], instance['SubnetId']] + [n['NetworkInterfaceId'] for n in instance['NetworkInterfaces']]
+          flows = read('describe-flow-logs','--filter','Name=resource-id,Values='+','.join(ids))
+          if 'FlowLogs' in flows:
+              print('flow_log_states', [f.get('FlowLogStatus') for f in flows['FlowLogs']])
+          PY
