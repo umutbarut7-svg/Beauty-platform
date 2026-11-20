@@ -25,7 +25,7 @@ jobs:
       EXPO_NO_TELEMETRY: "1"
       EXPO_PUBLIC_ORZELL_EVERYWHERE_ENABLED: "true"
       EXPO_PUBLIC_ORZELL_NATIVE_SERVICE_LINKS_ENABLED: "true"
-      EXPO_PUBLIC_ORZELL_WEB_ORIGIN: https://preview.13-51-112-228.sslip.io
+      EXPO_PUBLIC_ORZELL_WEB_ORIGIN: https://links.orzell.app
       EXPO_PUBLIC_API_URL: https://preview.13-51-112-228.sslip.io/api
     steps:
       - name: Check out reviewed application
