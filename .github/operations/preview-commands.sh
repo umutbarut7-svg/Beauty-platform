@@ -52,7 +52,27 @@ def overlay(old,new,current):
             if 'skip_log' in json.dumps(rule) and '/.well-known/apple-app-site-association' in json.dumps(rule):
                 return [rule]+[r for r in current if r!=rule]
     raise ValueError('Conflicting live route')
+import copy
+host='preview.13-51-112-228.sslip.io'
+def visit(obj):
+    if isinstance(obj,dict):
+        yield obj
+        for value in obj.values(): yield from visit(value)
+    elif isinstance(obj,list):
+        for value in obj: yield from visit(value)
+servers=desired['apps']['http']['servers']
+server_id,= [key for key,srv in servers.items() if host in srv.get('logs',{}).get('logger_names',{})]
+srv=servers[server_id]
+matcher={'not':[{'path':['/.well-known/apple-app-site-association']}]}
+skip,=[copy.deepcopy(rule) for rule in visit(srv['routes']) if rule.get('match')==[matcher]]
+skip['match'][0]['host']=[host]
+# Transfer only adapter-generated logger settings. Use the actual live routes below.
+srv['routes']=prior['apps']['http']['servers'][server_id]['routes']
 desired=overlay(prior,desired,active)
+live_routes=desired['apps']['http']['servers'][server_id]['routes']
+if skip not in live_routes:
+    desired=copy.deepcopy(desired)
+    desired['apps']['http']['servers'][server_id]['routes'].insert(0,skip)
 reload=docker+['caddy','reload','--config','/dev/stdin']
 host='preview.13-51-112-228.sslip.io'
 def probe(path):
