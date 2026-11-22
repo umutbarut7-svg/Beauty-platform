@@ -90,10 +90,14 @@ export class AppointmentsService {
     const actor = await this.actor(user, businessId);
     if (actor.membership?.role === "STAFF")
       throw new ForbiddenException("Staff cannot create customer appointments");
-    const customerId = actor.manages ? dto.customerId : actor.customer?.id;
+    const customerId = dto.bookForSelf
+      ? actor.customer?.id
+      : actor.manages
+        ? dto.customerId
+        : actor.customer?.id;
     if (!customerId) throw new BadRequestException("A customer is required");
     if (
-      !actor.manages &&
+      (!actor.manages || dto.bookForSelf) &&
       dto.customerId &&
       dto.customerId !== actor.customer?.id
     )
@@ -113,7 +117,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:${dto.staffMemberId}`,
           );
           const business = await tx.business.findUnique({
@@ -292,7 +296,10 @@ export class AppointmentsService {
               endsAt: new Date(slot.endsAt),
               status: "PENDING",
               customerNote: dto.customerNote,
-              internalNote: actor.manages ? dto.internalNote : undefined,
+              internalNote:
+                actor.manages && !dto.bookForSelf
+                  ? dto.internalNote
+                  : undefined,
               price: assignment.customPrice ?? assignment.service.price,
               currency: assignment.service.currency,
             },
@@ -382,7 +389,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:appointment:${appointmentId}`,
           );
           const lockIds = [
@@ -393,7 +400,7 @@ export class AppointmentsService {
             .sort();
           for (const id of new Set(lockIds))
             await tx.$queryRawUnsafe(
-              "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "SELECT pg_advisory_xact_lock(hashtext($1))::text",
               `${businessId}:${id}`,
             );
           const current = await tx.appointment.findFirst({
@@ -771,7 +778,7 @@ export class AppointmentsService {
       return await this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
-            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            "SELECT pg_advisory_xact_lock(hashtext($1))::text",
             `${businessId}:appointment:${appointmentId}`,
           );
           const current = await tx.appointment.findFirst({

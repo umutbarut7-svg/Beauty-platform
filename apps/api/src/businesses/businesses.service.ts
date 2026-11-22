@@ -171,7 +171,6 @@ export class BusinessesService {
         businessId,
         locations: {
           create: [...new Set(locationIds)].map((locationId) => ({
-            businessId,
             locationId,
           })),
         },
