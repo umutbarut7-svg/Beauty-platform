@@ -71,7 +71,7 @@ class OwnerSessionTests(unittest.TestCase):
         params=START.owner_parameters('https://example.test/encrypted?signature=generated', 'a'*32)
         self.assertEqual(list(params),['command'])
         command=params['command'][0]
-        self.assertIn('timeout -s TERM 900 env -i',command)
+        self.assertIn('timeout --foreground -s TERM 900 env -i',command)
         self.assertIn('667576',command)
         self.assertIn('/run/orzell-owner-session.',command)
         self.assertNotIn('kms decrypt',command)
