@@ -27,6 +27,8 @@ PR109'un sonraki belge değişiklikleri aynı testlerin tekrarı gerekçesi değ
 Telefonla giriş, önceki randevu/onay/iptal ve kabul edilmiş kayıt geri açma
 kontrolleri korunur. TestFlight 1151'in kurulumu daha önce teyit edilmiştir.
 
+**25 Kasım · Masaüstü web.** Chrome’da Restart Hair Design’ın Saç kesimi sayfasında 2.000 TL, 30 dakika ve uzman Umutbarut görüldü. QR denetimi açıldı. Yayındaki kod çözüldüğünde iPhone’da kabul edilen hizmet URL’siyle birebir eşleşti. Web randevusu bu sayfada kapalı. Android alan adı dosyası GET ve HEAD ile yönlendirmesiz HTTP 200 döndürüyor. İçeriği geçici olarak boş liste. Dağıtım imzası eşleştirmesi ve Android cihaz testi son aşamaya bırakıldı. [Yayın ve doğrulama](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/45686753946)
+
 | İş                         | Hazır olan                                                                                               | Kapanış için gerekli gerçek sonuç                                                                                               |
 | -------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Gerçek kurtarma | 12 Kasım yedeğiyle izole prova, karantina, bütünlük kontrolü ve bağlı başarı makbuzu tamamlandı | Üretimi yeniden açmak için yedek sonrasındaki silme/izin kayıtları, depolama ve erişim anahtarlarının bağımsız incelemesi açık |
