@@ -245,5 +245,8 @@ export type { OrzellShareTarget } from "./everywhere-link.js";
 
 export { formatMinorUnits } from "./money.js";
 
-export { parsePublishedShareService } from "./published-share-service.js";
+export {
+  parsePublishedShareService,
+  sharedBookingEnabled,
+} from "./published-share-service.js";
 export type { PublishedShareService } from "./published-share-service.js";
