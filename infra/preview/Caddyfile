@@ -64,6 +64,15 @@ links.orzell.app {
     header Content-Type application/json
     respond `{"applinks":{"details":[{"appIDs":["CDL78S6U9A.com.orzell.app"],"components":[{"/":"/discover/service"}]}]}}` 200
   }
+  @androidAssociation {
+    method GET HEAD
+    path /.well-known/assetlinks.json
+  }
+  handle @androidAssociation {
+    header Content-Type application/json
+    header Cache-Control "no-store"
+    respond "[]" 200
+  }
   @service {
     method GET HEAD
     path /discover/service /book/service /_next/static/* /orzell-original-reference.jpg
