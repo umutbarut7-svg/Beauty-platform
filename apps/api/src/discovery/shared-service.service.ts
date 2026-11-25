@@ -55,7 +55,28 @@ export class SharedServiceService {
             name: true,
             timezone: true,
             locations: {
-              where: { businessId: target.businessId, isActive: true },
+              where: {
+                businessId: target.businessId,
+                isActive: true,
+                ...(process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED ===
+                `${target.businessId}/${target.serviceId}`
+                  ? {
+                      staff: {
+                        some: {
+                          staff: {
+                            ...staffWhere,
+                            services: {
+                              some: {
+                                serviceId: target.serviceId,
+                                isActive: true,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    }
+                  : {}),
+              },
               select: { id: true, name: true },
               orderBy: { id: "asc" },
             },

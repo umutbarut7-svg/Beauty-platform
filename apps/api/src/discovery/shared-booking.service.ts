@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/consistent-type-imports */
+import { sharedBookingEnabled } from "@beauty-platform/types";
 import { createHash } from "node:crypto";
 import {
   ConflictException,
@@ -103,10 +104,13 @@ export class SharedBookingService {
     private readonly appointments: AppointmentsService,
   ) {}
 
-  private enabled() {
+  private enabled(target: Pick<OrzellShareTarget, "businessId" | "serviceId">) {
     if (
       process.env.ORZELL_EVERYWHERE_ENABLED !== "true" ||
-      process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED !== "true"
+      !sharedBookingEnabled(
+        process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED,
+        target,
+      )
     )
       throw new NotFoundException("Shared booking is unavailable");
   }
@@ -115,7 +119,7 @@ export class SharedBookingService {
       throw new NotFoundException("Shared booking is unavailable");
   }
   async quote(query: SharedAvailabilityQueryDto) {
-    this.enabled();
+    this.enabled(query);
     const published = await this.published.resolve(query);
     this.atLocation(published, query.locationId);
     const slots = await this.availability.calculate({
@@ -128,7 +132,7 @@ export class SharedBookingService {
     return { published, slots };
   }
   async book(user: AuthenticatedUser, input: SharedCreateBookingDto) {
-    this.enabled();
+    this.enabled(input);
     const scope = {
       businessId: input.businessId,
       actorId: user.id,
@@ -161,7 +165,7 @@ export class SharedBookingService {
         },
         {
           prepare: async (tx) => {
-            this.enabled();
+            this.enabled(input);
             await tx.$queryRawUnsafe(
               "SELECT pg_advisory_xact_lock(hashtext($1))::text",
               `shared-booking:${input.businessId}:${user.id}:${scope.keyHash}`,
@@ -232,7 +236,7 @@ export class SharedBookingService {
     }
   }
   async mine(user: AuthenticatedUser, target: OrzellShareTarget) {
-    this.enabled();
+    this.enabled(target);
     const rows: BookingRow[] = await this.db.appointment.findMany({
       where: {
         businessId: target.businessId,
@@ -251,12 +255,12 @@ export class SharedBookingService {
     businessId: string,
     appointmentId: string,
   ) {
-    this.enabled();
     const own = await this.db.appointment.findFirst({
       where: { id: appointmentId, businessId, customer: { userId: user.id } },
-      select: { id: true },
+      select: { id: true, serviceId: true },
     });
     if (!own) throw new NotFoundException("Booking is unavailable");
+    this.enabled({ businessId, serviceId: own.serviceId });
     return receipt(
       await this.appointments.cancel(user, businessId, appointmentId, {}),
     );
