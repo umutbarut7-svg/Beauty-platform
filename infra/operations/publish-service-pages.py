@@ -14,45 +14,9 @@ from html.parser import HTMLParser
 import preview_admin_ops as ops
 
 ROOT = ops.ROOT
-WORK = ROOT / 'service-pages-20261119'
+WORK = ROOT / 'scoped-service-booking-1191'
 HOST = 'https://preview.13-51-112-228.sslip.io'
-CONFIG = '/etc/caddy/Caddyfile'
-ORIGINAL = {
-    'api': 'sha256:f13b300b0a0a236553b174b6453fc1d8ec3c06b1c912074401e625371464c99e',
-    'admin': 'sha256:2a8bed2e62811748b09c9bf88e46a16bdd76ad56e0cc13f1463a419ed38b9ab4',
-}
-ENV = {
-    'api': {'ORZELL_EVERYWHERE_ENABLED': 'true', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': 'false'},
-    'admin': {'ORZELL_PUBLIC_ORIGIN': 'https://links.orzell.app', 'ORZELL_PUBLIC_API_ORIGIN': HOST,
-              'ORZELL_PUBLIC_API_PATH_PREFIX': '/api', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': 'false'},
-}
 require = ops.require
-
-
-def http(path):
-    try:
-        response = urllib.request.urlopen(HOST + path, timeout=10)
-    except urllib.error.HTTPError as error:
-        response = error
-    with response:
-        body = response.read(2_000_001)
-        require(len(body) <= 2_000_000, 'HTTP size bound exceeded')
-        return response.status, response.headers.get_content_type(), body
-
-
-def catalog_targets():
-    status, _, body = http('/api/discovery/services')
-    require(status == 200, 'Public catalog unavailable')
-    targets = []
-    for business in json.loads(body)['items']:
-        for service in business['services']:
-            ids = [business['businessId'], service['id']]
-            if all(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', key) for key in ids):
-                targets.append(urllib.parse.urlencode(dict(zip(['businessId','serviceId'], ids))))
-                if len(targets) == 2:
-                    return targets
-    require(bool(targets), 'No published catalog service available for acceptance')
-    return targets
 
 
 class RenderedText(HTMLParser):
@@ -82,41 +46,6 @@ class RenderedText(HTMLParser):
             self.heading.append(data)
 
 
-def inspect_pages(query):
-    api = '/api/discovery/shared-service?'
-    status, _, raw = http(api + query)
-    require(status == 200, 'Published service lookup failed')
-    shared = json.loads(raw)
-    identity = urllib.parse.parse_qs(query)
-    require(shared['business']['id'] == identity['businessId'][0] and
-            shared['service']['id'] == identity['serviceId'][0], 'Returned service identity differs')
-    for path in ['/discover/service?', '/book/service?']:
-        status, mime, raw = http(path + query)
-        page = raw.decode()
-        rendered = RenderedText()
-        rendered.feed(page)
-        visible = ' '.join(''.join(rendered.text).split())
-        service = shared['service']
-        detail = service['price'] + ' ' + service['currency'] + ' · ' + str(service['durationMinutes']) + ' dakika'
-        require((status, mime) == (200, 'text/html') and
-                ''.join(rendered.heading).strip() == service['name'].strip() and
-                shared['business']['name'] in visible and detail in visible and
-                'web randevusu şu anda kullanılamıyor' in visible,
-                'Browser service detail acceptance failed')
-        assets = re.findall(r'(?:src|href)="(/_next/static/[^"]+\.css[^"]*)"', page)
-        require(bool(assets) and http(assets[0])[:2] == (200, 'text/css'), 'Public stylesheet unavailable')
-    require(http(api + query + '&resultId=unpublished-result')[0] == 404, 'Result publication gate differs')
-
-
-def acceptance(queries, home):
-    for query in queries:
-        inspect_pages(query)
-    require(http('/')[2] == home and http('/.well-known/apple-app-site-association')[1] == 'application/json',
-            'Preview home or Apple declaration changed')
-    ops.http_candidate()
-    ops.ready()
-
-
 def load_images(release, url):
     uri = urllib.parse.urlsplit(url)
     require(uri.scheme == 'https' and uri.hostname and uri.hostname.endswith('.blob.core.windows.net')
@@ -141,124 +70,103 @@ def load_images(release, url):
             shutil.copyfileobj(source, target, 4*1024**2)
     require(ops.digest(image) == manifest['archiveSha256'], 'Image archive digest differs')
     ops.run(['docker','load','-i',str(image)], timeout=360)
-    for service in ORIGINAL:
+    for service in PREVIOUS:
         info = json.loads(ops.run(['docker','image','inspect', manifest[service]]))[0]
         require(info['Id'] == manifest[service] and info['Config']['User'] == 'node' and
                 info['Config']['Labels']['org.opencontainers.image.revision'] == manifest['source'],
                 'Loaded image provenance differs')
 
 
-def candidate_config(before, service, manifest):
-    result = copy.deepcopy(before)
-    spec = result['services'][service]
-    if service == 'gateway':
-        matches = [v for v in spec['volumes'] if v['target'] == CONFIG]
-        require(len(matches) == 1 and matches[0]['type'] == 'bind' and matches[0].get('read_only') and
-                matches[0]['source'] == str(ROOT/'preview-service-domain-20261119'/'Caddyfile'),
-                'Existing gateway route mount differs')
-        matches[0]['source'] = str(WORK/'Caddyfile')
-        entry = {'volumes': [matches[0]]}
-    else:
-        spec['image'] = manifest[service]
-        spec.setdefault('environment', {}).update(ENV[service])
-        entry = {'image': manifest[service], 'environment': ENV[service]}
-    return result, {'services': {service: entry}}
-
-
 def up(command, service):
     ops.run(command + ['up','-d','--no-deps','--no-build','--pull','never',service], timeout=150)
 
 
-def publish(release, url, caddy):
-    manifest = release['manifest']
-    before = ops.snapshot()
+PILOT_BUSINESS = 'cmvjkv2uz001tqa0jc72r3rl4'
+PILOT_SERVICE = 'cmw1wwm6u0009nx0jc6v3k4cr'
+ORIGIN = 'https://links.orzell.app'
+PILOT = PILOT_BUSINESS + '/' + PILOT_SERVICE
+PREVIOUS = {
+    'api': 'sha256:5e98b54f3371ef2605675c09aebf2b8ed0d9e105d48dc8dd4c8cc130bb3b58f9',
+    'admin': 'sha256:950b2f795d5d482276f9927ba017a580ccc72179b30f8f80c94df2c1c4685d4c',
+}
+
+def candidate_config(before, service, manifest):
+    require(service in PREVIOUS, 'Unexpected service')
+    result = copy.deepcopy(before)
+    cfg = result['services'][service]
+    require(cfg['environment'].get('ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED') == 'false', 'Unexpected booking state')
+    env = {'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': PILOT}
+    if service == 'api':
+        origins = cfg['environment']['CORS_ORIGINS'].split(',')
+        env['CORS_ORIGINS'] = ','.join(dict.fromkeys(origins + [ORIGIN]))
+    cfg['environment'].update(env)
+    cfg['image'] = manifest[service]
+    return result, {'services': {service: {'image': manifest[service], 'environment': env}}}
+
+def check_pilot():
+    query = urllib.parse.urlencode({'businessId': PILOT_BUSINESS, 'serviceId': PILOT_SERVICE})
+    for path in ('/discover/service?', '/book/service?'):
+        with urllib.request.urlopen(ORIGIN + path + query, timeout=10) as response:
+            parsed = RenderedText()
+            parsed.feed(response.read(2000000).decode())
+            visible = ' '.join(parsed.text)
+            require(response.status == 200 and 'Randevu talebi' in visible and 'Saç kesimi' in visible, 'Pilot booking form missing')
+    req = urllib.request.Request(HOST + '/api/auth/login', method='OPTIONS', headers={
+        'Origin': ORIGIN, 'Access-Control-Request-Method':'POST',
+        'Access-Control-Request-Headers':'content-type,authorization'})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        require(response.headers.get('Access-Control-Allow-Origin') == ORIGIN, 'Pilot CORS differs')
     ops.ready()
-    queries = catalog_targets()
-    status, mime, home = http('/')
-    require((status, mime) == (200, 'text/html') and b'ORZELL' in home, 'Preview home unavailable')
-    if WORK.exists() and (WORK/'complete').is_file():
-        require(all(before[s]['Image'] == manifest[s] for s in ORIGINAL), 'Installed images drifted')
-        acceptance(queries, home)
+
+def publish(release, url, caddy):
+    before = ops.snapshot()
+    manifest = release['manifest']
+    if (WORK/'complete').is_file():
+        require(all(before[k]['Image']==manifest[k] for k in PREVIOUS),'Pilot runtime drift')
+        check_pilot()
         print('COMPLETED: public service pages verified')
         return
-    require(not WORK.exists(), 'Previous incomplete release requires inspection')
-    require(all(before[s]['Image'] == image for s, image in ORIGINAL.items()), 'Prior release identity differs')
-    require(shutil.disk_usage(ROOT).free > 3_000_000_000, 'Insufficient disk for reversible preparation')
-    original, commands, configs = {}, {}, {}
-    for service in ['api','admin','gateway']:
-        old = before[service]
-        command = ops.compose(old)
-        baseline = json.loads(ops.run(command + ['config','--format','json']))
-        image = baseline['services'][service]['image']
-        require(json.loads(ops.run(['docker','image','inspect',image]))[0]['Id'] == old['Image'],
-                'Compose baseline image drift for ' + service)
-        original[service] = command
-        configs[service] = baseline
-    gateway = before['gateway']['Id']
-    prior = ops.run(['docker','exec',gateway,'cat',CONFIG])
-    marker = '  handle_path /api/* {'
-    first = caddy.index('  @publicServicePages {')
-    last = caddy.index(marker, first)
-    require(prior.startswith('{$PREVIEW_HOST} {') and '@appleServiceLink' in prior and
-            marker in prior.split('{$ADMIN_HOST}',1)[0] and '@publicServicePages' not in prior,
-            'Current route layout differs')
-    new_caddy = prior.replace(marker, caddy[first:last] + marker, 1)
-    WORK.mkdir(mode=0o755)
-    applied = []
+    require(not WORK.exists() and all(before[k]['Image']==PREVIOUS[k] for k in PREVIOUS),'Prior service images differ')
+    require(shutil.disk_usage(ROOT).free > 3_000_000_000, 'Insufficient reversible image storage')
+    ops.ready()
+    originals, candidates, applied = {}, {}, []
+    WORK.mkdir(mode=0o700)
     try:
-        (WORK/'Caddyfile').write_text(new_caddy)
-        (WORK/'Caddyfile').chmod(0o644)
-        for service, baseline in configs.items():
-            expected, overlay = candidate_config(baseline, service, manifest)
-            path = WORK/(service+'.json')
+        for svc in PREVIOUS:
+            original = ops.compose(before[svc])
+            baseline = json.loads(ops.run(original+['config','--format','json']))
+            expected, overlay = candidate_config(baseline, svc, manifest)
+            path = WORK/(svc+'.json')
             path.write_text(json.dumps(overlay))
-            commands[service] = original[service] + ['-f',str(path)]
-            actual = json.loads(ops.run(commands[service] + ['config','--format','json']))
-            require(actual == expected, 'Unreviewed Compose change for ' + service)
-        load_images(release, url)
-        ops.verify_others(before, ops.snapshot(), set())
-        for service in ['api','admin','gateway']:
-            applied.append(service)
-            up(commands[service], service)
-            if service == 'api':
-                ops.wait_ready()
-            if service in ORIGINAL:
-                actual = json.loads(ops.run(commands[service] + ['config','--format','json']))
-                ops.verify_runtime(before[service], ops.inspect('beauty-preview-'+service+'-1'),
-                                   actual['services'][service], manifest[service])
-        for attempt in range(8):
+            candidate = original + ['-f',str(path)]
+            require(json.loads(ops.run(candidate+['config','--format','json'])) == expected,'Unexpected Compose delta')
+            originals[svc], candidates[svc] = original, candidate
+        load_images(release,url)
+        for svc in PREVIOUS:
+            applied.append(svc)
+            up(candidates[svc],svc)
+            if svc == 'api': ops.wait_ready()
+            cfg = json.loads(ops.run(candidates[svc]+['config','--format','json']))['services'][svc]
+            ops.verify_runtime(before[svc],ops.inspect('beauty-preview-'+svc+'-1'),cfg,manifest[svc])
+        for attempt in range(12):
             try:
-                acceptance(queries, home)
+                check_pilot()
                 break
             except Exception:
-                if attempt == 7:
-                    raise
+                if attempt==11: raise
                 time.sleep(2)
-        ops.verify_others(before, ops.snapshot(), set(applied))
-        (WORK/'complete').write_text(manifest['source']+'\n')
+        ops.verify_others(before,ops.snapshot(),set(applied))
+        (WORK/'complete').write_text(manifest['source'])
     except Exception as error:
-        reason = str(error) if isinstance(error, ops.Stop) else type(error).__name__
-        print('Stopped at ' + reason, flush=True)
-        for service in reversed(applied):
-            up(original[service], service)
-        if applied:
-            ops.wait_ready()
-            restored = ops.snapshot()
-            require(all(restored[s]['Image'] == before[s]['Image'] and
-                        ops.environment(restored[s]) == ops.environment(before[s]) for s in applied)
-                    and http('/')[2] == home, 'Restore check failed')
-            ops.verify_others(before, restored, set(applied))
-        # Each candidate overlay is unreferenced once the original inputs are active.
-        for file in WORK.iterdir():
-            require(file.name in {'Caddyfile','api.json','admin.json','gateway.json','package.zip','images.tar.gz'}
-                    and file.is_file() and not file.is_symlink(), 'Unexpected temporary file')
-            file.unlink()
+        print('Pilot stopped:', str(error) if isinstance(error,ops.Stop) else type(error).__name__,flush=True)
+        for svc in reversed(applied): up(originals[svc],svc)
+        ops.wait_ready()
+        require(all(ops.inspect('beauty-preview-'+k+'-1')['Image']==PREVIOUS[k] for k in PREVIOUS),'Rollback requires review')
+        for name in ('api.json','admin.json','package.zip','images.tar.gz'): (WORK/name).unlink(missing_ok=True)
         WORK.rmdir()
-        raise ops.Stop('Release stopped; prior preview verified') from None
-    for name in ['package.zip','images.tar.gz']:
-        (WORK/name).unlink()
+        raise
+    for name in ('package.zip','images.tar.gz'): (WORK/name).unlink()
     print('COMPLETED: public service pages verified')
-
 
 def main(release, url, caddy):
     with (ROOT/'saved-matching-release-20261031.lock').open('a') as lock:

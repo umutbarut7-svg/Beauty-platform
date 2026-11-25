@@ -25,23 +25,21 @@ class ReleaseTests(unittest.TestCase):
         self.assertLessEqual(len(dispatch.transport.envelope(dispatch.bundle(), release, 'x'*1500)), 24000)
         compile(dispatch.bundle(), 'reviewed-release', 'exec')
 
-    def test_service_delta_preserves_other_services_and_settings(self):
-        baseline = {'services': {'api': {'image':'old','environment':{'EXISTING':'preserved'}},
-                                 'worker': {'image':'old'}}}
-        original = copy.deepcopy(baseline)
+    def test_pilot_keeps_existing_origins_and_changes_only_selected_service(self):
+        env = {'CORS_ORIGINS': 'https://old.test', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED':'false'}
+        baseline = {'services': {'api': {'environment':env}, 'worker': {'image':'old'}}}
+        prior = copy.deepcopy(baseline)
         candidate, overlay = publish.candidate_config(baseline,'api',{'api':'new'})
-        self.assertEqual(baseline,original)
-        self.assertEqual(candidate['services']['worker'],original['services']['worker'])
-        self.assertEqual(candidate['services']['api']['environment']['EXISTING'],'preserved')
-        self.assertEqual(overlay['services']['api']['environment']['ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED'],'false')
-
-    def test_gateway_mount_only_replaces_reviewed_input(self):
-        baseline = {'services':{'gateway':{'volumes':[{'target':publish.CONFIG,'source':'/other','read_only':True,'type':'bind'}]}}}
+        self.assertEqual(baseline,prior)
+        self.assertEqual(candidate['services']['worker'], prior['services']['worker'])
+        delta = overlay['services']['api']['environment']
+        self.assertEqual(delta['CORS_ORIGINS'], 'https://old.test,https://links.orzell.app')
+        self.assertEqual(delta['ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED'],
+                         'cmvjkv2uz001tqa0jc72r3rl4/cmw1wwm6u0009nx0jc6v3k4cr')
         with self.assertRaises(ops.Stop):
-            publish.candidate_config(baseline,'gateway',{})
-        baseline['services']['gateway']['volumes'][0]['source'] = str(publish.ROOT/'preview-service-domain-20261119'/'Caddyfile')
-        updated, _ = publish.candidate_config(baseline,'gateway',{})
-        self.assertEqual(updated['services']['gateway']['volumes'][0]['source'],str(publish.WORK/'Caddyfile'))
+            publish.candidate_config(baseline,'worker',{'worker':'new'})
+        with self.assertRaises(ops.Stop):
+            publish.candidate_config(candidate,'api',{'api':'new'})
 
     def test_acceptance_reads_visible_text_with_react_markers(self):
         page = publish.RenderedText()
