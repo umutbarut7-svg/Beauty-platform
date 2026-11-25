@@ -1,14 +1,25 @@
 # Aşama 33 — tek kapanış listesi, 12 Kasım 2026
 
-**13 Kasım güncellemesi:** owner IMG_2649/2650 kanıtları bu exact geçici stack'in
-`DELETE_COMPLETE` durumunu ve CloudFormation kaynaklarında silinmeden kalanlar
-filtresinin `[]` sonucunu doğruladı. 7. maddenin bu ortam/11 kayıtlı kaynak için
-temizlik kabulü kapandı; hesap genelindeki veya kayıt dışı kaynaklar hakkında
-iddia değildir. Dünkü kapsül aktarımının gerçek kurtarma makbuzu görülmediği için
+**25 Kasım 2026 · Kurtarma kaydı.** 15 Kasım’da operatör, 12 Kasım tarihli gerçek
+yedeği ağ erişimi kapalı geçici bir veritabanına geri yükledi. Karantina
+öncesi ve sonrası veri bütünlüğü kontrol edildi. Başarı makbuzu
+`70b11a65ec2b01dbe812e98fd15aaf2c` kaydedildi. Geçici veritabanı kaldırıldı.
+v5 ortamı için CloudFormation `DELETE_COMPLETE` ve kalan kaynak listesi `[]`
+olarak görüldü. [Makbuz, süreler ve temizlik kaydı](https://github.com/umutbarut7-svg/Beauty-platform/pull/141)
 
-1. madde açık kalır. Yeni ücretli ortam ve yeni exact host bağları ayrıca
-   hazırlanıp onaylanmalıdır; eski tek ortam onayı genellenmez. Yeni sonuç kayıt yolu
-   yalnız bu kayıp-çıktı sorununu giderir, bir gerçek restore kabulü değildir.
+Yedekten üretimi yeniden açma kararı ayrı bir değerlendirme gerektirir.
+Yedek alındıktan sonra yapılan hesap silme ve izin geri çekme işlemlerinin
+geri yüklenen kayıtlarla karşılaştırılması, ilgili depolama nesnelerinin
+silindiğinin doğrulanması ve eski erişim anahtarlarının geçersiz kılınmasının
+bağımsız incelenmesi açık. İzole provanın sonucu bu işlemler için onay vermez.
+[Depolama ve silme kontrolleri](offline-photo-restore.md) ·
+[Oturum ve erişim anahtarı kontrolleri](isolated-restore-controller-20261112.md)
+
+Hesap silme adayında, izin geri çekilmeden önce ve sonra alınan iki örnek
+yedek için otomatik kontroller geçti. 19 Kasım’daki iPhone testinde ise tek
+fotoğraf için izin geri çekildikten sonra sunucuda silme olayı doğrulandı.
+Bu iki kayıt farklı kapsamları ölçer. [İki geri yükleme testi](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/43065206173) ·
+[iPhone testinin sunucu kaydı](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/44511093150)
 
 Bu liste tamamlanmış işleri yeniden açmaz. Yedi otomatik kontrol grubu,
 `6664e6fd4d2e793a13c011be212ae3d3fce95fa5` uygulama adayı için başarılıdır;
@@ -16,15 +27,19 @@ PR109'un sonraki belge değişiklikleri aynı testlerin tekrarı gerekçesi değ
 Telefonla giriş, önceki randevu/onay/iptal ve kabul edilmiş kayıt geri açma
 kontrolleri korunur. TestFlight 1151'in kurulumu daha önce teyit edilmiştir.
 
+**25 Kasım · Masaüstü web.** Chrome’da Restart Hair Design’ın Saç kesimi sayfasında 2.000 TL, 30 dakika ve uzman Umutbarut görüldü. QR denetimi açıldı. Yayındaki kod çözüldüğünde iPhone’da kabul edilen hizmet URL’siyle birebir eşleşti. Umut, TestFlight 1191’de hizmet kartındaki “Hizmeti tarayıcıda aç” düğmesinin iPhone Safari’de doğru hizmeti açtığını doğruladı. İlk kontrolde web randevusu bu sayfada kapalıydı. Canlı hizmet sorgusu Umutbarut için 2.000 TL ve 30 dakika döndürdü. 26 Kasım için iki yayınlı konuma yapılan oturumsuz müsaitlik sorguları HTTP 401 döndürdü. 25 Kasım akşamı önizleme ortamında masaüstü Chromium üzerinden test müşterisiyle giriş yapıldı. Keşfet’te Restart Hair Design, Saç kesimi ve Umutbarut’un atandığı Küçükyalı konumu seçildi. 26 Kasım için 35 uygun başlangıç saati listelendi. İstanbul saatiyle 09.00 seçildiğinde “Randevun hazır” ekranı ve onay düğmesi görüldü. Deneme randevu göndermeden tamamlandı ve test oturumu kapatıldı. Aynı adla listelenen diğer konumda uzman ataması yok. Paylaşılan hizmet sayfasına ait ayrı müsaitlik uç noktası oturumlu istekte de 404 döndürdü. Android alan adı dosyası GET ve HEAD ile yönlendirmesiz HTTP 200 döndürüyor. İçeriği geçici olarak boş liste. Dağıtım imzası eşleştirmesi ve Android cihaz testi son aşamaya bırakıldı. [Yayın ve doğrulama](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/45686753946)
+
+**25 Kasım · Paylaşılan bağlantıdan randevu.** Restart Hair Design’ın Saç kesimi hizmeti links.orzell.app üzerinde açıldı. Masaüstü Chromium’da test müşterisiyle giriş yapıldı. 26 Kasım için Umutbarut ile 35 uygun saat listelendi. İstanbul saatiyle 09.00 seçildiğinde fiyat 2.000 TL ve talep gönderme düğmesi doğrulandı. Gerçek randevu gönderilmeden oturum kapatıldı. Ayrı bir hizmette saat sorgusu 404 döndürdü ve web sayfası randevunun kapalı olduğunu gösterdi. [Yayın kaydı](https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/45693502239)
+
 | İş                         | Hazır olan                                                                                               | Kapanış için gerekli gerçek sonuç                                                                                               |
 | -------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Gerçek kurtarma         | Şifreli yedek, imza/boyut/hash kabulü, ayrı host ve SSM, izole restore ve karantina kodu                 | Sahip anahtarıyla gerçek izole restore makbuzu; ölçümler; yeniden açma öncesi silme/izin ve secret uzlaşması                    |
-| 2. Hesap/veri silme        | PR109 ve yedi başarılı otomatik kontrol; günlük sorumlu Umut Barut, ilk inceleme hedefi 3 iş günü        | İşletme/finans/randevu/stok/B2B geçmişinde alan bazlı işlem ve süre; nihai bildirim; gerçek operatör erişimi; bağımsız inceleme |
+| 1. Gerçek kurtarma | 12 Kasım yedeğiyle izole prova, karantina, bütünlük kontrolü ve bağlı başarı makbuzu tamamlandı | Üretimi yeniden açmak için yedek sonrasındaki silme/izin kayıtları, depolama ve erişim anahtarlarının bağımsız incelemesi açık |
+| 2. Hesap/veri silme        | [PR109 ve yedi başarılı otomatik kontrol](https://github.com/umutbarut7-svg/Beauty-platform/pull/109), günlük sorumlu Umut Barut, ilk inceleme hedefi 3 iş günü        | İşletme/finans/randevu/stok/B2B geçmişinde alan bazlı işlem ve süre; nihai bildirim; gerçek operatör erişimi; bağımsız inceleme |
 | 3. Fotoğraf/AI metni       | İşletmeci Umut Barut, ORZELL App, orzellapp@gmail.com; içerik 24 saat, fotoğraf izin/işlem kanıtı 90 gün | Sağlayıcı hesabının gerçek veri kontrol/aktarım koşulları ve nihai kullanıcı metni incelemesi                                   |
 | 4. İşletme doğrulaması     | Bağımsız platform yöneticisi prensibi; başvuru kanıtı/notu 90 gün                                        | Başlangıç pazarı ve resmî kayıt kaynağı; yetkili gerçek incelemeci; sürümlü metin ve gerçek başvuru/karar kabulü                |
-| 5. Son cihaz/ürün kabulü   | Mevcut iPhone ve önceki başarılı akışlar; otomatik iOS/Android ve tarayıcı kanıtları                     | Yalnız değişen son akışın iPhone/Android fiziksel kabulü, yeni sonuç yazımı, izin geri çekme ve izinli gerçek fotoğraf kalitesi |
+| 5. Son cihaz/ürün kabulü | iPhone 17 Pro Max, TestFlight 1.0.0 (1191), 25 Kasım: Notlar’daki bağlantı uygulama tamamen kapalıyken ve arka plandayken Restart Hair Design’ın Saç kesimi kartını açtı (2.000 TL, 30 dakika). Kullanıcı ilk denemede giriş istendiğini bildirdi. Önceki fotoğraf izni geri çekme ve sunucuda silme kaydı da doğrulandı. | Android’de hizmet bağlantısının fiziksel kabulü, sonuç yazımı ve izinli gerçek fotoğraf kalitesi |
 | 6. Aynı adayda final       | Kaynak ve test kanıtları kayıtlı; bu tabloda tek açıklar listesi                                         | Gerekli son değişiklikleri aynı adaya bağlamak; kalan gerçek kanıtlar ve incelemeler geldikten sonra final kararı               |
-| 7. Geçici kaynak temizliği | Owner exact stack DELETE_COMPLETE ve 11 CFN kaynağında silinmeden kalan `[]` kanıtı                      | Bu exact ortam için tamamlandı; yeni bir ortam için yeniden ayrı takip edilir                                                   |
+| 7. Geçici kaynak temizliği | 13 Kasım ortamı ve 15 Kasım v5 ortamı için CloudFormation temizliği doğrulandı | Bu iki ortam için tamamlandı |
 
 Silme taleplerinin günlük sorumlusu, ilk inceleme hedefi, daha önce onaylı
 saklama süreleri ve geçici ortam temizliği yeniden sorulmaz. Fotoğrafın 90 günlük
