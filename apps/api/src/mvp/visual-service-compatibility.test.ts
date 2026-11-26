@@ -38,14 +38,19 @@ describe("conservative hair-only consultation compatibility", () => {
     ["STYLING", "fön", "saç şekillendirme"],
   ] as const;
 
-  it.each(services)("matches only compatible catalog titles for %s", (kind, intent, title) => {
-    const planned = resolveVisualServiceKind(intent, "", title);
-    expect(planned).toBe(kind);
-    if (!planned) throw new Error("Expected an explicit consultation kind");
-    for (const [candidateKind, , candidateTitle] of services) {
-      expect(compatibleVisualService(planned, candidateTitle)).toBe(candidateKind === kind);
-    }
-  });
+  it.each(services)(
+    "matches only compatible catalog titles for %s",
+    (kind, intent, title) => {
+      const planned = resolveVisualServiceKind(intent, "", title);
+      expect(planned).toBe(kind);
+      if (!planned) throw new Error("Expected an explicit consultation kind");
+      for (const [candidateKind, , candidateTitle] of services) {
+        expect(compatibleVisualService(planned, candidateTitle)).toBe(
+          candidateKind === kind,
+        );
+      }
+    },
+  );
 
   it("rejects an unrelated or unclassified catalog title", () => {
     expect(compatibleVisualService("CUT", "Kaynak")).toBe(false);
