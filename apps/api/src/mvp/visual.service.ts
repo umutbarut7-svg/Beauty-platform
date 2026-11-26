@@ -4,6 +4,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
   HttpException,
@@ -78,6 +79,14 @@ export class MvpExternalGuard {
       })
     )
       throw new ServiceUnavailableException("AI_CAPABILITY_DISABLED");
+    const rejectLimit = (scope: "global-day" | "user-minute" | "user-day") => {
+      const operation = agentType === "MVP_SEMANTIC" ? "semantic" : "visual";
+      Logger.warn(
+        `AI_USAGE_LIMIT_REACHED ${operation} ${scope}`,
+        "MvpExternalGuard",
+      );
+      throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
+    };
     const daily = configuredInteger("MVP_AI_DAILY_REQUEST_LIMIT", 1, 100);
     const globalDaily = configuredInteger(
       "MVP_AI_GLOBAL_DAILY_REQUEST_LIMIT",
@@ -92,7 +101,7 @@ export class MvpExternalGuard {
         )
       ).allowed
     )
-      throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
+      rejectLimit("global-day");
     for (const policy of [
       { limit: 5, windowMs: 60000 },
       { limit: daily, windowMs: 86400000 },
@@ -105,7 +114,7 @@ export class MvpExternalGuard {
           )
         ).allowed
       )
-        throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
+        rejectLimit(policy.windowMs === 60000 ? "user-minute" : "user-day");
     }
   }
 }
