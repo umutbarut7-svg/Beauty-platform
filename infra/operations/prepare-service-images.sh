@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source_sha=64b14aa3ed4fd325221bdd61df46ce176f4618c9
+source_sha=ec430c446ab1ac373bdef31b1991603bfc8fec70
 origin=https://preview.13-51-112-228.sslip.io
 api=orzell-preview-service-api:${source_sha:0:12}
 web=orzell-preview-service-web:${source_sha:0:12}
