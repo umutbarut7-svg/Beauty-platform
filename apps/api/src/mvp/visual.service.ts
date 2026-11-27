@@ -444,12 +444,14 @@ export class VisualService {
     });
     if (claim.count !== 1)
       throw new ConflictException("VISUAL_SESSION_BUSY_OR_LIMITED");
+    let quotaAccepted = false;
     try {
       await this.guard.consume(user.id, {
         intent: session.intent,
         target: session.target,
         answers: [...previous, ...answers],
       });
+      quotaAccepted = true;
       const photo = await this.activePhoto(user.id, session.photoId);
       if (!photo) throw new NotFoundException("PHOTO_UNAVAILABLE");
       const jpeg = await this.storage.sanitizedJpeg(
@@ -496,6 +498,10 @@ export class VisualService {
       });
       return this.get(user, id);
     } catch (error) {
+      const quotaDenied =
+        !quotaAccepted &&
+        error instanceof HttpException &&
+        error.getStatus() === 429;
       await this.db.mvpPhotoAnalysis.updateMany({
         where: {
           id,
@@ -503,7 +509,9 @@ export class VisualService {
           status: "RUNNING",
           attempts: session.attempts + 1,
         },
-        data: { status: "FAILED" },
+        data: quotaDenied
+          ? { status: session.status, attempts: session.attempts }
+          : { status: "FAILED" },
       });
       throw error;
     }
