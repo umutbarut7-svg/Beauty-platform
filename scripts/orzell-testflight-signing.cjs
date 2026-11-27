@@ -54,8 +54,13 @@ async function main() {
     if (!r.ok) {
       const body = await r.json().catch(() => null);
       const code = body?.errors?.[0]?.code;
-      const safeCode = typeof code === "string" && /^[A-Z][A-Z0-9_.-]{0,79}$/.test(code) ? code : "UNKNOWN";
-      throw new Error("Apple read failed: HTTP " + r.status + " (" + safeCode + ")");
+      const safeCode =
+        typeof code === "string" && /^[A-Z][A-Z0-9_.-]{0,79}$/.test(code)
+          ? code
+          : "UNKNOWN";
+      throw new Error(
+        "Apple read failed: HTTP " + r.status + " (" + safeCode + ")",
+      );
     }
     return r.json();
   }
@@ -133,7 +138,9 @@ print(json.dumps({"hasAssociatedDomains":bool(p["Entitlements"].get("com.apple.d
 
   if (process.argv.includes("--check-service-link-profile")) {
     if (!decoded.hasAssociatedDomains) {
-      console.error("::error::The active ORZELL App Store profile lacks the Associated Domains entitlement.");
+      console.error(
+        "::error::The active ORZELL App Store profile lacks the Associated Domains entitlement.",
+      );
       throw new Error("Associated Domains profile required.");
     }
     console.log("Active distribution profile includes Associated Domains.");
@@ -366,7 +373,12 @@ main().catch((error) => {
     "Invalid profile UUID.",
     "Associated Domains profile required.",
   ];
-  if (known.includes(error.message) || /^Apple read failed: HTTP [1-5][0-9]{2} \([A-Z][A-Z0-9_.-]{0,79}\)$/.test(error.message))
+  if (
+    known.includes(error.message) ||
+    /^Apple read failed: HTTP [1-5][0-9]{2} \([A-Z][A-Z0-9_.-]{0,79}\)$/.test(
+      error.message,
+    )
+  )
     console.error("::error::" + error.message);
   console.error(
     "::error::Signing preparation failed. Private material was not logged.",
