@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { PermissionsService } from "../auth/permissions.service.js";
 import { PRISMA_SERVICE } from "../database/database.tokens.js";
@@ -131,6 +132,23 @@ export class CustomersService {
     );
     const customer = await this.scopedCustomer(businessId, customerId);
     const now = new Date();
+    const completedValuesPromise: Promise<
+      Array<{
+        currency: string;
+        _sum: { price: Prisma.Decimal | null };
+        _avg: { price: Prisma.Decimal | null };
+      }>
+    > = this.prisma.appointment.groupBy({
+      by: ["currency"],
+      orderBy: { currency: "asc" },
+      where: {
+        businessId,
+        businessCustomerId: customerId,
+        status: "COMPLETED",
+      },
+      _sum: { price: true },
+      _avg: { price: true },
+    });
     const [
       recentAppointments,
       upcomingCount,
@@ -138,7 +156,7 @@ export class CustomersService {
       cancelledCount,
       noShowCount,
       lastVisit,
-      completedValue,
+      completedValues,
       totalCount,
       nextAppointment,
     ] = await Promise.all([
@@ -192,15 +210,7 @@ export class CustomersService {
         orderBy: { completedAt: "desc" },
         select: { completedAt: true, startsAt: true },
       }),
-      this.prisma.appointment.aggregate({
-        where: {
-          businessId,
-          businessCustomerId: customerId,
-          status: "COMPLETED",
-        },
-        _sum: { price: true },
-        _avg: { price: true },
-      }),
+      completedValuesPromise,
       this.prisma.appointment.count({
         where: { businessId, businessCustomerId: customerId },
       }),
@@ -215,6 +225,8 @@ export class CustomersService {
         select: { startsAt: true },
       }),
     ]);
+    const completedValue =
+      completedValues.length === 1 ? completedValues[0] : undefined;
     return {
       customer,
       summary: {
@@ -225,9 +237,16 @@ export class CustomersService {
         noShowAppointments: noShowCount,
         totalVisits: completedCount,
         lastVisitAt: lastVisit?.completedAt ?? lastVisit?.startsAt ?? null,
-        completedAppointmentValue: completedValue._sum.price ?? null,
-        totalSpend: completedValue._sum.price ?? null,
-        averageSpend: completedValue._avg.price ?? null,
+        completedAppointmentValue: completedValue?._sum.price ?? null,
+        totalSpend: completedValue?._sum.price ?? null,
+        averageSpend: completedValue?._avg.price ?? null,
+        completedValuesByCurrency: completedValues.map(
+          ({ currency, _sum, _avg }) => ({
+            currency,
+            completedAppointmentValue: _sum.price,
+            averageAppointmentValue: _avg.price,
+          }),
+        ),
         nextAppointmentAt: nextAppointment?.startsAt ?? null,
       },
       recentAppointments,

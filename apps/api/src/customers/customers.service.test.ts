@@ -8,7 +8,11 @@ const owner = {
   email: "owner@test.invalid",
   role: "BUSINESS_OWNER" as const,
 };
-function fixture() {
+function fixture(
+  completedValues = [
+    { currency: "TRY", _sum: { price: "250.00" }, _avg: { price: "125.00" } },
+  ],
+) {
   const customers = [
     {
       id: "customer-a",
@@ -79,10 +83,15 @@ function fixture() {
       findFirst: async () => ({
         completedAt: new Date("2030-01-01T10:00:00Z"),
       }),
-      aggregate: async () => ({
-        _sum: { price: "250.00" },
-        _avg: { price: "125.00" },
-      }),
+      groupBy: async ({ by, where }: any) => {
+        expect(by).toEqual(["currency"]);
+        expect(where).toEqual({
+          businessId: "a",
+          businessCustomerId: "customer-a",
+          status: "COMPLETED",
+        });
+        return completedValues;
+      },
     },
     customerNote: {
       create: async ({ data }: any) => {
@@ -213,6 +222,33 @@ describe("CustomersService", () => {
         completedAppointmentValue: "250.00",
       },
       recentAppointments: [{ id: "appointment" }],
+    });
+  });
+  it("keeps completed values separate when a customer has multiple currencies", async () => {
+    const { service } = fixture([
+      { currency: "EUR", _sum: { price: "50" }, _avg: { price: "50" } },
+      { currency: "TRY", _sum: { price: "200" }, _avg: { price: "200" } },
+    ]);
+    await expect(
+      service.detail(owner, "a", "customer-a"),
+    ).resolves.toMatchObject({
+      summary: {
+        totalSpend: null,
+        averageSpend: null,
+        completedAppointmentValue: null,
+        completedValuesByCurrency: [
+          {
+            currency: "EUR",
+            completedAppointmentValue: "50",
+            averageAppointmentValue: "50",
+          },
+          {
+            currency: "TRY",
+            completedAppointmentValue: "200",
+            averageAppointmentValue: "200",
+          },
+        ],
+      },
     });
   });
   it("updates only scoped DTO fields", async () => {
