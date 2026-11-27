@@ -99,6 +99,26 @@ export function ProductInventory({
       setHistory([]);
     }
   }
+  async function refreshProduct(productId: string) {
+    const index = products.findIndex((product) => product.id === productId);
+    const previous = products[index - 1];
+    const page = await api.request<ProductPage<CatalogProduct>>(
+      previous ? `${base}?after=${encodeURIComponent(previous.id)}` : base,
+    );
+    const current = page.items.find((product) => product.id === productId);
+    setProducts((items) =>
+      current
+        ? items.map((product) => (product.id === productId ? current : product))
+        : items.filter((product) => product.id !== productId),
+    );
+    setSelected(current ?? null);
+    setHistory([]);
+    if (current) {
+      setEditName(current.name);
+      setEditPrice(current.price);
+      setEditThreshold(current.lowStockThreshold);
+    }
+  }
   return (
     <View style={styles.panel}>
       <Text style={styles.title}>Ürünler ve stok</Text>
@@ -195,7 +215,7 @@ export function ProductInventory({
                   lowStockThreshold: threshold,
                 });
                 setMessage("Ürün bilgileri kaydedildi.");
-                await load();
+                await refreshProduct(selected.id);
               })}
               <Text style={styles.heading}>
                 {selected.name} · Stok hareketi
@@ -249,7 +269,7 @@ export function ProductInventory({
                   );
                 } catch (error) {
                   if (error instanceof ApiError && error.status === 409) {
-                    await load();
+                    await refreshProduct(selected.id);
                     setMessage(
                       "Stok değişmiş veya çıkış miktarı yetersiz olabilir. Güncel stok miktarını kontrol et.",
                     );
@@ -261,7 +281,7 @@ export function ProductInventory({
                 setQuantity("");
                 setReason("");
                 setMessage("Stok hareketi kaydedildi.");
-                await load();
+                await refreshProduct(selected.id);
                 setMessage("Stok hareketi kaydedildi.");
               })}
               {button(
@@ -273,7 +293,7 @@ export function ProductInventory({
                     expectedRevision: selected.revision,
                     isPublic: !selected.isPublic,
                   });
-                  await load();
+                  await refreshProduct(selected.id);
                   setMessage("Ürünün katalog görünürlüğü kaydedildi.");
                 },
               )}
@@ -284,7 +304,7 @@ export function ProductInventory({
                     expectedRevision: selected.revision,
                     isActive: !selected.isActive,
                   });
-                  await load();
+                  await refreshProduct(selected.id);
                   setMessage("Ürün durumu kaydedildi.");
                 },
               )}
@@ -318,7 +338,7 @@ export function ProductInventory({
                   expectedRevision: selected.revision,
                   b2bAvailable: !selected.b2bAvailable,
                 });
-                await load();
+                await refreshProduct(selected.id);
                 setMessage(
                   "B2B ürün görünürlüğü kaydedildi. Tedarikçi profilin açık olduğunda diğer işletmeler görebilir.",
                 );
