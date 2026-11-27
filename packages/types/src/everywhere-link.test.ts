@@ -20,6 +20,21 @@ describe("ORZELL Everywhere share links", () => {
       parseOrzellShareLink(createOrzellShareLink(origin, target), origin),
     ).toEqual(target);
   });
+  it.each(["fbclid", "gclid", "ttclid"])(
+    "keeps the service destination when a link carries %s",
+    (parameter) => {
+      const target = { businessId: "salon", serviceId: "cut" };
+      const canonical = createOrzellShareLink(origin, target);
+      const link = canonical + "&" + parameter + "=synthetic-click";
+      const parsed = parseOrzellShareLink(link, origin);
+      expect(parsed).toEqual(target);
+      expect(createOrzellShareLink(origin, parsed!)).toBe(canonical);
+      expect(
+        parseOrzellShareLink(link + "&serviceId=other", origin),
+      ).toBeNull();
+      expect(parseOrzellShareLink(link + "&redirect=other", origin)).toBeNull();
+    },
+  );
   it("rejects unsafe optional identifiers during creation", () => {
     expect(() =>
       createOrzellShareLink(origin, {

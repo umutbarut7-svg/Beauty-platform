@@ -72,6 +72,10 @@ export function parseOrzellShareLink(
       "serviceId",
       "professionalId",
       "resultId",
+      // Platforms append click IDs. Keep them out of the destination and generated links.
+      "fbclid",
+      "gclid",
+      "ttclid",
     ]);
     for (const key of url.searchParams.keys()) {
       if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1)
