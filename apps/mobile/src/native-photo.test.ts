@@ -71,6 +71,32 @@ describe("native photo preparation", () => {
     },
   );
 
+  it.each([asset.uri, "file:///cache/late.jpg"])(
+    "ends a stalled encode and only removes late temporary files: %s",
+    async (uri) => {
+      vi.useFakeTimers();
+      try {
+        const io = fixture();
+        let finish!: (output: typeof asset) => void;
+        vi.mocked(io.encode).mockImplementation(
+          () => new Promise((resolve) => (finish = resolve)),
+        );
+        const rejected = expect(prepareNativePhoto(asset, io)).rejects.toThrow(
+          "süresi doldu",
+        );
+        await vi.advanceTimersByTimeAsync(60000);
+        await rejected;
+        finish({ ...asset, uri });
+        await Promise.resolve();
+        expect(io.remove).not.toHaveBeenCalledWith(asset.uri);
+        if (uri !== asset.uri) expect(io.remove).toHaveBeenCalledWith(uri);
+        expect(io.encode).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("uses measured output bytes and retries compression without leaking discarded files", async () => {
     const io = fixture({
       outputSizes: [MAX_PHOTO_BYTES + 1, MAX_PHOTO_BYTES + 1, MAX_PHOTO_BYTES],

@@ -1,12 +1,17 @@
+import { iosPhotoEncoder } from "./ios-photo-encoder";
 import { File, FileMode } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { prepareNativePhoto, type NativePhotoAsset } from "./native-photo";
 import { MAX_SOURCE_BYTES, PhotoPreparationError } from "./photo-upload";
 
-export function prepareDevicePhoto(asset: NativePhotoAsset) {
+export function prepareDevicePhoto(
+  asset: NativePhotoAsset,
+  onStep?: (step: string) => void,
+) {
   return prepareNativePhoto(asset, {
     async inspect(uri) {
       try {
+        onStep?.(uri === asset.uri ? "inspect source" : "inspect JPEG");
         const file = new File(uri);
         const size = file.size;
         if (
@@ -34,11 +39,30 @@ export function prepareDevicePhoto(asset: NativePhotoAsset) {
       }
     },
     async encode(source, size, quality) {
+      if (iosPhotoEncoder) {
+        onStep?.("downsample local image with ImageIO");
+        return iosPhotoEncoder.encode(
+          source.uri,
+          Math.max(size.width, size.height),
+          quality,
+        );
+      }
+      onStep?.("create image context");
       const context = ImageManipulator.manipulate(source.uri);
       try {
         context.resize(size);
-        const image = await context.renderAsync();
+        onStep?.("render resized image");
+        const image = await context.renderAsync().catch((error: unknown) => {
+          // Expose native rejection details only to the optional probe callback.
+          if (onStep) {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            onStep(`render rejected: ${reason.slice(0, 160)}`);
+          }
+          throw error;
+        });
         try {
+          onStep?.("save JPEG");
           return await image.saveAsync({
             format: SaveFormat.JPEG,
             compress: quality,

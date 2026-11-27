@@ -244,6 +244,35 @@ afterAll(async () => {
 });
 
 describe("Authenticated shared booking on real HTTP and PostgreSQL", () => {
+  it("offers slots only for the configured pilot business and service", async () => {
+    const flag = "ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED";
+    const previous = process.env[flag];
+    const path = `/discovery/shared-service/availability?${query()}`;
+    try {
+      vi.stubEnv(flag, `${businessId}/${serviceId}`);
+      const allowed = await request("GET", path);
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.json().slots.length).toBeGreaterThan(0);
+
+      for (const scope of [
+        `${otherId}/${serviceId}`,
+        `${businessId}/another-service`,
+      ]) {
+        vi.stubEnv(flag, scope);
+        expect((await request("GET", path)).statusCode).toBe(404);
+        const denied = await request(
+          "POST",
+          "/discovery/shared-service/bookings",
+          userId,
+          body(),
+        );
+        expect(denied.statusCode).toBe(404);
+      }
+      expect(await db.appointment.count({ where: { businessId } })).toBe(0);
+    } finally {
+      vi.stubEnv(flag, previous);
+    }
+  });
   it("requires authentication and rejects forged customer/photo/price fields", async () => {
     expect(
       (
