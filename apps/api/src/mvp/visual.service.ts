@@ -93,29 +93,37 @@ export class MvpExternalGuard {
       1,
       10000,
     );
-    if (
-      !(
-        await this.abuse.consume(
-          { scope: "ENDPOINT", limit: globalDaily, windowMs: 86400000 },
-          "mvp-external-global",
-        )
-      ).allowed
-    )
-      rejectLimit("global-day");
-    for (const policy of [
-      { limit: 5, windowMs: 60000 },
-      { limit: daily, windowMs: 86400000 },
-    ]) {
+    // Only admitted requests reserve provider capacity across all three windows.
+    await this.db.$transaction(async (tx: PrismaService) => {
+      const now = new Date();
       if (
         !(
           await this.abuse.consume(
-            { scope: "AI_USER", ...policy },
-            `mvp-external:${policy.windowMs}:${ownerId}`,
+            { scope: "ENDPOINT", limit: globalDaily, windowMs: 86400000 },
+            "mvp-external-global",
+            now,
+            tx,
           )
         ).allowed
       )
-        rejectLimit(policy.windowMs === 60000 ? "user-minute" : "user-day");
-    }
+        rejectLimit("global-day");
+      for (const policy of [
+        { limit: 5, windowMs: 60000 },
+        { limit: daily, windowMs: 86400000 },
+      ]) {
+        if (
+          !(
+            await this.abuse.consume(
+              { scope: "AI_USER", ...policy },
+              `mvp-external:${policy.windowMs}:${ownerId}`,
+              now,
+              tx,
+            )
+          ).allowed
+        )
+          rejectLimit(policy.windowMs === 60000 ? "user-minute" : "user-day");
+      }
+    });
   }
 }
 

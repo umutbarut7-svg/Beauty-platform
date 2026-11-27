@@ -9,7 +9,7 @@
     "worker": "node dist/worker.js",
     "lint": "eslint .",
     "test": "vitest run src",
-    "test:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run integration/governance.test.ts integration/shared-service.test.ts integration/shared-booking.test.ts",
+    "test:integration": "tsc --noEmit -p tsconfig.integration.json && vitest run integration/ai-quota.test.ts integration/governance.test.ts integration/shared-service.test.ts integration/shared-booking.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
