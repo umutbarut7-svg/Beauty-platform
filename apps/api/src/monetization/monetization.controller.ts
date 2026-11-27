@@ -50,15 +50,16 @@ export class MonetizationController {
       occurredAt: new Date(dto.occurredAt),
     });
   }
-  @Post("refunds") refund(
+  @Post("refunds") async refund(
     @CurrentUser() user: AuthenticatedUser,
     @Param("businessId", ResourceIdPipe) businessId: string,
     @Body() dto: RefundDto,
   ) {
-    return this.service.refund(user, businessId, {
+    const record = await this.service.refund(user, businessId, {
       ...dto,
       amountMinor: BigInt(dto.amountMinor),
     });
+    return { ...record, amountMinor: record.amountMinor.toString() };
   }
   @Get("summary") summary(
     @CurrentUser() user: AuthenticatedUser,

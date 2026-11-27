@@ -1,3 +1,4 @@
+import { MonetizationController } from "./monetization.controller.js";
 import { describe, expect, it, vi } from "vitest";
 import { GlobalizationEngine } from "../globalization/globalization-engine.service.js";
 import { MonetizationEngine } from "./monetization-engine.service.js";
@@ -81,6 +82,23 @@ function fixture() {
   };
 }
 describe("MonetizationService", () => {
+  it("serializes ledger amounts as exact decimal minor-unit strings for HTTP", async () => {
+    const { service, db } = fixture();
+    (
+      db.financialLedgerEntry as { findMany: ReturnType<typeof vi.fn> }
+    ).findMany.mockResolvedValueOnce([
+      { type: "CHARGE", amountMinor: 900719925474099300n, currency: "TRY" },
+    ]);
+    const summary = await service.summary(user, "a");
+    expect(summary).toMatchObject({
+      status: "AVAILABLE",
+      grossRevenueMinor: "900719925474099300",
+      currency: "TRY",
+    });
+    expect(JSON.parse(JSON.stringify(summary)).grossRevenueMinor).toBe(
+      "900719925474099300",
+    );
+  });
   it("binds reads to server-side tenant authorization", async () => {
     const { service, permissions } = fixture();
     await service.summary(user, "a");
@@ -185,6 +203,26 @@ describe("MonetizationService", () => {
     expect(
       (db.financialLedgerEntry as { create: ReturnType<typeof vi.fn> }).create,
     ).not.toHaveBeenCalled();
+  });
+  it("serializes a saved refund without losing minor-unit precision", async () => {
+    const { service, db } = fixture();
+    (
+      db.refundRecord as { findFirst: ReturnType<typeof vi.fn> }
+    ).findFirst.mockResolvedValueOnce({
+      id: "refund",
+      originalEntryId: "charge",
+      amountMinor: 900719925474099300n,
+      reason: "partial",
+    });
+    const result = await new MonetizationController(service).refund(user, "a", {
+      originalEntryId: "charge",
+      amountMinor: "900719925474099300",
+      idempotencyKey: "r",
+      reason: "partial",
+    });
+    expect(JSON.parse(JSON.stringify(result)).amountMinor).toBe(
+      "900719925474099300",
+    );
   });
   it("writes refund reversal and audit records", async () => {
     const { service, audit } = fixture();
