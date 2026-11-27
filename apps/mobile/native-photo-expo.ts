@@ -46,7 +46,8 @@ export function prepareDevicePhoto(
         const image = await context.renderAsync().catch((error: unknown) => {
           // Expose native rejection details only to the optional probe callback.
           if (onStep) {
-            const reason = error instanceof Error ? error.message : String(error);
+            const reason =
+              error instanceof Error ? error.message : String(error);
             onStep(`render rejected: ${reason.slice(0, 160)}`);
           }
           throw error;
