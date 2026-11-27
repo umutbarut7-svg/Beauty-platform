@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source_sha=ec430c446ab1ac373bdef31b1991603bfc8fec70
+source_sha=dd1015508c309aa637e8dadc4fa92d691f68f504
 origin=https://preview.13-51-112-228.sslip.io
 api=orzell-preview-service-api:${source_sha:0:12}
 web=orzell-preview-service-web:${source_sha:0:12}
@@ -32,6 +32,13 @@ async function check() {
     assert.equal(response.status,200);
     assert.match(await response.text(),/Geçersiz bağlantı/);
   }
+  // With no configured upstream, an accepted target reaches the unavailable-service state.
+  const shared = base + '/discover/service?businessId=pilot&serviceId=cut';
+  const decorated = await fetch(shared + '&fbclid=synthetic-click');
+  assert.equal(decorated.status, 200);
+  assert.match(await decorated.text(), /Hizmet şu anda görüntülenemiyor/);
+  const ambiguous = await fetch(shared + '&fbclid=synthetic-click&serviceId=other');
+  assert.match(await ambiguous.text(), /Geçersiz bağlantı/);
   assert.match(await (await fetch(base+'/login')).text(),/Giriş yap/);
   const logo = await fetch(base+'/orzell-original-reference.jpg');
   assert.equal(crypto.createHash('sha256').update(Buffer.from(await logo.arrayBuffer())).digest('hex'),'16ad3fabe252740fb9ec97316ac63a4b1c4c4648ef333e0a08027c3430bc0fa4');

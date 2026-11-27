@@ -17,7 +17,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ec430c446ab1ac373bdef31b1991603bfc8fec70
+          ref: dd1015508c309aa637e8dadc4fa92d691f68f504
           path: application
           persist-credentials: false
       - name: Build and verify the preview images
