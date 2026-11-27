@@ -27,7 +27,12 @@ const hash = (value: string) =>
 @Injectable()
 export class AbuseProtectionService {
   constructor(@Inject(PRISMA_SERVICE) private readonly db: PrismaService) {}
-  async consume(policy: RateLimitPolicy, identifier: string, now = new Date()) {
+  async consume(
+    policy: RateLimitPolicy,
+    identifier: string,
+    now = new Date(),
+    db: Pick<PrismaService, "abuseLimitBucket"> = this.db,
+  ) {
     if (!Number.isInteger(policy.limit) || policy.limit < 1)
       throw new Error("Rate limit must be a positive integer");
     if (!Number.isInteger(policy.windowMs) || policy.windowMs < 1000)
@@ -36,7 +41,7 @@ export class AbuseProtectionService {
       Math.floor(now.getTime() / policy.windowMs) * policy.windowMs,
     );
     const keyHash = hash(identifier);
-    const bucket = await this.db.abuseLimitBucket.upsert({
+    const bucket = await db.abuseLimitBucket.upsert({
       where: {
         scope_keyHash_windowStart: {
           scope: policy.scope,

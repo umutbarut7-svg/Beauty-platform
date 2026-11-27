@@ -2,6 +2,7 @@ import { ServiceQr } from "./ServiceQr";
 import type { Metadata } from "next";
 import { cache } from "react";
 import {
+  sharedBookingEnabled,
   createOrzellShareLink,
   parseOrzellShareLink,
 } from "@beauty-platform/types";
@@ -147,8 +148,10 @@ export default async function SharedServicePage({ searchParams }: PageProps) {
           ))}
         </section>
       )}
-      {process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED === "true" &&
-      apiBase ? (
+      {sharedBookingEnabled(
+        process.env.ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED,
+        target,
+      ) && apiBase ? (
         <SharedBooking
           key={`${target.businessId}:${target.serviceId}:${target.professionalId ?? ""}`}
           apiBase={apiBase}

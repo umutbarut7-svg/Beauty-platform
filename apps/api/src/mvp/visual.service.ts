@@ -4,6 +4,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
   HttpException,
@@ -78,35 +79,51 @@ export class MvpExternalGuard {
       })
     )
       throw new ServiceUnavailableException("AI_CAPABILITY_DISABLED");
+    const rejectLimit = (scope: "global-day" | "user-minute" | "user-day") => {
+      const operation = agentType === "MVP_SEMANTIC" ? "semantic" : "visual";
+      Logger.warn(
+        `AI_USAGE_LIMIT_REACHED ${operation} ${scope}`,
+        "MvpExternalGuard",
+      );
+      throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
+    };
     const daily = configuredInteger("MVP_AI_DAILY_REQUEST_LIMIT", 1, 100);
     const globalDaily = configuredInteger(
       "MVP_AI_GLOBAL_DAILY_REQUEST_LIMIT",
       1,
       10000,
     );
-    if (
-      !(
-        await this.abuse.consume(
-          { scope: "ENDPOINT", limit: globalDaily, windowMs: 86400000 },
-          "mvp-external-global",
-        )
-      ).allowed
-    )
-      throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
-    for (const policy of [
-      { limit: 5, windowMs: 60000 },
-      { limit: daily, windowMs: 86400000 },
-    ]) {
+    // Only admitted requests reserve provider capacity across all three windows.
+    await this.db.$transaction(async (tx: PrismaService) => {
+      const now = new Date();
       if (
         !(
           await this.abuse.consume(
-            { scope: "AI_USER", ...policy },
-            `mvp-external:${policy.windowMs}:${ownerId}`,
+            { scope: "ENDPOINT", limit: globalDaily, windowMs: 86400000 },
+            "mvp-external-global",
+            now,
+            tx,
           )
         ).allowed
       )
-        throw new HttpException("AI_USAGE_LIMIT_REACHED", 429);
-    }
+        rejectLimit("global-day");
+      for (const policy of [
+        { limit: 5, windowMs: 60000 },
+        { limit: daily, windowMs: 86400000 },
+      ]) {
+        if (
+          !(
+            await this.abuse.consume(
+              { scope: "AI_USER", ...policy },
+              `mvp-external:${policy.windowMs}:${ownerId}`,
+              now,
+              tx,
+            )
+          ).allowed
+        )
+          rejectLimit(policy.windowMs === 60000 ? "user-minute" : "user-day");
+      }
+    });
   }
 }
 
@@ -427,12 +444,14 @@ export class VisualService {
     });
     if (claim.count !== 1)
       throw new ConflictException("VISUAL_SESSION_BUSY_OR_LIMITED");
+    let quotaAccepted = false;
     try {
       await this.guard.consume(user.id, {
         intent: session.intent,
         target: session.target,
         answers: [...previous, ...answers],
       });
+      quotaAccepted = true;
       const photo = await this.activePhoto(user.id, session.photoId);
       if (!photo) throw new NotFoundException("PHOTO_UNAVAILABLE");
       const jpeg = await this.storage.sanitizedJpeg(
@@ -479,6 +498,10 @@ export class VisualService {
       });
       return this.get(user, id);
     } catch (error) {
+      const quotaDenied =
+        !quotaAccepted &&
+        error instanceof HttpException &&
+        error.getStatus() === 429;
       await this.db.mvpPhotoAnalysis.updateMany({
         where: {
           id,
@@ -486,7 +509,9 @@ export class VisualService {
           status: "RUNNING",
           attempts: session.attempts + 1,
         },
-        data: { status: "FAILED" },
+        data: quotaDenied
+          ? { status: session.status, attempts: session.attempts }
+          : { status: "FAILED" },
       });
       throw error;
     }

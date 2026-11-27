@@ -84,3 +84,13 @@ export function parsePublishedShareService(
     return null;
   return value as PublishedShareService;
 }
+
+/** A deployment may enable all published services or one exact business/service pair. */
+export function sharedBookingEnabled(
+  setting: string | undefined,
+  target: Pick<OrzellShareTarget, "businessId" | "serviceId">,
+): boolean {
+  return (
+    setting === "true" || setting === `${target.businessId}/${target.serviceId}`
+  );
+}
