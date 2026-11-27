@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 import preview_admin_ops as ops
 
 ROOT = ops.ROOT
-WORK = ROOT / 'scoped-service-booking-1191'
+WORK = ROOT / 'scoped-service-booking-1201'
 HOST = 'https://preview.13-51-112-228.sslip.io'
 require = ops.require
 
@@ -86,27 +86,29 @@ PILOT_SERVICE = 'cmw1wwm6u0009nx0jc6v3k4cr'
 ORIGIN = 'https://links.orzell.app'
 PILOT = PILOT_BUSINESS + '/' + PILOT_SERVICE
 PREVIOUS = {
-    'api': 'sha256:5e98b54f3371ef2605675c09aebf2b8ed0d9e105d48dc8dd4c8cc130bb3b58f9',
-    'admin': 'sha256:950b2f795d5d482276f9927ba017a580ccc72179b30f8f80c94df2c1c4685d4c',
+    'api': 'sha256:9eb4def6d1d51887765e992dea3a71a79291b9ea09c3efde2492ed5d538ad3dd',
+    'admin': 'sha256:49ab53ef59d5f7fe9431eff07692edbfa8adedb7fbabdd06ff699435834be819',
 }
 
 def candidate_config(before, service, manifest):
     require(service in PREVIOUS, 'Unexpected service')
     result = copy.deepcopy(before)
     cfg = result['services'][service]
-    require(cfg['environment'].get('ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED') == 'false', 'Unexpected booking state')
-    env = {'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': PILOT}
+    require(cfg['environment'].get('ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED') == PILOT,
+            'Unexpected booking state')
     if service == 'api':
-        origins = cfg['environment']['CORS_ORIGINS'].split(',')
-        env['CORS_ORIGINS'] = ','.join(dict.fromkeys(origins + [ORIGIN]))
-    cfg['environment'].update(env)
-    cfg['image'] = manifest[service]
-    return result, {'services': {service: {'image': manifest[service], 'environment': env}}}
+        require(ORIGIN in cfg['environment']['CORS_ORIGINS'].split(','), 'Pilot CORS missing')
+    image = manifest[service]
+    cfg['image'] = image
+    return result, {'services': {service: {'image': image}}}
 
-def check_pilot():
+def check_pilot(decorated=True):
     query = urllib.parse.urlencode({'businessId': PILOT_BUSINESS, 'serviceId': PILOT_SERVICE})
-    for path in ('/discover/service?', '/book/service?'):
-        with urllib.request.urlopen(ORIGIN + path + query, timeout=10) as response:
+    routes = ['/discover/service?' + query, '/book/service?' + query]
+    if decorated:
+        routes.append(routes[0] + '&fbclid=orzell-release-check')
+    for route in routes:
+        with urllib.request.urlopen(ORIGIN + route, timeout=10) as response:
             parsed = RenderedText()
             parsed.feed(response.read(2000000).decode())
             visible = ' '.join(parsed.text)
@@ -135,6 +137,9 @@ def publish(release, url, caddy):
         for svc in PREVIOUS:
             original = ops.compose(before[svc])
             baseline = json.loads(ops.run(original+['config','--format','json']))
+            original_cfg = baseline['services'][svc]
+            original_image = json.loads(ops.run(['docker', 'image', 'inspect', original_cfg['image']]))[0]
+            require(original_image['Id'] == PREVIOUS[svc], 'Rollback image differs')
             expected, overlay = candidate_config(baseline, svc, manifest)
             path = WORK/(svc+'.json')
             path.write_text(json.dumps(overlay))
@@ -160,8 +165,14 @@ def publish(release, url, caddy):
     except Exception as error:
         print('Pilot stopped:', str(error) if isinstance(error,ops.Stop) else type(error).__name__,flush=True)
         for svc in reversed(applied): up(originals[svc],svc)
-        ops.wait_ready()
-        require(all(ops.inspect('beauty-preview-'+k+'-1')['Image']==PREVIOUS[k] for k in PREVIOUS),'Rollback requires review')
+        if applied:
+            ops.wait_ready()
+            for svc in applied:
+                cfg = json.loads(ops.run(originals[svc]+['config','--format','json']))['services'][svc]
+                ops.verify_runtime(before[svc],ops.inspect('beauty-preview-'+svc+'-1'),cfg,PREVIOUS[svc])
+            ops.verify_others(before,ops.snapshot(),set(applied))
+            check_pilot(decorated=False)
+            print('ROLLBACK: previous pilot verified', flush=True)
         for name in ('api.json','admin.json','package.zip','images.tar.gz'): (WORK/name).unlink(missing_ok=True)
         WORK.rmdir()
         raise

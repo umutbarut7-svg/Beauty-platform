@@ -12,14 +12,21 @@ spec = importlib.util.spec_from_file_location('preview_transport', HERE/'dispatc
 transport = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(transport)
 require = transport.require
-APPLICATION = '64b14aa3ed4fd325221bdd61df46ce176f4618c9'
-GATES = [45692654150, 45692654221, 45692654455]
+APPLICATION = 'dd1015508c309aa637e8dadc4fa92d691f68f504'
+# Candidate API, admin and lockfile match this accepted application.
+# The two changed shared link files are exercised by the pinned image build.
+ACCEPTED = '081e72b0db99822463b2cc504e340073ffd6ae9a'
+GATES = {
+    46056276958: (ACCEPTED, '.github/workflows/stage-32-validation.yml'),
+    46056276983: (ACCEPTED, '.github/workflows/admin-entry.yml'),
+    46056276855: (ACCEPTED, '.github/workflows/orzell-application.yml'),
+}
 INSTANCE = 'i-09fe7fdb5f10d63b6'
 
 
 def pinned_request():
     body = Path('.github/operations/service-pages-release.json').read_bytes()
-    require(hashlib.sha256(body).hexdigest() == '0712a325a684bd548c7ad5ed653e750b7dfc2af7aa3706d624875a8bdd38cbb1',
+    require(hashlib.sha256(body).hexdigest() == '569a24078fdf78ae5356c4652a544d16b5524ee20de046998c5c29401baf08f0',
             'Preview release request differs')
     return json.loads(body)
 
@@ -53,8 +60,12 @@ def main():
     build = transport.github('actions/runs/'+str(expected['run']))
     require(build['path'] == '.github/workflows/preview-service-images.yml', 'Image workflow differs')
     verify_gate(build, expected['head'])
-    for run_id in GATES + [45692688879]:
-        verify_gate(transport.github('actions/runs/'+str(run_id)), APPLICATION if run_id in GATES else expected['head'])
+    require(release['manifest']['source'] == APPLICATION, 'Candidate source differs')
+    gates = {**GATES, 46056805703: (expected['head'], '.github/workflows/stage-32-validation.yml')}
+    for run_id, (head, path) in gates.items():
+        run = transport.github('actions/runs/'+str(run_id))
+        require(run['id'] == run_id and run['path'] == path, 'Required workflow differs')
+        verify_gate(run, head)
     identity = transport.aws('sts','get-caller-identity')
     require(identity.get('Arn','').startswith('arn:aws:sts::926642724499:assumed-role/BeautyPlatformPreviewOperations/'),
             'Preview identity differs')
