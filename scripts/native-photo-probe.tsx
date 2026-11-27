@@ -1,4 +1,5 @@
 // CI-only entrypoint. The workflow copies this into an ephemeral simulator app.
+import { iosPhotoEncoder } from "./ios-photo-encoder";
 import { useEffect } from "react";
 import { Text } from "react-native";
 import { File, Paths } from "expo-file-system";
@@ -30,6 +31,8 @@ export default function NativePhotoProbe() {
           oldReadRejected = true;
         }
         mark("actual native file read and JPEG encoder");
+        if (!iosPhotoEncoder)
+          throw new Error("Native iOS photo encoder missing");
         const photo = await prepareDevicePhoto(
           { uri: source.uri, width: 2560, height: 1920 },
           mark,
@@ -81,6 +84,7 @@ export default function NativePhotoProbe() {
             status: "PASS",
             oldReadRejected,
             oldMultipartRejected,
+            encoder: "ImageIO",
             preparedFileRemoved: true,
             sourcePreserved: true,
           }),

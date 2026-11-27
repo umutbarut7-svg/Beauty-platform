@@ -1,3 +1,4 @@
+import { iosPhotoEncoder } from "./ios-photo-encoder";
 import { File, FileMode } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { prepareNativePhoto, type NativePhotoAsset } from "./native-photo";
@@ -38,6 +39,14 @@ export function prepareDevicePhoto(
       }
     },
     async encode(source, size, quality) {
+      if (iosPhotoEncoder) {
+        onStep?.("downsample local image with ImageIO");
+        return iosPhotoEncoder.encode(
+          source.uri,
+          Math.max(size.width, size.height),
+          quality,
+        );
+      }
       onStep?.("create image context");
       const context = ImageManipulator.manipulate(source.uri);
       try {
