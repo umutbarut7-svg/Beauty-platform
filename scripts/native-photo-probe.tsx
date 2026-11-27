@@ -1,4 +1,5 @@
 // CI-only entrypoint. The workflow copies this into an ephemeral simulator app.
+import { iosPhotoEncoder } from "./ios-photo-encoder";
 import { useEffect } from "react";
 import { Text } from "react-native";
 import { File, Paths } from "expo-file-system";
@@ -30,11 +31,12 @@ export default function NativePhotoProbe() {
           oldReadRejected = true;
         }
         mark("actual native file read and JPEG encoder");
-        const photo = await prepareDevicePhoto({
-          uri: source.uri,
-          width: 2560,
-          height: 1920,
-        });
+        if (!iosPhotoEncoder)
+          throw new Error("Native iOS photo encoder missing");
+        const photo = await prepareDevicePhoto(
+          { uri: source.uri, width: 2560, height: 1920 },
+          mark,
+        );
         cleanup = photo.cleanup;
         const api = new MvpApiClient(origin);
         mark("native HTTPS-compatible client login on local fixture server");
@@ -82,11 +84,15 @@ export default function NativePhotoProbe() {
             status: "PASS",
             oldReadRejected,
             oldMultipartRejected,
+            encoder: "ImageIO",
             preparedFileRemoved: true,
             sourcePreserved: true,
           }),
         });
-      } catch {
+      } catch (error) {
+        // Synthetic fixture only: distinguish encoder timeout from rejection.
+        const failure = error instanceof Error ? error.message : String(error);
+        mark(`${step}: ${failure.slice(0, 200)}`);
         await fetch(origin + "/result", {
           method: "POST",
           headers: { "content-type": "application/json" },

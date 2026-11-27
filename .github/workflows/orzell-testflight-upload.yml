@@ -1,4 +1,4 @@
-# Internal TestFlight release for preview run 44529308969. Report the Apple account error code when the profile is unavailable.
+# Internal TestFlight promotion of the reviewed e3bcf6fa application.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -32,6 +32,14 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Verify reviewed mobile source and dependency inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Git tree IDs cover every tracked file below each directory.
+          test "$(git rev-parse HEAD:apps/mobile)" = 7a7cb1f81b3af8f4582fe80f5a37494f269cafce
+          test "$(git rev-parse HEAD:packages)" = 4081b9b251b222050fc253081f2ba7c9b4fe8555
+          test "$(git rev-parse HEAD:pnpm-lock.yaml)" = efac472409cdb4670138843786d99809a9ff30a3
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
