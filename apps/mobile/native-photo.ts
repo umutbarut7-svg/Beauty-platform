@@ -22,6 +22,37 @@ export type NativePhotoIO = {
   remove: (uri: string) => void;
 };
 
+// A stalled native encoder must not leave the picker waiting indefinitely.
+async function encodePhoto(
+  io: NativePhotoIO,
+  asset: NativePhotoAsset,
+  size: { width: number; height: number },
+  quality: number,
+) {
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      io.encode(asset, size, quality).then((output) => {
+        if (expired && output.uri !== asset.uri) io.remove(output.uri);
+        return output;
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          expired = true;
+          reject(
+            new PhotoPreparationError(
+              "Fotoğraf hazırlama süresi doldu. Başka bir fotoğraf seçin.",
+            ),
+          );
+        }, 60000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Validate the actual local files, not the picker's optional MIME/size hints.
 // Preparation finishes before any existing consent/session is replaced.
 export async function prepareNativePhoto(
@@ -46,8 +77,9 @@ export async function prepareNativePhoto(
   for (const quality of [0.85, 0.7, 0.55]) {
     let output: NativePhotoAsset;
     try {
-      output = await io.encode(asset, size, quality);
-    } catch {
+      output = await encodePhoto(io, asset, size, quality);
+    } catch (error) {
+      if (error instanceof PhotoPreparationError) throw error;
       throw new PhotoPreparationError(
         "Fotoğraf açılamadı. Başka bir fotoğraf seçin.",
       );

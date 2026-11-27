@@ -30,11 +30,10 @@ export default function NativePhotoProbe() {
           oldReadRejected = true;
         }
         mark("actual native file read and JPEG encoder");
-        const photo = await prepareDevicePhoto({
-          uri: source.uri,
-          width: 2560,
-          height: 1920,
-        });
+        const photo = await prepareDevicePhoto(
+          { uri: source.uri, width: 2560, height: 1920 },
+          mark,
+        );
         cleanup = photo.cleanup;
         const api = new MvpApiClient(origin);
         mark("native HTTPS-compatible client login on local fixture server");

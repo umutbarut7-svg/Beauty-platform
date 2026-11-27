@@ -3,10 +3,14 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { prepareNativePhoto, type NativePhotoAsset } from "./native-photo";
 import { MAX_SOURCE_BYTES, PhotoPreparationError } from "./photo-upload";
 
-export function prepareDevicePhoto(asset: NativePhotoAsset) {
+export function prepareDevicePhoto(
+  asset: NativePhotoAsset,
+  onStep?: (step: string) => void,
+) {
   return prepareNativePhoto(asset, {
     async inspect(uri) {
       try {
+        onStep?.(uri === asset.uri ? "inspect source" : "inspect JPEG");
         const file = new File(uri);
         const size = file.size;
         if (
@@ -34,11 +38,14 @@ export function prepareDevicePhoto(asset: NativePhotoAsset) {
       }
     },
     async encode(source, size, quality) {
+      onStep?.("create image context");
       const context = ImageManipulator.manipulate(source.uri);
       try {
         context.resize(size);
+        onStep?.("render resized image");
         const image = await context.renderAsync();
         try {
+          onStep?.("save JPEG");
           return await image.saveAsync({
             format: SaveFormat.JPEG,
             compress: quality,
