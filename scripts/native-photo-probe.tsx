@@ -85,7 +85,10 @@ export default function NativePhotoProbe() {
             sourcePreserved: true,
           }),
         });
-      } catch {
+      } catch (error) {
+        // Synthetic fixture only: distinguish encoder timeout from rejection.
+        const failure = error instanceof Error ? error.message : String(error);
+        mark(`${step}: ${failure.slice(0, 200)}`);
         await fetch(origin + "/result", {
           method: "POST",
           headers: { "content-type": "application/json" },
