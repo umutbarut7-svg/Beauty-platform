@@ -2,6 +2,9 @@ import copy
 import importlib.util
 from pathlib import Path
 import sys
+import json
+import tempfile
+from unittest.mock import patch
 import unittest
 
 
@@ -25,21 +28,53 @@ class ReleaseTests(unittest.TestCase):
         self.assertLessEqual(len(dispatch.transport.envelope(dispatch.bundle(), release, 'x'*1500)), 24000)
         compile(dispatch.bundle(), 'reviewed-release', 'exec')
 
-    def test_pilot_keeps_existing_origins_and_changes_only_selected_service(self):
-        env = {'CORS_ORIGINS': 'https://old.test', 'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED':'false'}
-        baseline = {'services': {'api': {'environment':env}, 'worker': {'image':'old'}}}
+    def test_pilot_changes_only_image_and_rejects_booking_or_cors_drift(self):
+        env = {'CORS_ORIGINS': 'https://old.test,'+publish.ORIGIN,
+               'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED': publish.PILOT}
+        baseline = {'services': {'api': {'environment':env, 'image':'old'},
+                                  'worker': {'image':'old'}}}
         prior = copy.deepcopy(baseline)
         candidate, overlay = publish.candidate_config(baseline,'api',{'api':'new'})
         self.assertEqual(baseline,prior)
-        self.assertEqual(candidate['services']['worker'], prior['services']['worker'])
-        delta = overlay['services']['api']['environment']
-        self.assertEqual(delta['CORS_ORIGINS'], 'https://old.test,https://links.orzell.app')
-        self.assertEqual(delta['ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED'],
-                         'cmvjkv2uz001tqa0jc72r3rl4/cmw1wwm6u0009nx0jc6v3k4cr')
+        prior['services']['api']['image'] = 'new'
+        self.assertEqual(candidate,prior)
+        self.assertEqual(overlay, {'services': {'api': {'image':'new'}}})
         with self.assertRaises(ops.Stop):
             publish.candidate_config(baseline,'worker',{'worker':'new'})
-        with self.assertRaises(ops.Stop):
-            publish.candidate_config(candidate,'api',{'api':'new'})
+        for key, value in [('CORS_ORIGINS','https://old.test'),
+                           ('ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED','true')]:
+            with self.subTest(key=key), self.assertRaises(ops.Stop):
+                drift = copy.deepcopy(baseline)
+                drift['services']['api']['environment'][key] = value
+                publish.candidate_config(drift,'api',{'api':'new'})
+
+    def test_failed_pilot_probe_restores_both_images_in_reverse_order(self):
+        manifest = {'api':'new-api','admin':'new-admin'}
+        before = {key:{'Image':value} for key,value in publish.PREVIOUS.items()}
+        commands = []
+        def run(args):
+            if args[:3] == ['docker','image','inspect']:
+                return json.dumps([{'Id':args[-1]}])
+            service = args[0]
+            image = manifest[service] if '-f' in args else publish.PREVIOUS[service]
+            return json.dumps({'services':{service:{'image':image,'environment':{
+                'ORZELL_EVERYWHERE_WEB_BOOKING_ENABLED':publish.PILOT,
+                'CORS_ORIGINS':publish.ORIGIN}}}})
+        def check(decorated=True):
+            if decorated:
+                raise ops.Stop('Simulated acceptance failure')
+        with tempfile.TemporaryDirectory() as root, patch.multiple(
+                publish, ROOT=Path(root), WORK=Path(root)/'release',
+                load_images=lambda *_:None, up=lambda command, service:commands.append((service,'-f' in command)),
+                check_pilot=check), patch.multiple(
+                    ops, snapshot=lambda:before, ready=lambda:None, wait_ready=lambda:None,
+                    compose=lambda container:[next(k for k,v in before.items() if v is container)],
+                    run=run, inspect=lambda _:{}, verify_runtime=lambda *_:None,
+                    verify_others=lambda *_:None), patch.object(publish.time,'sleep'):
+            with self.assertRaisesRegex(ops.Stop,'Simulated acceptance failure'):
+                publish.publish({'manifest':manifest},'',None)
+            self.assertFalse(publish.WORK.exists())
+        self.assertEqual(commands,[('api',True),('admin',True),('admin',False),('api',False)])
 
     def test_acceptance_reads_visible_text_with_react_markers(self):
         page = publish.RenderedText()
