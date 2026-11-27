@@ -43,7 +43,14 @@ export function prepareDevicePhoto(
       try {
         context.resize(size);
         onStep?.("render resized image");
-        const image = await context.renderAsync();
+        const image = await context.renderAsync().catch((error: unknown) => {
+          // Expose native rejection details only to the optional probe callback.
+          if (onStep) {
+            const reason = error instanceof Error ? error.message : String(error);
+            onStep(`render rejected: ${reason.slice(0, 160)}`);
+          }
+          throw error;
+        });
         try {
           onStep?.("save JPEG");
           return await image.saveAsync({
