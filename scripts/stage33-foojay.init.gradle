@@ -1,5 +1,9 @@
 // Resolve these pinned Foojay artifacts at their publisher before general repositories.
 gradle.beforeSettings { settings ->
+    def directory = settings.settingsDir
+    if (directory.name != 'gradle-plugin' || directory.parentFile.name != '@react-native') {
+        return
+    }
     settings.pluginManagement.repositories.gradlePluginPortal {
         name = 'orzellFoojayPluginPortal'
         content {
