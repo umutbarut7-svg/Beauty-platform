@@ -80,3 +80,23 @@ export class UpdateCustomerTagDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(80) name?: string;
   @IsOptional() @IsString() @Matches(/^#[0-9A-Fa-f]{6}$/) color?: string;
 }
+
+export const CUSTOMER_ACTIVITY_SECTIONS = [
+  "appointments",
+  "services",
+  "payments",
+  "operations",
+] as const;
+
+export type CustomerActivitySection =
+  (typeof CUSTOMER_ACTIVITY_SECTIONS)[number];
+
+export class CustomerActivityQueryDto {
+  @IsIn(CUSTOMER_ACTIVITY_SECTIONS) section!: CustomerActivitySection;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 25;
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  @Matches(/^[A-Za-z0-9_-]+$/)
+  cursor?: string;
+}

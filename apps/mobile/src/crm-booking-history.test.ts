@@ -2,7 +2,10 @@ import { MvpApiClient } from "@beauty-platform/types";
 import { describe, expect, it } from "vitest";
 import {
   businessBookingEmail,
-  readAppointmentCustomers,
+  customerPaymentAmount,
+  listBusinessCustomers,
+  readCustomerActivity,
+  readCustomerAppointment,
   readBusinessCustomer,
   type BusinessBooking,
 } from "./business-customers";
@@ -26,29 +29,108 @@ function client(payload: unknown, path: string) {
 }
 
 describe("CRM appointment history", () => {
-  it("reads the selected business and groups real unlinked bookings by account ID", async () => {
-    const rows = [
-      booking,
-      { ...booking, id: "appointment-2" },
-      { ...booking, id: "appointment-3", businessCustomerId: "profile-a" },
-      { ...booking, id: "appointment-4", businessId: "salon-b" },
-      { ...booking, id: "appointment-5", customer: { id: "account-b" } },
+  it("lists imported and booking-backed profiles in a single search result", async () => {
+    const items = [
+      { id: "profile-a", businessId: "salon-a", firstName: "Ada" },
+      {
+        id: "profile-b",
+        businessId: "salon-a",
+        accountEmail: "ada.scholar@example.test",
+      },
     ];
-    const result = await readAppointmentCustomers(
-      client(rows, "/businesses/salon-a/appointments"),
-      "salon-a",
-      "ADA@",
+    await expect(
+      listBusinessCustomers(
+        client(
+          { items, page: 1, pages: 1 },
+          "/businesses/salon-a/customers?page=1&limit=25&search=Ada",
+        ),
+        "salon-a",
+        "Ada",
+        1,
+      ),
+    ).resolves.toMatchObject({ items });
+  });
+
+  const linked = { ...booking, businessCustomerId: "profile-a" };
+  const customerPath = "/businesses/salon-a/customers/profile-a";
+
+  it("passes the next page cursor only to the selected customer and history", async () => {
+    const path =
+      customerPath + "/activity?section=appointments&cursor=next-page";
+    await expect(
+      readCustomerActivity(
+        client({ items: [linked], nextCursor: null }, path),
+        "salon-a",
+        "profile-a",
+        "appointments",
+        "next-page",
+      ),
+    ).resolves.toEqual({ items: [linked], nextCursor: null });
+  });
+
+  it("rejects cross-customer rows and foreign appointment references", async () => {
+    const path = customerPath + "/activity?section=operations";
+    await expect(
+      readCustomerActivity(
+        client(
+          {
+            items: [
+              {
+                id: "event",
+                businessId: "salon-a",
+                appointment: { ...linked, businessCustomerId: "profile-b" },
+              },
+            ],
+            nextCursor: null,
+          },
+          path,
+        ),
+        "salon-a",
+        "profile-a",
+        "operations",
+      ),
+    ).rejects.toThrow("scope mismatch");
+    await expect(
+      readCustomerAppointment(
+        client(
+          { ...linked, id: "different" },
+          customerPath + "/appointments/appointment-1",
+        ),
+        "salon-a",
+        "profile-a",
+        "appointment-1",
+      ),
+    ).rejects.toThrow("scope mismatch");
+  });
+
+  it("formats actual ledger amounts with the configured precision", async () => {
+    const payment = {
+      id: "receipt",
+      businessId: "salon-a",
+      businessCustomerId: "profile-a",
+      appointmentId: linked.id,
+      serviceName: "Saç kesimi",
+      type: "CHARGE" as const,
+      amountMinor: "900719925474099301",
+      currency: "TRY",
+      minorUnit: 2,
+      createdAt: booking.startsAt,
+    };
+    await expect(
+      readCustomerActivity(
+        client(
+          { items: [payment], nextCursor: null },
+          customerPath + "/activity?section=payments",
+        ),
+        "salon-a",
+        "profile-a",
+        "payments",
+      ),
+    ).resolves.toMatchObject({ items: [payment] });
+    expect(customerPaymentAmount(payment)).toBe("9007199254740993,01 TRY");
+    expect(customerPaymentAmount({ ...payment, minorUnit: null })).toBe(
+      "900719925474099301 TRY (alt birim)",
     );
-    expect(result).toEqual({
-      limited: false,
-      items: [
-        {
-          id: "account-a",
-          email: "ada@example.test",
-          appointments: rows.slice(0, 2),
-        },
-      ],
-    });
   });
 
   it("never shows a booking contact from a different business", () => {

@@ -9,6 +9,8 @@ export type BusinessCustomer = {
   alternateEmail?: string | null;
   email?: string | null;
   phone?: string | null;
+  notes?: string | null;
+  tags?: Array<{ tag: { id: string; name: string } }>;
 };
 
 type CustomerPage = { items: BusinessCustomer[]; page: number; pages: number };
@@ -19,6 +21,11 @@ export type CustomerDetail = {
   summary: {
     completedAppointments: number;
     upcomingAppointments: number;
+    totalAppointments?: number;
+    cancelledAppointments?: number;
+    noShowAppointments?: number;
+    lastVisitAt?: string | null;
+    nextAppointmentAt?: string | null;
     completedValuesByCurrency?: Array<{
       currency: string;
       completedAppointmentValue: string | null;
@@ -72,34 +79,122 @@ export function businessBookingEmail(
   return item.customer.user?.email?.trim() || null;
 }
 
-export async function readAppointmentCustomers(
+export type CustomerActivitySection =
+  "appointments" | "services" | "payments" | "operations";
+
+export type CustomerAppointment = MvpBooking & {
+  businessCustomerId: string;
+  endsAt: string;
+  location: { name: string } | null;
+  staff: { displayName: string } | null;
+};
+
+type AppointmentReference = {
+  id: string;
+  businessId: string;
+  businessCustomerId: string;
+  service: { name: string };
+};
+
+type CustomerPayment = {
+  id: string;
+  businessId: string;
+  businessCustomerId: string;
+  appointmentId: string;
+  serviceName: string;
+  type: "CHARGE" | "REFUND";
+  amountMinor: string;
+  currency: string;
+  minorUnit: number | null;
+  createdAt: string;
+};
+
+type CustomerOperation = {
+  id: string;
+  businessId: string;
+  appointment: AppointmentReference;
+  changedAt: string;
+  fromStatus: string | null;
+  toStatus: string;
+};
+
+export type CustomerActivityItem =
+  CustomerAppointment | CustomerPayment | CustomerOperation;
+type ActivityPage = {
+  items: CustomerActivityItem[];
+  nextCursor: string | null;
+};
+
+function customerPath(businessId: string, customerId: string) {
+  return `/businesses/${encodeURIComponent(businessId)}/customers/${encodeURIComponent(customerId)}`;
+}
+
+function belongsTo(
+  row: { businessId: string; businessCustomerId?: string | null },
+  businessId: string,
+  customerId: string,
+) {
+  return row.businessId === businessId && row.businessCustomerId === customerId;
+}
+
+export async function readCustomerActivity(
   api: Pick<MvpApiClient, "request">,
   businessId: string,
-  search: string,
+  customerId: string,
+  section: CustomerActivitySection,
+  cursor?: string,
 ) {
-  const path = `/businesses/${encodeURIComponent(businessId)}/appointments`;
-  const rows = await api.request<BusinessBooking[]>(path);
-  const query = search.toLocaleLowerCase("tr-TR");
-  const customers = new Map<
-    string,
-    { id: string; email: string; appointments: MvpBooking[] }
-  >();
-  for (const item of rows) {
-    const email = businessBookingEmail(item, businessId);
-    const id = item.customer?.id;
-    if (
-      !id ||
-      !email ||
-      item.businessCustomerId ||
-      !email.toLocaleLowerCase("tr-TR").includes(query)
-    )
-      continue;
-    const existing = customers.get(id);
-    if (existing) {
-      existing.appointments.push(item);
-    } else {
-      customers.set(id, { id, email, appointments: [item] });
-    }
-  }
-  return { items: [...customers.values()], limited: rows.length >= 200 };
+  const query = new URLSearchParams({ section });
+  if (cursor) query.set("cursor", cursor);
+  const page = await api.request<ActivityPage>(
+    `${customerPath(businessId, customerId)}/activity?${query}`,
+  );
+  if (
+    page.items.some((row) => {
+      if (row.businessId !== businessId) return true;
+      if (section === "operations")
+        return !(
+          "appointment" in row &&
+          belongsTo(row.appointment, businessId, customerId)
+        );
+      if ("appointment" in row || !belongsTo(row, businessId, customerId))
+        return true;
+      return (section === "payments") !== "appointmentId" in row;
+    })
+  )
+    throw new Error("Customer activity scope mismatch");
+  return page;
+}
+
+export async function readCustomerAppointment(
+  api: Pick<MvpApiClient, "request">,
+  businessId: string,
+  customerId: string,
+  appointmentId: string,
+) {
+  const row = await api.request<CustomerAppointment>(
+    `${customerPath(businessId, customerId)}/appointments/${encodeURIComponent(appointmentId)}`,
+  );
+  if (!belongsTo(row, businessId, customerId) || row.id !== appointmentId)
+    throw new Error("Customer appointment scope mismatch");
+  return row;
+}
+
+export function customerPaymentAmount({
+  amountMinor,
+  currency,
+  minorUnit,
+}: CustomerPayment) {
+  if (!/^\d+$/.test(amountMinor) || !/^[A-Z]{3}$/.test(currency))
+    return "Tutar alınamadı";
+  if (
+    minorUnit === null ||
+    !Number.isInteger(minorUnit) ||
+    minorUnit < 0 ||
+    minorUnit > 6
+  )
+    return `${amountMinor} ${currency} (alt birim)`;
+  if (minorUnit === 0) return `${amountMinor} ${currency}`;
+  const digits = amountMinor.padStart(minorUnit + 1, "0");
+  return `${digits.slice(0, -minorUnit)},${digits.slice(-minorUnit)} ${currency}`;
 }

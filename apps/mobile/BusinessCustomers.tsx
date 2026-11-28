@@ -1,14 +1,36 @@
 import { useState, type ReactNode } from "react";
 import { View } from "react-native";
-import type { MvpApiClient, MvpBooking } from "@beauty-platform/types";
+import { ApiError, type MvpApiClient } from "@beauty-platform/types";
 import { AppText as Text, formatPrice, palette, statusLabels } from "./ui";
 import {
+  customerPaymentAmount,
   listBusinessCustomers,
   readBusinessCustomer,
-  readAppointmentCustomers,
+  readCustomerActivity,
+  readCustomerAppointment,
   type BusinessCustomer,
+  type CustomerActivityItem,
+  type CustomerActivitySection,
+  type CustomerAppointment,
   type CustomerDetail,
 } from "./src/business-customers";
+
+type ActionButton = (
+  label: string,
+  action: () => Promise<void>,
+  secondary?: boolean,
+) => ReactNode;
+
+const sections: Array<[CustomerActivitySection, string, string]> = [
+  ["appointments", "Randevular", "Randevu kaydı bulunamadı."],
+  ["services", "Alınan hizmetler", "Tamamlanan hizmet kaydı bulunamadı."],
+  [
+    "payments",
+    "Tahsilatlar ve iadeler",
+    "Randevuya bağlı tahsilat veya iade kaydı bulunamadı.",
+  ],
+  ["operations", "İşlem geçmişi", "Randevu durum değişikliği bulunamadı."],
+];
 
 function customerLabel(customer: BusinessCustomer) {
   return (
@@ -21,19 +43,177 @@ function customerLabel(customer: BusinessCustomer) {
   );
 }
 
-function AppointmentHistory({ items }: { items: MvpBooking[] }) {
-  return (
-    <View>
-      <Text style={{ fontWeight: "700" }}>Son randevular</Text>
-      {!items.length && <Text>Randevu kaydı bulunamadı.</Text>}
-      {items.map((item) => (
-        <Text key={item.id}>
-          {item.service.name} ·{" "}
-          {new Date(item.startsAt).toLocaleString("tr-TR")} ·{" "}
-          {statusLabels[item.status] ?? "Durum bilgisi alınamadı"}
+const date = (value: string) => new Date(value).toLocaleString("tr-TR");
+const status = (value: string) =>
+  statusLabels[value] ?? "Durum bilgisi alınamadı";
+
+function activityLabel(item: CustomerActivityItem) {
+  if ("appointment" in item)
+    return `${item.appointment.service.name} · ${date(item.changedAt)} · ${item.fromStatus ? `${status(item.fromStatus)} → ` : ""}${status(item.toStatus)}`;
+  if ("appointmentId" in item)
+    return `${item.serviceName} · ${date(item.createdAt)} · ${item.type === "REFUND" ? "İade" : "Tahsilat"} · ${customerPaymentAmount(item)}`;
+  return `${item.service.name} · ${date(item.startsAt)} · ${status(item.status)}`;
+}
+
+function CustomerCard({
+  api,
+  businessId,
+  detail,
+  button,
+  back,
+}: {
+  api: MvpApiClient;
+  businessId: string;
+  detail: CustomerDetail;
+  button: ActionButton;
+  back: () => void;
+}) {
+  const { customer, summary } = detail;
+  const [selected, setSelected] = useState<CustomerAppointment | null>(null);
+  const [activity, setActivity] = useState<{
+    section: CustomerActivitySection;
+    items: CustomerActivityItem[];
+    nextCursor: string | null;
+  } | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function load(section: CustomerActivitySection, cursor?: string) {
+    setMessage("");
+    if (!cursor) setActivity(null);
+    try {
+      const page = await readCustomerActivity(
+        api,
+        businessId,
+        customer.id,
+        section,
+        cursor,
+      );
+      setActivity((previous) => {
+        const items =
+          cursor && previous?.section === section
+            ? [
+                ...previous.items,
+                ...page.items.filter(
+                  (item) => !previous.items.some(({ id }) => id === item.id),
+                ),
+              ]
+            : page.items;
+        return { section, items, nextCursor: page.nextCursor };
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        setMessage("Bu geçmişi görüntüleme yetkiniz yok.");
+        return;
+      }
+      throw error;
+    }
+  }
+
+  if (selected)
+    return (
+      <>
+        {button("Müşteri kartına dön", async () => setSelected(null), true)}
+        <Text style={{ fontSize: 20, fontWeight: "700" }}>
+          {selected.service.name}
         </Text>
+        <Text>
+          {status(selected.status)} · {date(selected.startsAt)} –{" "}
+          {date(selected.endsAt)}
+        </Text>
+        {selected.location && <Text>Konum: {selected.location.name}</Text>}
+        {selected.staff && <Text>Uzman: {selected.staff.displayName}</Text>}
+        <Text>
+          Randevu tutarı: {formatPrice(selected.price, selected.currency)}
+        </Text>
+      </>
+    );
+
+  return (
+    <>
+      {button("Müşteri listesine dön", async () => back(), true)}
+      <Text style={{ fontSize: 20, fontWeight: "700" }}>
+        {customerLabel(customer)}
+      </Text>
+      {customer.phone && <Text>{customer.phone}</Text>}
+      {customer.email && <Text>{customer.email}</Text>}
+      {customer.accountEmail && customer.accountEmail !== customer.email && (
+        <Text>{customer.accountEmail}</Text>
+      )}
+      {customer.alternateEmail && (
+        <Text>Alternatif e-posta: {customer.alternateEmail}</Text>
+      )}
+      {!!customer.tags?.length && (
+        <Text>
+          Etiketler: {customer.tags.map(({ tag }) => tag.name).join(", ")}
+        </Text>
+      )}
+      {customer.notes && <Text>Profil notu: {customer.notes}</Text>}
+      {summary.totalAppointments !== undefined && (
+        <Text>Toplam randevu: {summary.totalAppointments}</Text>
+      )}
+      <Text>Tamamlanan randevular: {summary.completedAppointments}</Text>
+      <Text>Yaklaşan randevular: {summary.upcomingAppointments}</Text>
+      {summary.lastVisitAt && (
+        <Text>Son ziyaret: {date(summary.lastVisitAt)}</Text>
+      )}
+      {summary.nextAppointmentAt && (
+        <Text>Sonraki randevu: {date(summary.nextAppointmentAt)}</Text>
+      )}
+      {summary.completedValuesByCurrency?.map(
+        ({ currency, completedAppointmentValue }) =>
+          completedAppointmentValue !== null && (
+            <Text key={currency}>
+              Tamamlanan randevu tutarı:{" "}
+              {formatPrice(completedAppointmentValue, currency)}
+            </Text>
+          ),
+      )}
+      {sections.map(([section, label]) => (
+        <View key={section}>
+          {button(label, () => load(section), activity?.section !== section)}
+        </View>
       ))}
-    </View>
+      {!!message && <Text accessibilityRole="alert">{message}</Text>}
+      {activity && (
+        <>
+          {!activity.items.length && (
+            <Text>
+              {sections.find(([section]) => section === activity.section)?.[2]}
+            </Text>
+          )}
+          {activity.items.map((item) => (
+            <View key={item.id}>
+              {button(
+                activityLabel(item),
+                async () => {
+                  const appointmentId =
+                    "appointment" in item
+                      ? item.appointment.id
+                      : "appointmentId" in item
+                        ? item.appointmentId
+                        : item.id;
+                  setSelected(
+                    await readCustomerAppointment(
+                      api,
+                      businessId,
+                      customer.id,
+                      appointmentId,
+                    ),
+                  );
+                },
+                true,
+              )}
+            </View>
+          ))}
+          {activity.nextCursor &&
+            button(
+              "Daha fazla göster",
+              () => load(activity.section, activity.nextCursor ?? undefined),
+              true,
+            )}
+        </>
+      )}
+    </>
   );
 }
 
@@ -45,11 +225,7 @@ export function BusinessCustomers({
 }: {
   api: MvpApiClient;
   businessId: string;
-  button: (
-    label: string,
-    action: () => Promise<void>,
-    secondary?: boolean,
-  ) => ReactNode;
+  button: ActionButton;
   input: (
     label: string,
     value: string,
@@ -62,72 +238,25 @@ export function BusinessCustomers({
     ReturnType<typeof listBusinessCustomers>
   > | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
-  type AppointmentCustomers = Awaited<
-    ReturnType<typeof readAppointmentCustomers>
-  >;
-  const [appointmentCustomers, setAppointmentCustomers] =
-    useState<AppointmentCustomers | null>(null);
-  const [appointmentCustomer, setAppointmentCustomer] = useState<
-    AppointmentCustomers["items"][number] | null
-  >(null);
   const [message, setMessage] = useState("");
   async function load(query: string, page = 1) {
     setMessage("");
-    setDetail(null);
-    setAppointmentCustomers(null);
-    setAppointmentCustomer(null);
-    setResult(null);
     const value = await listBusinessCustomers(api, businessId, query, page);
     setApplied(query);
     setResult(value);
   }
 
-  if (appointmentCustomer) {
+  if (detail)
     return (
-      <>
-        {button(
-          "Müşteri listesine dön",
-          async () => setAppointmentCustomer(null),
-          true,
-        )}
-        <Text style={{ fontSize: 20, fontWeight: "700" }}>
-          {appointmentCustomer.email}
-        </Text>
-        <AppointmentHistory items={appointmentCustomer.appointments} />
-      </>
+      <CustomerCard
+        key={detail.customer.id}
+        api={api}
+        businessId={businessId}
+        detail={detail}
+        button={button}
+        back={() => setDetail(null)}
+      />
     );
-  }
-
-  if (detail) {
-    const { customer, summary } = detail;
-    return (
-      <>
-        {button("Müşteri listesine dön", async () => setDetail(null), true)}
-        <Text style={{ fontSize: 20, fontWeight: "700" }}>
-          {customerLabel(customer)}
-        </Text>
-        {customer.phone && <Text>{customer.phone}</Text>}
-        {(customer.email || customer.accountEmail) && (
-          <Text>{customer.email || customer.accountEmail}</Text>
-        )}
-        {customer.alternateEmail && <Text>{customer.alternateEmail}</Text>}
-        <Text>Tamamlanan randevular: {summary.completedAppointments}</Text>
-        <Text>Yaklaşan randevular: {summary.upcomingAppointments}</Text>
-        {summary.completedValuesByCurrency?.map(
-          ({ currency, completedAppointmentValue }) =>
-            completedAppointmentValue !== null && (
-              <Text key={currency}>
-                Tamamlanan randevu tutarı:{" "}
-                {formatPrice(completedAppointmentValue, currency)}
-              </Text>
-            ),
-        )}
-        {summary && (
-          <AppointmentHistory items={detail.recentAppointments ?? []} />
-        )}
-      </>
-    );
-  }
 
   return (
     <>
@@ -146,39 +275,6 @@ export function BusinessCustomers({
       {!!message && <Text accessibilityRole="alert">{message}</Text>}
       {result && !result.items.length && (
         <Text style={{ color: palette.muted }}>Müşteri kaydı bulunamadı.</Text>
-      )}
-      {result &&
-        !appointmentCustomers &&
-        button(
-          "Randevulardan müşterileri getir",
-          async () => {
-            setAppointmentCustomers(
-              await readAppointmentCustomers(api, businessId, applied),
-            );
-          },
-          true,
-        )}
-      {appointmentCustomers && (
-        <View>
-          <Text style={{ fontWeight: "700" }}>
-            CRM profili bağlanmamış randevu müşterileri
-          </Text>
-          {appointmentCustomers.limited && (
-            <Text>Arama son 200 randevuyla sınırlı.</Text>
-          )}
-          {!appointmentCustomers.items.length && (
-            <Text>Eşleşen randevu müşterisi bulunamadı.</Text>
-          )}
-          {appointmentCustomers.items.map((item) => (
-            <View key={item.id}>
-              {button(
-                item.email,
-                async () => setAppointmentCustomer(item),
-                true,
-              )}
-            </View>
-          ))}
-        </View>
       )}
       {result?.items.map((customer) => (
         <View key={customer.id}>
