@@ -1,4 +1,4 @@
-# Internal TestFlight candidate with the business customer CRM screen.
+# Internal TestFlight candidate with CRM appointment history.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           # Git tree IDs cover every tracked file below each directory.
-          test "$(git rev-parse HEAD:apps/mobile)" = cace8187bf63cfd7ea84e05070dd66d71ca168ee
+          test "$(git rev-parse HEAD:apps/mobile)" = d673d28e4ef3e203365f12b91dda6bdb37f3883f
           test "$(git rev-parse HEAD:packages)" = 4081b9b251b222050fc253081f2ba7c9b4fe8555
           test "$(git rev-parse HEAD:pnpm-lock.yaml)" = efac472409cdb4670138843786d99809a9ff30a3
       - name: Set up pnpm
