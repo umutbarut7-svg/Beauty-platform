@@ -734,8 +734,10 @@ model BusinessCustomer {
   id                      String                      @id @default(cuid())
   businessId              String
   userCustomerId          String?
-  firstName               String
-  lastName                String
+  firstName               String?
+  lastName                String?
+  bookingProfile          Boolean                     @default(false)
+  alternateEmail          String?
   phone                   String?
   email                   String?
   birthDate               DateTime?                   @db.Date

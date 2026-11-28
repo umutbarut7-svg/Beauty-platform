@@ -24,10 +24,14 @@ function fixture(
     overlap?: boolean;
     unavailable?: boolean;
     ownerCustomer?: boolean;
+    profiles?: Array<Record<string, unknown>>;
+    profileRace?: boolean;
   } = {},
 ) {
   let listWhere: any;
   const history: any[] = [];
+  const profiles = options.profiles ?? [];
+  let profileRace = options.profileRace;
   const appointment = {
     id: "appointment",
     businessId: "business",
@@ -63,9 +67,33 @@ function fixture(
             : null,
     },
     businessCustomer: {
-      findFirst: async () => null,
-      create: async ({ data }: any) => ({ id: "business-customer", ...data }),
-      update: async ({ where, data }: any) => ({ id: where.id, ...data }),
+      findFirst: async ({ where }: any) =>
+        profiles.find((profile) =>
+          Object.entries(where).every(([key, value]) => profile[key] === value),
+        ),
+      create: async ({ data }: any) => {
+        const row = { id: "business-customer", ...data };
+        profiles.push(row);
+        if (profileRace) {
+          profileRace = false;
+          throw {
+            code: "P2002",
+            meta: { target: ["businessId", "userCustomerId"] },
+          };
+        }
+        return row;
+      },
+      update: async ({ where, data }: any) => {
+        const profile = profiles.find(
+          (candidate) =>
+            candidate.businessId === where.businessId_id.businessId &&
+            candidate.id === where.businessId_id.id,
+        );
+        if (!profile) throw new Error("unexpected CRM profile update");
+        for (const [key, value] of Object.entries(data))
+          if (value !== undefined) profile[key] = value;
+        return profile;
+      },
     },
     appointment: {
       findMany: async ({ where }: any) => {
@@ -73,7 +101,7 @@ function fixture(
         return [];
       },
       findFirst: async ({ where }: any) =>
-        where.id === "appointment" &&
+        (where.id === undefined || where.id === "appointment") &&
         where.businessId === "business" &&
         (where.customerId === undefined ||
           where.customerId === appointment.customerId) &&
@@ -153,6 +181,7 @@ function fixture(
     getListWhere: () => listWhere,
     appointment,
     history,
+    profiles,
   };
 }
 
@@ -186,6 +215,102 @@ describe("AppointmentsService", () => {
       status: "PENDING",
     });
   });
+  const booking = {
+    serviceId: "service",
+    locationId: "location",
+    staffMemberId: "staff-member",
+    startsAt: "2030-01-07T10:00:00.000Z",
+  };
+
+  it("persists one tenant profile for unaided bookings without inventing contact data", async () => {
+    const { service, profiles } = fixture();
+    for (let index = 0; index < 2; index++) {
+      await expect(
+        service.create(customerUser, "business", booking),
+      ).resolves.toMatchObject({ businessCustomerId: "business-customer" });
+    }
+    expect(profiles).toEqual([
+      expect.objectContaining({
+        businessId: "business",
+        userCustomerId: "customer",
+        bookingProfile: true,
+        firstName: undefined,
+        lastName: undefined,
+        phone: undefined,
+        email: undefined,
+        marketingConsent: false,
+      }),
+    ]);
+  });
+
+  it("does not adopt another tenant's profile or allow a manager to enroll an unrelated account", async () => {
+    const otherTenant = {
+      id: "other-profile",
+      businessId: "other",
+      userCustomerId: "customer",
+      bookingProfile: true,
+    };
+    const { service, profiles } = fixture({ profiles: [otherTenant] });
+    await expect(
+      service.create(owner, "other", { ...booking, customerId: "customer" }),
+    ).rejects.toThrow("Customer not found in this business");
+    await expect(
+      service.create(customerUser, "business", booking),
+    ).resolves.toMatchObject({ businessCustomerId: "business-customer" });
+    expect(profiles[0]).toEqual(otherTenant);
+  });
+
+  it("reuses the concurrent CRM profile after a unique identity collision", async () => {
+    const { service, profiles, history } = fixture({ profileRace: true });
+    await expect(
+      service.create(customerUser, "business", booking),
+    ).resolves.toMatchObject({ businessCustomerId: "business-customer" });
+    expect(profiles).toHaveLength(1);
+    expect(history).toHaveLength(1);
+  });
+
+  it("fills missing profile fields without overwriting CRM values or adopting a contact-only record", async () => {
+    const profiles = [
+      {
+        id: "manual",
+        businessId: "business",
+        email: "contact@example.test",
+        firstName: "Manual",
+      },
+      {
+        id: "canonical",
+        businessId: "business",
+        userCustomerId: "customer",
+        bookingProfile: true,
+        firstName: "Existing",
+        email: "existing@example.test",
+        marketingConsent: false,
+      },
+    ];
+    const { service } = fixture({ profiles });
+    await expect(
+      service.create(customerUser, "business", {
+        ...booking,
+        customerProfile: {
+          firstName: "Changed",
+          lastName: "Lovelace",
+          email: "contact@example.test",
+          marketingConsent: true,
+        },
+      }),
+    ).resolves.toMatchObject({ businessCustomerId: "canonical" });
+    expect(profiles).toEqual([
+      expect.objectContaining({ id: "manual", firstName: "Manual" }),
+      expect.objectContaining({
+        id: "canonical",
+        firstName: "Existing",
+        lastName: "Lovelace",
+        email: "existing@example.test",
+        marketingConsent: false,
+      }),
+    ]);
+  });
+
   it("prevents customers from spoofing another customer", async () => {
     await expect(
       fixture().service.create(customerUser, "business", {

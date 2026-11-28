@@ -22,6 +22,7 @@ export class CreateBusinessCustomerDto {
   @IsString() @MinLength(1) @MaxLength(100) lastName!: string;
   @IsOptional() @IsString() @Matches(PHONE) phone?: string;
   @IsOptional() @IsEmail() @MaxLength(254) email?: string;
+  @IsOptional() @IsEmail() @MaxLength(254) alternateEmail?: string;
   @IsOptional() @IsDateString({ strict: true }) birthDate?: string;
   @IsOptional() @IsIn(GENDERS) gender?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
@@ -36,6 +37,7 @@ export class UpdateBusinessCustomerDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(100) lastName?: string;
   @IsOptional() @IsString() @Matches(PHONE) phone?: string;
   @IsOptional() @IsEmail() @MaxLength(254) email?: string;
+  @IsOptional() @IsEmail() @MaxLength(254) alternateEmail?: string;
   @IsOptional() @IsDateString({ strict: true }) birthDate?: string;
   @IsOptional() @IsIn(GENDERS) gender?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;

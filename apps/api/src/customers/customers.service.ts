@@ -65,8 +65,14 @@ export class CustomersService {
       businessId,
       "customer:read",
     );
-    const search = query.search?.trim();
-    const normalizedPhone = search ? normalizePhone(search) : undefined;
+    const search = query.search?.trim().replace(/[\\%_]/g, "\\$&");
+    const phone =
+      search && /^[+\d ()-]+$/.test(search)
+        ? normalizePhone(search).replace(/^\+/, "")
+        : "";
+    const nameParts = search?.split(/\s+/) ?? [];
+    const email = search ? normalizeEmail(search) : "";
+    const mode = "insensitive" as const;
     const where = {
       businessId,
       archivedAt: query.archived ? { not: null } : null,
@@ -77,16 +83,31 @@ export class CustomersService {
       ...(search
         ? {
             OR: [
-              { firstName: { startsWith: search, mode: "insensitive" } },
-              { lastName: { startsWith: search, mode: "insensitive" } },
+              { firstName: { startsWith: search, mode } },
+              { lastName: { startsWith: search, mode } },
+              ...(nameParts.length > 1
+                ? Array.from({ length: nameParts.length - 1 }, (_, index) => ({
+                    firstName: {
+                      startsWith: nameParts.slice(0, index + 1).join(" "),
+                      mode,
+                    },
+                    lastName: {
+                      startsWith: nameParts.slice(index + 1).join(" "),
+                      mode,
+                    },
+                  }))
+                : []),
+              { email: { startsWith: email, mode } },
+              { alternateEmail: { startsWith: email, mode } },
               {
-                email: {
-                  startsWith: normalizeEmail(search),
-                  mode: "insensitive",
-                },
+                bookingProfile: true,
+                userCustomer: { user: { email: { startsWith: email, mode } } },
               },
-              ...(normalizedPhone
-                ? [{ phone: { startsWith: normalizedPhone } }]
+              ...(phone
+                ? [
+                    { phone: { startsWith: phone } },
+                    { phone: { startsWith: `+${phone}` } },
+                  ]
                 : []),
             ],
           }
@@ -107,12 +128,15 @@ export class CustomersService {
         orderBy,
         skip,
         take: query.limit,
-        include: { tags: { include: { tag: true } } },
+        include: {
+          tags: { include: { tag: true } },
+          userCustomer: { select: { user: { select: { email: true } } } },
+        },
       }),
       this.prisma.businessCustomer.count({ where }),
     ]);
     return {
-      items,
+      items: items.map(this.withAccountEmail),
       page: query.page,
       limit: query.limit,
       total,
@@ -130,7 +154,13 @@ export class CustomersService {
       businessId,
       "customer:read",
     );
-    const customer = await this.scopedCustomer(businessId, customerId);
+    const customer = await this.prisma.businessCustomer.findUnique({
+      where: { businessId_id: { businessId, id: customerId } },
+      include: {
+        userCustomer: { select: { user: { select: { email: true } } } },
+      },
+    });
+    if (!customer) throw new NotFoundException("Customer not found");
     const now = new Date();
     const completedValuesPromise: Promise<
       Array<{
@@ -228,7 +258,7 @@ export class CustomersService {
     const completedValue =
       completedValues.length === 1 ? completedValues[0] : undefined;
     return {
-      customer,
+      customer: this.withAccountEmail(customer),
       summary: {
         upcomingAppointments: upcomingCount,
         totalAppointments: totalCount,
@@ -523,6 +553,18 @@ export class CustomersService {
     });
   }
 
+  private withAccountEmail<
+    T extends {
+      bookingProfile?: boolean;
+      userCustomer?: { user: { email: string } } | null;
+    },
+  >({ bookingProfile, userCustomer, ...profile }: T) {
+    return {
+      ...profile,
+      accountEmail: bookingProfile ? (userCustomer?.user.email ?? null) : null,
+    };
+  }
+
   private async scopedCustomer(businessId: string, id: string) {
     const value = await this.prisma.businessCustomer.findFirst({
       where: { id, businessId },
@@ -539,7 +581,10 @@ export class CustomersService {
         : { firstName: dto.firstName.trim() }),
       ...(dto.lastName === undefined ? {} : { lastName: dto.lastName.trim() }),
       ...(dto.phone === undefined ? {} : { phone: normalizePhone(dto.phone) }),
-      ...(dto.email === undefined ? {} : { email: normalizeEmail(dto.email) }),
+      ...(dto.email == null ? {} : { email: normalizeEmail(dto.email) }),
+      ...(dto.alternateEmail == null
+        ? {}
+        : { alternateEmail: normalizeEmail(dto.alternateEmail) }),
       ...(dto.birthDate === undefined
         ? {}
         : { birthDate: new Date(`${dto.birthDate}T00:00:00.000Z`) }),

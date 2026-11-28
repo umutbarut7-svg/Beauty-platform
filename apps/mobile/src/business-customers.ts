@@ -3,8 +3,10 @@ import type { MvpApiClient, MvpBooking } from "@beauty-platform/types";
 export type BusinessCustomer = {
   id: string;
   businessId: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
+  accountEmail?: string | null;
+  alternateEmail?: string | null;
   email?: string | null;
   phone?: string | null;
 };
