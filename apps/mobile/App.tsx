@@ -24,6 +24,7 @@ import {
 import { IncomingService } from "./IncomingService";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
+import { businessBookingEmail } from "./src/business-customers";
 import { BusinessCustomers } from "./BusinessCustomers";
 import { BusinessSetup } from "./BusinessSetup";
 import { ServiceChoice } from "./ServiceChoice";
@@ -1457,6 +1458,13 @@ export default function App() {
                       {dateLabel(selected.startsAt)} ·{" "}
                       {statusLabels[selected.status]}
                     </Text>
+                    {mode === "business" && business && (
+                      <Text style={styles.body}>
+                        Müşteri:{" "}
+                        {businessBookingEmail(selected, business.id) ??
+                          "İletişim bilgisi yok"}
+                      </Text>
+                    )}
                     {resultRead === "loading" && (
                       <Text style={styles.body}>Sonuç bilgisi yükleniyor.</Text>
                     )}

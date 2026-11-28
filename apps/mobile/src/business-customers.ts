@@ -1,4 +1,4 @@
-import type { MvpApiClient } from "@beauty-platform/types";
+import type { MvpApiClient, MvpBooking } from "@beauty-platform/types";
 
 export type BusinessCustomer = {
   id: string;
@@ -13,6 +13,7 @@ type CustomerPage = { items: BusinessCustomer[]; page: number; pages: number };
 
 export type CustomerDetail = {
   customer: BusinessCustomer;
+  recentAppointments?: MvpBooking[];
   summary: {
     completedAppointments: number;
     upcomingAppointments: number;
@@ -49,8 +50,54 @@ export async function readBusinessCustomer(
   );
   if (
     result.customer.businessId !== businessId ||
-    result.customer.id !== customerId
+    result.customer.id !== customerId ||
+    result.recentAppointments?.some((item) => item.businessId !== businessId)
   )
     throw new Error("Customer detail scope mismatch");
   return result;
+}
+
+export type BusinessBooking = MvpBooking & {
+  businessCustomerId?: string | null;
+  customer?: { id: string; user?: { email?: string | null } | null };
+};
+
+export function businessBookingEmail(
+  item: BusinessBooking,
+  businessId: string,
+) {
+  if (item.businessId !== businessId || !item.customer?.id) return null;
+  return item.customer.user?.email?.trim() || null;
+}
+
+export async function readAppointmentCustomers(
+  api: Pick<MvpApiClient, "request">,
+  businessId: string,
+  search: string,
+) {
+  const path = `/businesses/${encodeURIComponent(businessId)}/appointments`;
+  const rows = await api.request<BusinessBooking[]>(path);
+  const query = search.toLocaleLowerCase("tr-TR");
+  const customers = new Map<
+    string,
+    { id: string; email: string; appointments: MvpBooking[] }
+  >();
+  for (const item of rows) {
+    const email = businessBookingEmail(item, businessId);
+    const id = item.customer?.id;
+    if (
+      !id ||
+      !email ||
+      item.businessCustomerId ||
+      !email.toLocaleLowerCase("tr-TR").includes(query)
+    )
+      continue;
+    const existing = customers.get(id);
+    if (existing) {
+      existing.appointments.push(item);
+    } else {
+      customers.set(id, { id, email, appointments: [item] });
+    }
+  }
+  return { items: [...customers.values()], limited: rows.length >= 200 };
 }
