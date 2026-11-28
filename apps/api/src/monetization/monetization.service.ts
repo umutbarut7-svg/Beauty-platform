@@ -251,12 +251,26 @@ export class MonetizationService {
     return this.db.$transaction(async (tx: PrismaService) => {
       await tx.$queryRawUnsafe(
         "SELECT pg_advisory_xact_lock(hashtext($1))",
-        `refund:${businessId}:${input.originalEntryId}`,
+        JSON.stringify(["refund-request", businessId, input.idempotencyKey]),
       );
       const prior = await tx.refundRecord.findFirst({
         where: { businessId, idempotencyKey: input.idempotencyKey },
       });
-      if (prior) return prior;
+      if (prior) {
+        if (
+          prior.originalEntryId !== input.originalEntryId ||
+          BigInt(prior.amountMinor) !== input.amountMinor ||
+          prior.reason !== input.reason
+        )
+          throw new ConflictException(
+            "Refund key already used for another request",
+          );
+        return prior;
+      }
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        `refund:${businessId}:${input.originalEntryId}`,
+      );
       const original = await tx.financialLedgerEntry.findFirst({
         where: { id: input.originalEntryId, businessId, type: "CHARGE" },
       });
