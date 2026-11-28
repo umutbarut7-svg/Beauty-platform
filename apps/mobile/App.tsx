@@ -24,6 +24,7 @@ import {
 import { IncomingService } from "./IncomingService";
 import { KeyboardScreen } from "./KeyboardScreen";
 import { OrzellBrand } from "./OrzellBrand";
+import { BusinessCustomers } from "./BusinessCustomers";
 import { BusinessSetup } from "./BusinessSetup";
 import { ServiceChoice } from "./ServiceChoice";
 import { ProductInventory } from "./ProductInventory";
@@ -64,6 +65,7 @@ type Screen =
   | "workspace"
   | "setup"
   | "inventory"
+  | "customers"
   | "b2b"
   | "insights";
 const transitions: Record<string, string[]> = {
@@ -1157,6 +1159,9 @@ export default function App() {
                       {button("İşletme ayarları", async () => {
                         setScreen("setup");
                       })}
+                      {button("Müşteriler (CRM)", async () => {
+                        navigate("customers");
+                      })}
                       {button("Ürünler ve stok", async () => {
                         setScreen("inventory");
                       })}
@@ -1217,6 +1222,25 @@ export default function App() {
                   busy={busy}
                   run={run}
                 />
+              </>
+            )}
+            {mode === "business" && screen === "customers" && business && (
+              <>
+                {button(
+                  "İşletmeme dön",
+                  async () => setScreen("workspace"),
+                  true,
+                )}
+                <Text style={styles.title}>{business.name}</Text>
+                <View style={styles.card}>
+                  <BusinessCustomers
+                    key={business.id}
+                    api={api}
+                    businessId={business.id}
+                    button={button}
+                    input={input}
+                  />
+                </View>
               </>
             )}
             {mode === "business" && screen === "inventory" && business && (
