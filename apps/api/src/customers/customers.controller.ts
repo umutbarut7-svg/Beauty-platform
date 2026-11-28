@@ -16,6 +16,7 @@ import {
   CreateBusinessCustomerDto,
   CreateCustomerNoteDto,
   CustomerListQueryDto,
+  CustomerActivityQueryDto,
   UpdateBusinessCustomerDto,
   UpdateCustomerNoteDto,
   CreateCustomerTagDto,
@@ -62,6 +63,27 @@ export class CustomersController {
     @Param("customerId", ResourceIdPipe) customerId: string,
   ) {
     return this.customers.delete(user, businessId, customerId);
+  }
+  @Get(":customerId/activity") activity(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("businessId", ResourceIdPipe) businessId: string,
+    @Param("customerId", ResourceIdPipe) customerId: string,
+    @Query() query: CustomerActivityQueryDto,
+  ) {
+    return this.customers.activity(user, businessId, customerId, query);
+  }
+  @Get(":customerId/appointments/:appointmentId") appointment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("businessId", ResourceIdPipe) businessId: string,
+    @Param("customerId", ResourceIdPipe) customerId: string,
+    @Param("appointmentId", ResourceIdPipe) appointmentId: string,
+  ) {
+    return this.customers.appointment(
+      user,
+      businessId,
+      customerId,
+      appointmentId,
+    );
   }
   @Get(":customerId/history") history(
     @CurrentUser() user: AuthenticatedUser,

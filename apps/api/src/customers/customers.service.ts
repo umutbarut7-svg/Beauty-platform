@@ -15,11 +15,21 @@ import type {
   CreateBusinessCustomerDto,
   CreateCustomerNoteDto,
   CustomerListQueryDto,
+  CustomerActivityQueryDto,
   UpdateBusinessCustomerDto,
   UpdateCustomerNoteDto,
   CreateCustomerTagDto,
   UpdateCustomerTagDto,
 } from "./customer.dto.js";
+
+import {
+  CustomerActivityPage,
+  customerAppointmentSelect,
+  customerOperationSelect,
+  customerPayments,
+  type CustomerAppointment,
+  type CustomerOperation,
+} from "./customer-activity.js";
 
 @Injectable()
 export class CustomersService {
@@ -157,6 +167,7 @@ export class CustomersService {
     const customer = await this.prisma.businessCustomer.findUnique({
       where: { businessId_id: { businessId, id: customerId } },
       include: {
+        tags: { select: { tag: { select: { id: true, name: true } } } },
         userCustomer: { select: { user: { select: { email: true } } } },
       },
     });
@@ -402,6 +413,87 @@ export class CustomersService {
       data: { archivedAt: new Date() },
     });
   }
+  async activity(
+    user: AuthenticatedUser,
+    businessId: string,
+    customerId: string,
+    query: CustomerActivityQueryDto,
+  ) {
+    await this.permissions.assertBusinessAccess(
+      user,
+      businessId,
+      "customer:read",
+    );
+    if (query.section === "payments")
+      await this.permissions.assertBusinessAccess(
+        user,
+        businessId,
+        "financial:read",
+      );
+    if (query.section === "operations")
+      await this.permissions.assertBusinessAccess(
+        user,
+        businessId,
+        "appointment:manage",
+      );
+    await this.scopedCustomer(businessId, customerId);
+
+    const page = new CustomerActivityPage(
+      [businessId, customerId, query.section],
+      query.limit,
+      query.cursor,
+    );
+    const appointment = { businessId, businessCustomerId: customerId };
+    if (query.section === "payments")
+      return customerPayments(this.prisma, businessId, customerId, page);
+    if (query.section === "operations") {
+      const rows: CustomerOperation[] =
+        await this.prisma.appointmentStatusHistory.findMany({
+          where: { businessId, appointment, ...page.where("changedAt") },
+          orderBy: [{ changedAt: "desc" }, { id: "desc" }],
+          take: page.take,
+          select: customerOperationSelect,
+        });
+      return page.result(rows, (row) => row.changedAt);
+    }
+
+    const rows: CustomerAppointment[] = await this.prisma.appointment.findMany({
+      where: {
+        ...appointment,
+        ...(query.section === "services" ? { status: "COMPLETED" } : {}),
+        ...page.where("startsAt"),
+      },
+      orderBy: [{ startsAt: "desc" }, { id: "desc" }],
+      take: page.take,
+      select: customerAppointmentSelect,
+    });
+    return page.result(rows, (row) => row.startsAt);
+  }
+
+  async appointment(
+    user: AuthenticatedUser,
+    businessId: string,
+    customerId: string,
+    appointmentId: string,
+  ) {
+    await this.permissions.assertBusinessAccess(
+      user,
+      businessId,
+      "customer:read",
+    );
+    const row: CustomerAppointment | null =
+      await this.prisma.appointment.findFirst({
+        where: {
+          id: appointmentId,
+          businessId,
+          businessCustomerId: customerId,
+        },
+        select: customerAppointmentSelect,
+      });
+    if (!row) throw new NotFoundException("Customer appointment not found");
+    return row;
+  }
+
   async history(
     user: AuthenticatedUser,
     businessId: string,
