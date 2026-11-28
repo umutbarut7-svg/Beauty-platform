@@ -4,6 +4,12 @@ gradle.beforeSettings { settings ->
     if (directory.name != 'gradle-plugin' || directory.parentFile.name != '@react-native') {
         return
     }
+    // Use the same module as the published Kotlin marker POM.
+    settings.pluginManagement.resolutionStrategy.eachPlugin {
+        if (requested.id.id == 'org.jetbrains.kotlin.jvm' && requested.version == '2.1.20') {
+            useModule('org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20')
+        }
+    }
     settings.pluginManagement.repositories.gradlePluginPortal {
         name = 'orzellFoojayPluginPortal'
         content {
