@@ -21,6 +21,9 @@ function fixture(
       lastName: "Lovelace",
       phone: "+905551112233",
       email: "ada@example.test",
+      alternateEmail: "alternative@example.test",
+      bookingProfile: true,
+      userCustomer: { user: { email: "account@example.test" } },
       createdAt: new Date(),
       archivedAt: null,
     },
@@ -31,6 +34,8 @@ function fixture(
       lastName: "Tenant",
       phone: "+905559999999",
       email: "other@example.test",
+      bookingProfile: false,
+      userCustomer: { user: { email: "legacy@example.test" } },
       createdAt: new Date(),
       archivedAt: null,
     },
@@ -44,6 +49,14 @@ function fixture(
   let lastList: any;
   const prisma: any = {
     businessCustomer: {
+      findUnique: async ({
+        where: {
+          businessId_id: { businessId, id },
+        },
+      }: any) =>
+        customers.find(
+          (profile) => profile.businessId === businessId && profile.id === id,
+        ),
       findFirst: async ({ where }: any) =>
         customers.find(
           (customer) =>
@@ -212,6 +225,67 @@ describe("CustomersService", () => {
     expect(result).toMatchObject({ page: 2, limit: 10, total: 1 });
     expect(current.getLastList()).toMatchObject({ skip: 10, take: 10 });
   });
+  it.each([
+    [
+      "Ada Lov",
+      {
+        firstName: { startsWith: "Ada", mode: "insensitive" },
+        lastName: { startsWith: "Lov", mode: "insensitive" },
+      },
+    ],
+    ["Lovelace", { lastName: { startsWith: "Lovelace", mode: "insensitive" } }],
+    ["90 (555) 11", { phone: { startsWith: "+9055511" } }],
+    [
+      "ALTERNATIVE@",
+      { alternateEmail: { startsWith: "alternative@", mode: "insensitive" } },
+    ],
+    [
+      "ACCOUNT@",
+      {
+        bookingProfile: true,
+        userCustomer: {
+          user: { email: { startsWith: "account@", mode: "insensitive" } },
+        },
+      },
+    ],
+  ])("builds a tenant-bound search for %s", async (search, match) => {
+    const current = fixture();
+    const result = await current.service.list(owner, "a", {
+      search,
+      page: 1,
+      limit: 25,
+      sort: "name",
+      direction: "asc",
+      archived: false,
+    });
+    expect(current.getLastList().where).toMatchObject({
+      businessId: "a",
+    });
+    expect(current.getLastList().where.OR).toContainEqual(
+      expect.objectContaining(match),
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      accountEmail: "account@example.test",
+    });
+    expect(result.items[0]).not.toHaveProperty("userCustomer");
+  });
+
+  it("does not reveal account email through an unverified legacy profile", async () => {
+    const detail = await fixture().service.detail(owner, "a", "customer-a");
+    expect(detail.customer).toMatchObject({
+      accountEmail: "account@example.test",
+    });
+    const result = await fixture().service.list(owner, "b", {
+      page: 1,
+      limit: 25,
+      sort: "name",
+      direction: "asc",
+      archived: false,
+    });
+    expect(result.items[0]).toMatchObject({ accountEmail: null });
+  });
+
   it("returns appointment history and safe completed-value aggregates", async () => {
     await expect(
       fixture().service.detail(owner, "a", "customer-a"),

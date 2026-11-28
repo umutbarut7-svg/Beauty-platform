@@ -6,8 +6,20 @@ import {
   listBusinessCustomers,
   readBusinessCustomer,
   readAppointmentCustomers,
+  type BusinessCustomer,
   type CustomerDetail,
 } from "./src/business-customers";
+
+function customerLabel(customer: BusinessCustomer) {
+  return (
+    [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
+    customer.email ||
+    customer.accountEmail ||
+    customer.phone ||
+    customer.alternateEmail ||
+    "Müşteri profili"
+  );
+}
 
 function AppointmentHistory({ items }: { items: MvpBooking[] }) {
   return (
@@ -92,10 +104,13 @@ export function BusinessCustomers({
       <>
         {button("Müşteri listesine dön", async () => setDetail(null), true)}
         <Text style={{ fontSize: 20, fontWeight: "700" }}>
-          {customer.firstName} {customer.lastName}
+          {customerLabel(customer)}
         </Text>
         {customer.phone && <Text>{customer.phone}</Text>}
-        {customer.email && <Text>{customer.email}</Text>}
+        {(customer.email || customer.accountEmail) && (
+          <Text>{customer.email || customer.accountEmail}</Text>
+        )}
+        {customer.alternateEmail && <Text>{customer.alternateEmail}</Text>}
         <Text>Tamamlanan randevular: {summary.completedAppointments}</Text>
         <Text>Yaklaşan randevular: {summary.upcomingAppointments}</Text>
         {summary.completedValuesByCurrency?.map(
@@ -117,7 +132,7 @@ export function BusinessCustomers({
   return (
     <>
       <Text style={{ fontSize: 20, fontWeight: "700" }}>Müşteriler (CRM)</Text>
-      {input("Ad, telefon veya e-posta", search, (value) =>
+      {input("Ad, soyad, cep telefonu veya e-posta", search, (value) =>
         setSearch(value.slice(0, 100)),
       )}
       {button("Müşterileri listele", async () => {
@@ -168,7 +183,7 @@ export function BusinessCustomers({
       {result?.items.map((customer) => (
         <View key={customer.id}>
           {button(
-            `${customer.firstName} ${customer.lastName}`,
+            customerLabel(customer),
             async () =>
               setDetail(
                 await readBusinessCustomer(api, businessId, customer.id),

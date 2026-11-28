@@ -17,6 +17,7 @@ esac
 upgrade_url="postgresql://postgres:postgres@localhost:5432/${upgrade_db}"
 migrations_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/migrations" && pwd)"
 split_migration="20260923235959_appointment_checked_in_enum"
+crm_migration="20261128000000_crm_booking_identity"
 
 psql "$admin_url" -X -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${upgrade_db}"
 psql "$admin_url" -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${upgrade_db}"
@@ -52,6 +53,34 @@ for migration in "$migrations_dir"/*/migration.sql; do
   if [[ "$migration" == *"/$split_migration/"* ]]; then
     apply_remaining=true
   fi
+  if [[ "$migration" == *"/$crm_migration/"* ]]; then
+    psql "$upgrade_url" -X -q -v ON_ERROR_STOP=1 <<'SQL'
+INSERT INTO "User" (id, email, "passwordHash", "updatedAt")
+VALUES ('crm-other-user', 'crm-other@example.test', 'not-a-password-hash', CURRENT_TIMESTAMP);
+INSERT INTO "Customer" (id, "userId", "updatedAt")
+VALUES ('crm-other-account', 'crm-other-user', CURRENT_TIMESTAMP);
+INSERT INTO "Business" (id, name, slug, "updatedAt")
+VALUES ('crm-other-business', 'Other CRM Fixture', 'crm-other-fixture', CURRENT_TIMESTAMP);
+INSERT INTO "ServiceCategory" (id, "businessId", name, slug)
+VALUES ('crm-other-category', 'crm-other-business', 'Other', 'other');
+INSERT INTO "Service" (id, "businessId", name, "categoryId", slug)
+VALUES ('crm-other-service', 'crm-other-business', 'Other', 'crm-other-category', 'other');
+INSERT INTO "BusinessCustomer" (
+  id, "businessId", "userCustomerId", "firstName", "lastName", email, "archivedAt", "updatedAt"
+) VALUES
+  ('crm-existing', 'stage32-business', 'stage32-customer', 'Known', 'Name', NULL, NULL, CURRENT_TIMESTAMP),
+  ('crm-archived', 'stage32-business', 'stage32-customer', 'Historical', 'Name', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('crm-contact-only', 'crm-other-business', NULL, 'Unlinked', 'Contact', 'stage32@example.test', NULL, CURRENT_TIMESTAMP),
+  ('crm-conflict', 'stage32-business', 'stage32-customer', 'Preserve', 'Record', NULL, NULL, CURRENT_TIMESTAMP);
+INSERT INTO "Appointment" (
+  id, "businessId", "customerId", "businessCustomerId", "serviceId", "startsAt", "endsAt", price, currency
+) VALUES
+  ('crm-historical', 'stage32-business', 'crm-other-account', 'crm-conflict', 'stage32-service',
+    CURRENT_TIMESTAMP + INTERVAL '2 days', CURRENT_TIMESTAMP + INTERVAL '2 days 30 minutes', 100, 'TRY'),
+  ('crm-unlinked', 'crm-other-business', 'stage32-customer', NULL, 'crm-other-service',
+    CURRENT_TIMESTAMP + INTERVAL '3 days', CURRENT_TIMESTAMP + INTERVAL '3 days 30 minutes', 100, 'TRY');
+SQL
+  fi
   if [[ "$apply_remaining" == true ]]; then
     psql "$upgrade_url" -X -q -v ON_ERROR_STOP=1 -f "$migration"
   fi
@@ -70,5 +99,40 @@ if [[ "$preserved" != "1" ]]; then
   echo "Representative appointment was not preserved by the migration upgrade." >&2
   exit 1
 fi
+
+psql "$upgrade_url" -X -q -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM "Appointment" a
+    JOIN "BusinessCustomer" c ON c.id = a."businessCustomerId" AND c."businessId" = a."businessId"
+    WHERE a.id = 'stage32-appointment' AND c.id = 'crm-existing'
+      AND c."bookingProfile" AND c."firstName" = 'Known'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM "Appointment" a
+    JOIN "BusinessCustomer" c ON c.id = a."businessCustomerId" AND c."businessId" = a."businessId"
+    WHERE a.id = 'crm-unlinked' AND c."businessId" = 'crm-other-business'
+      AND c."userCustomerId" = 'stage32-customer' AND c."bookingProfile"
+      AND c."firstName" IS NULL AND c."lastName" IS NULL AND c.email IS NULL
+  ) OR NOT EXISTS (
+    SELECT 1 FROM "Appointment"
+    WHERE id = 'crm-historical' AND "businessCustomerId" = 'crm-conflict'
+  ) OR EXISTS (
+    SELECT 1 FROM "BusinessCustomer"
+    WHERE id IN ('crm-archived', 'crm-contact-only', 'crm-conflict')
+      AND "bookingProfile"
+  ) THEN
+    RAISE EXCEPTION 'CRM backfill changed historical identity or failed tenant isolation';
+  END IF;
+
+  BEGIN
+    INSERT INTO "BusinessCustomer" (id, "businessId", "userCustomerId", "bookingProfile", "updatedAt")
+    VALUES ('crm-duplicate', 'stage32-business', 'stage32-customer', true, CURRENT_TIMESTAMP);
+    RAISE EXCEPTION 'Duplicate canonical CRM identity was accepted';
+  EXCEPTION WHEN unique_violation THEN
+    NULL;
+  END;
+END $$;
+SQL
 
 echo "Stage 32 representative-data migration upgrade passed."

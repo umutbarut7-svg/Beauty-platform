@@ -106,19 +106,22 @@ export class AppointmentsService {
       dto.customerId !== actor.customer?.id
     )
       throw new ForbiddenException("Customers can only book for themselves");
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { id: true },
-    });
-    if (!customer) throw new NotFoundException("Customer not found");
+    if (customerId !== actor.customer?.id) {
+      const existing = await this.prisma.appointment.findFirst({
+        where: { businessId, customerId },
+        select: { id: true },
+      });
+      if (!existing)
+        throw new NotFoundException("Customer not found in this business");
+    }
     const requestedStart = DateTime.fromISO(dto.startsAt, { setZone: true });
     if (!requestedStart.isValid || requestedStart.toUTC() <= DateTime.utc())
       throw new BadRequestException(
         "Appointment start must be a valid future instant",
       );
 
-    try {
-      return await this.prisma.$transaction(
+    const book = () =>
+      this.prisma.$transaction(
         async (tx: PrismaService) => {
           await tx.$queryRawUnsafe(
             "SELECT pg_advisory_xact_lock(hashtext($1))::text",
@@ -221,84 +224,12 @@ export class AppointmentsService {
             throw new ConflictException(
               "Staff service assignment is unavailable",
             );
-          let businessCustomerId: string | undefined;
-          if (dto.customerProfile) {
-            if (dto.customerProfile.preferredStaffId) {
-              const preferredStaff = await tx.staff.findFirst({
-                where: {
-                  id: dto.customerProfile.preferredStaffId,
-                  businessId,
-                },
-                select: { id: true },
-              });
-              if (!preferredStaff)
-                throw new NotFoundException("Preferred staff not found");
-            }
-            const phone = dto.customerProfile.phone
-              ? normalizePhone(dto.customerProfile.phone)
-              : undefined;
-            const email = dto.customerProfile.email
-              ? normalizeEmail(dto.customerProfile.email)
-              : undefined;
-            const existing =
-              phone || email
-                ? await tx.businessCustomer.findFirst({
-                    where: {
-                      businessId,
-                      OR: [
-                        ...(phone ? [{ phone }] : []),
-                        ...(email ? [{ email }] : []),
-                      ],
-                    },
-                  })
-                : null;
-            if (
-              existing?.userCustomerId &&
-              existing.userCustomerId !== customerId
-            )
-              throw new ConflictException(
-                "Customer contact belongs to another customer",
-              );
-            const profile = existing
-              ? await tx.businessCustomer.update({
-                  where: { id: existing.id },
-                  data: {
-                    userCustomerId: existing.userCustomerId ?? customerId,
-                    firstName: dto.customerProfile.firstName.trim(),
-                    lastName: dto.customerProfile.lastName.trim(),
-                    phone,
-                    email,
-                    preferredStaffId: dto.customerProfile.preferredStaffId,
-                    marketingConsent: dto.customerProfile.marketingConsent,
-                    smsConsent: dto.customerProfile.smsConsent,
-                    emailConsent: dto.customerProfile.emailConsent,
-                  },
-                })
-              : await tx.businessCustomer.create({
-                  data: {
-                    businessId,
-                    userCustomerId: customerId,
-                    firstName: dto.customerProfile.firstName.trim(),
-                    lastName: dto.customerProfile.lastName.trim(),
-                    phone,
-                    email,
-                    birthDate: dto.customerProfile.birthDate
-                      ? new Date(
-                          `${dto.customerProfile.birthDate}T00:00:00.000Z`,
-                        )
-                      : undefined,
-                    gender: dto.customerProfile.gender?.trim(),
-                    notes: dto.customerProfile.notes?.trim(),
-                    source: dto.customerProfile.source?.trim() ?? "BOOKING",
-                    preferredStaffId: dto.customerProfile.preferredStaffId,
-                    marketingConsent:
-                      dto.customerProfile.marketingConsent ?? false,
-                    smsConsent: dto.customerProfile.smsConsent ?? false,
-                    emailConsent: dto.customerProfile.emailConsent ?? false,
-                  },
-                });
-            businessCustomerId = profile.id;
-          }
+          const businessCustomerId = await this.bookingProfile(
+            tx,
+            businessId,
+            customerId,
+            dto.customerProfile,
+          );
           const created = await tx.appointment.create({
             data: {
               businessId,
@@ -345,14 +276,109 @@ export class AppointmentsService {
         },
         { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 },
       );
-    } catch (error) {
-      if (this.isOverlapError(error))
-        throw new ConflictException(
-          "Requested appointment slot was booked concurrently",
-        );
-      throw error;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await book();
+      } catch (error) {
+        const prismaError = error as {
+          code?: string;
+          meta?: { target?: unknown };
+        };
+        const identityRace =
+          prismaError?.code === "P2002" &&
+          /userCustomerId|BusinessCustomer_booking_profile_key/.test(
+            String(prismaError.meta?.target),
+          );
+        if (attempt < 2 && (identityRace || prismaError?.code === "P2034"))
+          continue;
+        if (identityRace)
+          throw new ConflictException(
+            "Customer profile was created concurrently",
+          );
+        if (prismaError?.code === "P2002")
+          throw new ConflictException(
+            "Customer contact already exists in this business",
+          );
+        if (this.isOverlapError(error))
+          throw new ConflictException(
+            "Requested appointment slot was booked concurrently",
+          );
+        throw error;
+      }
     }
   }
+
+  private async bookingProfile(
+    tx: PrismaService,
+    businessId: string,
+    customerId: string,
+    input: CreateAppointmentDto["customerProfile"],
+  ): Promise<string> {
+    const existing = await tx.businessCustomer.findFirst({
+      where: { businessId, userCustomerId: customerId, bookingProfile: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+      },
+    });
+    const firstName = input?.firstName.trim() || undefined;
+    const lastName = input?.lastName.trim() || undefined;
+    const phone = input?.phone
+      ? normalizePhone(input.phone) || undefined
+      : undefined;
+    const email = input?.email ? normalizeEmail(input.email) : undefined;
+    if (input?.preferredStaffId) {
+      const staff = await tx.staff.findFirst({
+        where: { id: input.preferredStaffId, businessId },
+        select: { id: true },
+      });
+      if (!staff) throw new NotFoundException("Preferred staff not found");
+    }
+    if (existing) {
+      // Booking data can fill blanks in its own profile. It cannot take over
+      // another profile or overwrite contact data and consent managed in CRM.
+      const data = {
+        firstName: existing.firstName ? undefined : firstName,
+        lastName: existing.lastName ? undefined : lastName,
+        phone: existing.phone ? undefined : phone,
+        email: existing.email ? undefined : email,
+      };
+      if (Object.values(data).some((value) => value !== undefined)) {
+        await tx.businessCustomer.update({
+          where: { businessId_id: { businessId, id: existing.id } },
+          data,
+        });
+      }
+      return existing.id;
+    }
+    const created = await tx.businessCustomer.create({
+      data: {
+        businessId,
+        userCustomerId: customerId,
+        bookingProfile: true,
+        firstName,
+        lastName,
+        phone,
+        email,
+        preferredStaffId: input?.preferredStaffId,
+        birthDate: input?.birthDate
+          ? new Date(`${input.birthDate}T00:00:00.000Z`)
+          : undefined,
+        gender: input?.gender?.trim(),
+        notes: input?.notes?.trim(),
+        source: input?.source?.trim() || "BOOKING",
+        marketingConsent: input?.marketingConsent ?? false,
+        smsConsent: input?.smsConsent ?? false,
+        emailConsent: input?.emailConsent ?? false,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
   async update(
     user: AuthenticatedUser,
     businessId: string,
