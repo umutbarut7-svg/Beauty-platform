@@ -56,7 +56,7 @@ jobs:
         working-directory: apps/mobile/android
         run: |
           java -version
-          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
+          ./gradlew --init-script ../../../scripts/stage33-foojay.init.gradle :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
       - name: Install iOS pods
         if: matrix.platform == 'ios'
         working-directory: apps/mobile/ios

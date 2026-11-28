@@ -228,6 +228,10 @@ export function BusinessSetup({
       {field("Para birimi", currency, setCurrency)}
       {field("Süre (dakika)", duration, setDuration)}
       {button("Hizmet ekle", async () => {
+        if (!categories.some((category) => category.id === categoryId)) {
+          setMessage("Hizmet eklemek için bir kategori seçin.");
+          return;
+        }
         const s = await api.request<Named>(`${path}/services`, "POST", {
           categoryId,
           name: serviceName,

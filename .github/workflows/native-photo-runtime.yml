@@ -39,9 +39,9 @@ jobs:
           )
           blob=$(printf '%s\n' "$original" | git hash-object -w --stdin)
           git update-index --cacheinfo "100644,$blob,$workflow"
-          if [[ $(git write-tree) == 157ddd7c73af4f2c72a5246674318fc6d6cb3ce9 ]]; then
+          if [[ $(git write-tree) == 3fad352d64763af03524018e31d74266f715c71b ]]; then
             echo "reuse=true" >> "$GITHUB_OUTPUT"
-            echo "Native photo and multipart evidence: https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/46014067325/job/140556585509" >> "$GITHUB_STEP_SUMMARY"
+            echo "Native photo and multipart evidence: https://github.com/umutbarut7-svg/Beauty-platform/actions/runs/46085153159/job/140792924814" >> "$GITHUB_STEP_SUMMARY"
           fi
   runtime:
     needs: evidence

@@ -1,3 +1,4 @@
+import { MonetizationController } from "./monetization.controller.js";
 import { describe, expect, it, vi } from "vitest";
 import { GlobalizationEngine } from "../globalization/globalization-engine.service.js";
 import { MonetizationEngine } from "./monetization-engine.service.js";
@@ -160,7 +161,12 @@ describe("MonetizationService", () => {
     const { service, db } = fixture();
     (
       db.refundRecord as { findFirst: ReturnType<typeof vi.fn> }
-    ).findFirst.mockResolvedValueOnce({ id: "existing" });
+    ).findFirst.mockResolvedValueOnce({
+      id: "existing",
+      originalEntryId: "charge",
+      amountMinor: 100n,
+      reason: "partial",
+    });
     await expect(
       service.refund(user, "a", {
         originalEntryId: "charge",
@@ -168,7 +174,55 @@ describe("MonetizationService", () => {
         idempotencyKey: "r",
         reason: "partial",
       }),
-    ).resolves.toEqual({ id: "existing" });
+    ).resolves.toMatchObject({ id: "existing" });
+  });
+  it.each([
+    { originalEntryId: "another-charge" },
+    { amountMinor: 101n },
+    { reason: "another-reason" },
+  ])("rejects a refund key reused with changed details: %o", async (change) => {
+    const { service, db } = fixture();
+    const original = {
+      originalEntryId: "charge",
+      amountMinor: 100n,
+      reason: "partial",
+    };
+    (
+      db.refundRecord as { findFirst: ReturnType<typeof vi.fn> }
+    ).findFirst.mockResolvedValueOnce({
+      id: "existing",
+      ...original,
+    });
+    await expect(
+      service.refund(user, "a", {
+        ...original,
+        idempotencyKey: "r",
+        ...change,
+      }),
+    ).rejects.toThrow("Refund key already used");
+    expect(
+      (db.financialLedgerEntry as { create: ReturnType<typeof vi.fn> }).create,
+    ).not.toHaveBeenCalled();
+  });
+  it("serializes a saved refund without losing minor-unit precision", async () => {
+    const { service, db } = fixture();
+    (
+      db.refundRecord as { findFirst: ReturnType<typeof vi.fn> }
+    ).findFirst.mockResolvedValueOnce({
+      id: "refund",
+      originalEntryId: "charge",
+      amountMinor: 900719925474099300n,
+      reason: "partial",
+    });
+    const result = await new MonetizationController(service).refund(user, "a", {
+      originalEntryId: "charge",
+      amountMinor: "900719925474099300",
+      idempotencyKey: "r",
+      reason: "partial",
+    });
+    expect(JSON.parse(JSON.stringify(result)).amountMinor).toBe(
+      "900719925474099300",
+    );
   });
   it("writes refund reversal and audit records", async () => {
     const { service, audit } = fixture();

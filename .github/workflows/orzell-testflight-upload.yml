@@ -1,4 +1,4 @@
-# Internal TestFlight promotion of the reviewed e3bcf6fa application.
+# Internal TestFlight candidate integrating category, inventory, CRM and refund changes.
 name: ORZELL signed iOS TestFlight upload
 
 on:
@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           # Git tree IDs cover every tracked file below each directory.
-          test "$(git rev-parse HEAD:apps/mobile)" = 7a7cb1f81b3af8f4582fe80f5a37494f269cafce
+          test "$(git rev-parse HEAD:apps/mobile)" = 9edda83be2b6a790fd2750de126b9ed7b800a7e9
           test "$(git rev-parse HEAD:packages)" = 4081b9b251b222050fc253081f2ba7c9b4fe8555
           test "$(git rev-parse HEAD:pnpm-lock.yaml)" = efac472409cdb4670138843786d99809a9ff30a3
       - name: Set up pnpm
